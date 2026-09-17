@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>기상허브 · 시간자료</title>
+  <style>
+    :root { --bg:#f2efe6; --fg:#1c1915; --surface:#fbf8f1; --muted:#6f6a62; --line:#ddd4c4; --pri:#1f4e5f; }
+    * { box-sizing: border-box; }
+    body { margin:0; font: 15px/1.5 "IBM Plex Sans", "Noto Sans KR", sans-serif; background:var(--bg); color:var(--fg); }
+    header { background:var(--pri); color:#f7f4ec; padding:20px 24px; }
+    header p { margin:6px 0 0; opacity:.85; font-size:13px; }
+    main { padding:20px; max-width:1100px; margin:0 auto; display:grid; gap:16px; }
+    .card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:16px; }
+    label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+    input, select, button { height:40px; border-radius:8px; border:1px solid var(--line); padding:0 10px; font: inherit; }
+    button { background:var(--pri); color:#fff; border:0; cursor:pointer; }
+    button.sec { background:#efe8d8; color:var(--fg); }
+    .row { display:flex; flex-wrap:wrap; gap:10px; align-items:end; }
+    .row > div { flex:1; min-width:140px; }
+    table { width:100%; border-collapse:collapse; font-variant-numeric: tabular-nums; }
+    th, td { text-align:left; padding:8px 6px; border-top:1px solid var(--line); font-size:13px; }
+    th { color:var(--muted); font-weight:500; }
+    .muted { color:var(--muted); font-size:13px; }
+    .ok { color:#2f6b4f; }
+    .bad { color:#8f3a32; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>기상허브</h1>
+    <p>공식 ASOS 시간자료 · Asia/Seoul · NULL을 0으로 바꾸지 않습니다</p>
+  </header>
+  <main>
+    <section class="card" id="status">불러오는 중…</section>
+    <section class="card">
+      <h2>공공데이터포털 인증키</h2>
+      <p class="muted">키 전문은 서버 data/settings.json에만 저장됩니다. 채팅에 보내지 마세요.</p>
+      <div class="row">
+        <div style="flex:2"><label>serviceKey</label><input id="apiKey" type="password" autocomplete="off" placeholder="포털에서 복사한 인증키" /></div>
+        <button id="saveKey">등록</button>
+      </div>
+      <p id="keyMsg" class="muted"></p>
+    </section>
+    <section class="card">
+      <h2>시간자료 조회</h2>
+      <div class="row">
+        <div><label>지점</label>
+          <select id="station">
+            <option value="108">108 서울</option>
+            <option value="112">112 인천</option>
+            <option value="159">159 부산</option>
+          </select>
+        </div>
+        <div><label>시작</label><input id="from" /></div>
+        <div><label>종료</label><input id="to" /></div>
+        <button id="query">조회</button>
+        <button class="sec" id="collect">전날 공식수집</button>
+      </div>
+      <p id="queryMsg" class="muted"></p>
+      <div style="overflow:auto; margin-top:12px;">
+        <table>
+          <thead><tr><th>관측일시</th><th>지점</th><th>기온</th><th>강수</th><th>습도</th><th>풍속</th><th>출처</th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const fmt = (v) => (v === null || v === undefined ? "—" : v);
+    async function status() {
+      const s = await (await fetch("/api/status")).json();
+      $("from").value = s.latestOfficialHour.slice(0,10) + " 00:00:00";
+      $("to").value = s.latestOfficialHour;
+      $("status").innerHTML = `<strong>공식 최신</strong> ${s.latestOfficialHour}<br>
+        보유 ${s.hourlyRecords}건 · 키 ${s.keyRegistered ? "등록됨 " + (s.keyHint||"") : "미등록"} ·
+        최근작업 ${s.lastJob ? s.lastJob.status + " / " + s.lastJob.trigger : "없음"}`;
+      return s;
+    }
+    async function query() {
+      const q = new URLSearchParams({ stationId: $("station").value, from: $("from").value, to: $("to").value });
+      const r = await (await fetch("/api/hourly?" + q)).json();
+      $("queryMsg").textContent = `${r.from} ~ ${r.to} · ${r.total}건`;
+      $("tbody").innerHTML = r.data.map((row) => `<tr>
+        <td>${row.observation_datetime}</td><td>${row.station_id} ${row.station_name}</td>
+        <td>${fmt(row.temperature)}</td><td>${fmt(row.precipitation)}</td>
+        <td>${fmt(row.humidity)}</td><td>${fmt(row.wind_speed)}</td>
+        <td>${row.source_kind}</td></tr>`).join("") || `<tr><td colspan="7">조건에 맞는 자료가 없습니다.</td></tr>`;
+    }
+    $("query").onclick = query;
+    $("saveKey").onclick = async () => {
+      const res = await fetch("/api/key", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ apiKey: $("apiKey").value }) });
+      const d = await res.json();
+      $("keyMsg").textContent = d.ok ? "등록했습니다. 힌트 " + d.hint : (d.message || "실패");
+      $("apiKey").value = "";
+      await status();
+    };
+    $("collect").onclick = async () => {
+      $("queryMsg").textContent = "수집 중…";
+      const res = await fetch("/api/collect", { method:"POST", headers:{ "content-type":"application/json" },
+        body: JSON.stringify({ stationId: $("station").value, from: $("from").value, to: $("to").value }) });
+      const d = await res.json();
+      $("queryMsg").innerHTML = `<span class="${d.status==="COMPLETED"?"ok":"bad"}">${d.status}</span> ${d.message || ""} (수신 ${d.received||0})`;
+      await status();
+      await query();
+    };
+    status().then(query);
+  </script>
+</body>
+</html>

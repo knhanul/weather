@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1789219116986,
+    "dataset": "ASOS_HOURLY",
+    "status": "FAILED",
+    "trigger": "MANUAL",
+    "station_id": "108",
+    "from": "2026-09-10 23:00:00",
+    "to": "2026-09-11 23:00:00",
+    "received": 0,
+    "inserted": 0,
+    "updated": 0,
+    "message": "인증키가 없습니다. 공급원에 공공데이터포털 serviceKey를 등록하세요."
+  },
+  {
+    "id": 1,
+    "dataset": "ASOS_HOURLY",
+    "status": "COMPLETED",
+    "trigger": "SEED",
+    "from": "2026-09-05 00:00:00",
+    "to": "2026-09-11 23:00:00",
+    "received": 503,
+    "inserted": 503,
+    "message": "미리보기 시드(기후값). 공식 수집 시 UPSERT로 덮어씁니다."
+  }
+]

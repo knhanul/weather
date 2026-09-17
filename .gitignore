@@ -1,0 +1,12 @@
+# 인증키 등 민감 정보 (배포 패키지에 포함 금지)
+data/settings.json
+
+# 의존성/빌드 산출물
+node_modules/
+npm-debug.log*
+
+# OS/에디터
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

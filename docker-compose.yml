@@ -1,0 +1,15 @@
+services:
+  weather-hub:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: Asia/Seoul
+      PORT: "8080"
+      KMA_API_KEY: ${KMA_API_KEY:-}
+    volumes:
+      - weather-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  weather-data:
