@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>기상허브</title>
+  <style>
+    :root { --bg:#f2efe6; --fg:#1c1915; --surface:#fbf8f1; --muted:#6f6a62; --line:#ddd4c4; --pri:#1f4e5f; --pri-fg:#f7f4ec; }
+    * { box-sizing: border-box; }
+    body { margin:0; font: 15px/1.5 "Noto Sans KR", "IBM Plex Sans", sans-serif; background:var(--bg); color:var(--fg); }
+    .layout { display:flex; min-height:100dvh; }
+    aside { width:220px; background:var(--surface); border-right:1px solid var(--line); padding:20px 12px; }
+    .brand { font-size:20px; font-weight:700; padding:0 10px 16px; }
+    .brand span { display:block; font-size:12px; color:var(--muted); font-weight:400; }
+    nav a { display:block; padding:10px 12px; border-radius:8px; color:var(--fg); text-decoration:none; margin-bottom:2px; }
+    nav a.active { background:var(--pri); color:var(--pri-fg); }
+    .wrap { flex:1; min-width:0; }
+    header { background:var(--pri); color:var(--pri-fg); padding:16px 24px; }
+    header p { margin:4px 0 0; opacity:.85; font-size:13px; }
+    main { padding:20px 24px 40px; display:grid; gap:16px; }
+    .card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:16px; }
+    .grid4 { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); }
+    label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+    input, select, button { height:40px; border-radius:8px; border:1px solid var(--line); padding:0 10px; font: inherit; }
+    button { background:var(--pri); color:#fff; border:0; cursor:pointer; }
+    button.sec { background:#efe8d8; color:var(--fg); }
+    .row { display:flex; flex-wrap:wrap; gap:10px; align-items:end; }
+    .row > div { flex:1; min-width:130px; }
+    table { width:100%; border-collapse:collapse; font-variant-numeric: tabular-nums; }
+    th, td { text-align:left; padding:8px 6px; border-top:1px solid var(--line); font-size:13px; }
+    th { color:var(--muted); font-weight:500; }
+    .muted { color:var(--muted); font-size:13px; }
+    .ok { color:#2f6b4f; } .bad { color:#8f3a32; }
+    .page { display:none; } .page.on { display:grid; gap:16px; }
+    svg { width:100%; height:160px; }
+    @media (max-width:800px) { .layout { display:block; } aside { width:auto; display:flex; gap:8px; overflow:auto; } nav { display:flex; gap:4px; } }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <div class="brand">기상허브<span>Weather Data Hub</span></div>
+      <nav>
+        <a href="#/" data-page="dash">대시보드</a>
+        <a href="#/hourly" data-page="hourly">시간자료</a>
+        <a href="#/daily" data-page="daily">일자료</a>
+        <a href="#/download" data-page="download">다운로드</a>
+        <a href="#/jobs" data-page="jobs">수집이력</a>
+        <a href="#/stations" data-page="stations">관측지점</a>
+        <a href="#/provider" data-page="provider">공급원</a>
+      </nav>
+    </aside>
+    <div class="wrap">
+      <header>
+        <strong>사내 공통 기상데이터 플랫폼</strong>
+        <p>공식 ASOS · Asia/Seoul · NULL을 0으로 바꾸지 않습니다</p>
+      </header>
+      <main>
+        <section class="page" id="dash">
+          <div class="grid4" id="dashCards"></div>
+          <div class="card">
+            <h2 id="chartTitle">최근 기온</h2>
+            <div class="row">
+              <div><label>차트 지점</label><select id="chartStation"></select></div>
+            </div>
+            <div id="chart"></div>
+          </div>
+        </section>
+        <section class="page" id="hourly">
+          <div class="card">
+            <h2>시간자료</h2>
+            <div class="row">
+              <div><label>지점</label><select id="hStation"></select></div>
+              <div><label>시작</label><input id="hFrom" /></div>
+              <div><label>종료</label><input id="hTo" /></div>
+              <button id="hQuery">조회</button>
+              <button class="sec" id="hCollect">공식수집</button>
+            </div>
+            <p class="muted" id="hMsg"></p>
+            <div class="row" id="hPager" style="display:none">
+              <button class="sec" id="hPrev">이전</button>
+              <button class="sec" id="hNext">다음</button>
+            </div>
+            <div style="overflow:auto"><table><thead><tr><th>관측일시</th><th>지점</th><th>기온</th><th>강수</th><th>습도</th><th>풍속</th><th>출처</th></tr></thead><tbody id="hBody"></tbody></table></div>
+          </div>
+        </section>
+        <section class="page" id="daily">
+          <div class="card">
+            <h2>일자료</h2>
+            <p class="muted">공식 일자료가 없으면 시간자료 집계(DERIVED)를 보여 줍니다. 둘은 다를 수 있습니다.</p>
+            <div class="row">
+              <div><label>지점</label><select id="dStation"></select></div>
+              <div><label>시작</label><input id="dFrom" /></div>
+              <div><label>종료</label><input id="dTo" /></div>
+              <button id="dQuery">조회</button>
+              <button class="sec" id="dCollect">공식 일자료 수집</button>
+            </div>
+            <p class="muted" id="dMsg"></p>
+            <div style="overflow:auto"><table><thead><tr><th>일자</th><th>평균</th><th>최저</th><th>최고</th><th>강수</th><th>습도</th><th>출처</th></tr></thead><tbody id="dBody"></tbody></table></div>
+          </div>
+        </section>
+        <section class="page" id="download">
+          <div class="card">
+            <h2>다운로드</h2>
+            <div class="row">
+              <div><label>종류</label><select id="xKind"><option value="hourly">시간자료</option><option value="daily">일자료</option></select></div>
+              <div><label>지점</label><select id="xStation"></select></div>
+              <div><label>시작</label><input id="xFrom" /></div>
+              <div><label>종료</label><input id="xTo" /></div>
+              <button id="xGo">CSV 받기</button>
+            </div>
+          </div>
+        </section>
+        <section class="page" id="jobs">
+          <div class="card">
+            <h2>수집이력</h2>
+            <div style="overflow:auto"><table><thead><tr><th>시각</th><th>자료</th><th>지점</th><th>상태</th><th>수신/신규/갱신</th><th>메시지</th></tr></thead><tbody id="jBody"></tbody></table></div>
+          </div>
+        </section>
+        <section class="page" id="stations">
+          <div class="card">
+            <h2>관측지점</h2>
+            <div style="overflow:auto"><table><thead><tr><th>지점</th><th>이름</th><th>지역</th><th>사용</th><th>즐겨찾기</th></tr></thead><tbody id="sBody"></tbody></table></div>
+          </div>
+        </section>
+        <section class="page" id="provider">
+          <div class="card">
+            <h2>공공데이터포털 인증키</h2>
+            <p class="muted">키 전문은 서버에만 저장됩니다. 채팅에 보내지 마세요. URL인코딩(%3D)된 값은 저장 시 풀어 씁니다.</p>
+            <p class="muted" id="pStatus"></p>
+            <div class="row">
+              <div style="flex:2"><label>serviceKey</label><input id="apiKey" type="password" autocomplete="off" placeholder="포털에서 복사한 인증키" /></div>
+              <button id="saveKey">등록</button>
+            </div>
+            <p id="keyMsg" class="muted"></p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const fmt = (v) => (v === null || v === undefined ? "—" : v);
+    let dashCache = null;
+    function fillStations(sel) {
+      const list = (dashCache?.stations || []).filter((s) => s.enabled);
+      sel.innerHTML = list.map((s) => `<option value="${s.station_id}">${s.station_id} ${s.station_name}</option>`).join("");
+    }
+    async function loadDash(stationId) {
+      const sid = stationId || $("chartStation")?.value || "108";
+      dashCache = await (await fetch("/api/dashboard?stationId=" + encodeURIComponent(sid))).json();
+      const d = dashCache;
+      const summaries = d.stationSummaries || [];
+      $("dashCards").innerHTML = `
+        ${summaries.map((s)=>`<div class="card"><p class="muted">${s.station_id} ${s.station_name||""}</p><strong>${s.temperature == null ? "—" : s.temperature + "℃"}</strong><p class="muted">${s.last||""}<br>${(s.records||0).toLocaleString()}건 · ${s.source_kind||""}</p></div>`).join("")}
+        <div class="card"><p class="muted">최근 수집</p><strong>${d.lastJob?.status || "없음"}</strong><p class="muted">${d.lastJob ? d.lastJob.dataset + " · " + (d.lastJob.message||"") : ""}</p></div>
+        <div class="card"><p class="muted">저장소</p><strong>${d.storage || "json"}</strong><p class="muted">전체 ${(d.hourlyRecords||0).toLocaleString()}건</p></div>`;
+      fillStations($("hStation")); fillStations($("dStation")); fillStations($("xStation")); fillStations($("chartStation"));
+      if ($("chartStation") && sid) $("chartStation").value = sid;
+      const st = (d.stations||[]).find((x) => x.station_id === (d.seriesStation || sid));
+      $("chartTitle").textContent = `${d.seriesStation || sid} ${st?.station_name || ""} · 최근 기온`;
+      const series = d.series || [];
+      if (series.length) {
+        const vals = series.map((s) => s.temperature).filter((v) => v != null);
+        const min = Math.min(...vals) - 1, max = Math.max(...vals) + 1;
+        const w = 640, h = 160, pad = 8;
+        const pts = series.map((s, i) => {
+          const x = pad + (i / Math.max(series.length - 1, 1)) * (w - pad * 2);
+          const y = h - pad - ((s.temperature - min) / (max - min || 1)) * (h - pad * 2);
+          return `${x},${y}`;
+        }).join(" ");
+        $("chart").innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline fill="none" stroke="#1f4e5f" stroke-width="2" points="${pts}"/></svg>`;
+      }
+      $("hFrom").value = d.latestOfficialHour.slice(0,10) + " 00:00:00";
+      $("hTo").value = d.latestOfficialHour;
+      $("dFrom").value = d.latestOfficialHour.slice(0,10);
+      $("dTo").value = d.latestOfficialHour.slice(0,10);
+      $("xFrom").value = $("hFrom").value;
+      $("xTo").value = $("hTo").value;
+      $("pStatus").textContent = `저장 ${d.storage||"json"} · 키 ${d.keyRegistered ? "등록됨 " + (d.keyHint||"") : "미등록"} · 공식 최신 ${d.latestOfficialHour}`;
+    }
+    let hPage = 1;
+    async function queryHourly() {
+      const q = new URLSearchParams({ stationId: $("hStation").value, from: $("hFrom").value, to: $("hTo").value, page: String(hPage), pageSize: "500" });
+      const r = await (await fetch("/api/hourly?" + q)).json();
+      $("hMsg").textContent = `${r.from} ~ ${r.to} · 전체 ${r.total}건 · ${r.page}/${r.pages}페이지`;
+      $("hPager").style.display = r.pages > 1 ? "flex" : "none";
+      $("hBody").innerHTML = r.data.map((row) => `<tr><td>${row.observation_datetime}</td><td>${row.station_id} ${row.station_name||""}</td><td>${fmt(row.temperature)}</td><td>${fmt(row.precipitation)}</td><td>${fmt(row.humidity)}</td><td>${fmt(row.wind_speed)}</td><td>${row.source_kind}</td></tr>`).join("") || `<tr><td colspan="7">자료 없음</td></tr>`;
+      window.__hPages = r.pages;
+    }
+    async function queryDaily() {
+      const q = new URLSearchParams({ stationId: $("dStation").value, from: $("dFrom").value, to: $("dTo").value });
+      const r = await (await fetch("/api/daily?" + q)).json();
+      $("dMsg").textContent = `${r.from} ~ ${r.to} · ${r.data.length}건`;
+      $("dBody").innerHTML = r.data.map((row) => `<tr><td>${row.observation_date}</td><td>${fmt(row.avg_temperature)}</td><td>${fmt(row.min_temperature)}</td><td>${fmt(row.max_temperature)}</td><td>${fmt(row.precipitation)}</td><td>${fmt(row.avg_humidity)}</td><td>${row.source_kind}</td></tr>`).join("") || `<tr><td colspan="7">자료 없음</td></tr>`;
+    }
+    async function loadJobs() {
+      const jobs = await (await fetch("/api/jobs")).json();
+      $("jBody").innerHTML = jobs.map((j) => `<tr><td>${j.id}</td><td>${j.dataset}</td><td>${j.station_id||""}</td><td class="${j.status==="COMPLETED"?"ok":"bad"}">${j.status}</td><td>${j.received||0}/${j.inserted||0}/${j.updated||0}</td><td>${j.message||""}</td></tr>`).join("");
+    }
+    async function loadStations() {
+      const r = await (await fetch("/api/stations")).json();
+      $("sBody").innerHTML = r.data.map((s) => `<tr><td>${s.station_id}</td><td>${s.station_name}</td><td>${s.region||""}</td>
+        <td><button class="sec" onclick="toggleSt('${s.station_id}','enabled')">${s.enabled?"사용":"중지"}</button></td>
+        <td><button class="sec" onclick="toggleSt('${s.station_id}','favorite')">${s.favorite?"★":"☆"}</button></td></tr>`).join("");
+    }
+    async function toggleSt(stationId, field) {
+      await fetch("/api/stations/toggle", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ stationId, field }) });
+      await loadDash(); await loadStations();
+    }
+    function show(name) {
+      document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p.id === name));
+      document.querySelectorAll("nav a").forEach((a) => a.classList.toggle("active", a.dataset.page === name));
+      if (name === "hourly") queryHourly();
+      if (name === "daily") queryDaily();
+      if (name === "jobs") loadJobs();
+      if (name === "stations") loadStations();
+    }
+    function route() {
+      const h = location.hash.replace("#", "") || "/";
+      const map = { "/": "dash", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/jobs": "jobs", "/stations": "stations", "/provider": "provider" };
+      show(map[h] || "dash");
+    }
+    $("hQuery").onclick = () => { hPage = 1; queryHourly(); };
+    $("hPrev").onclick = () => { hPage = Math.max(1, hPage - 1); queryHourly(); };
+    $("hNext").onclick = () => { hPage = Math.min(window.__hPages || 1, hPage + 1); queryHourly(); };
+    $("dQuery").onclick = queryDaily;
+    $("hCollect").onclick = async () => {
+      $("hMsg").textContent = "수집 중…";
+      const res = await fetch("/api/collect", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ stationId: $("hStation").value, from: $("hFrom").value, to: $("hTo").value }) });
+      const d = await res.json();
+      $("hMsg").innerHTML = `<span class="${d.status==="COMPLETED"?"ok":"bad"}">${d.status}</span> ${d.message||""}`;
+      await loadDash(); await queryHourly();
+    };
+    $("dCollect").onclick = async () => {
+      $("dMsg").textContent = "수집 중…";
+      const res = await fetch("/api/collect-daily", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ stationId: $("dStation").value, from: $("dFrom").value, to: $("dTo").value }) });
+      const d = await res.json();
+      $("dMsg").innerHTML = `<span class="${d.status==="COMPLETED"?"ok":"bad"}">${d.status}</span> ${d.message||""}`;
+      await queryDaily();
+    };
+    $("xGo").onclick = () => {
+      const q = new URLSearchParams({ kind: $("xKind").value, stationId: $("xStation").value, from: $("xFrom").value, to: $("xTo").value });
+      location.href = "/api/export?" + q;
+    };
+    $("saveKey").onclick = async () => {
+      const res = await fetch("/api/key", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ apiKey: $("apiKey").value }) });
+      const d = await res.json();
+      $("keyMsg").textContent = d.ok ? "등록했습니다. " + d.hint : (d.message || "실패");
+      $("apiKey").value = "";
+      await loadDash();
+    };
+    $("chartStation").onchange = () => loadDash($("chartStation").value);
+    window.toggleSt = toggleSt;
+    window.addEventListener("hashchange", route);
+    loadDash().then(route);
+  </script>
+</body>
+</html>

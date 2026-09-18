@@ -1,0 +1,43 @@
+{
+  "url": "http://127.0.0.1:8081/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "기상허브",
+      "hasCanvas": false,
+      "bodyTextLen": 1003,
+      "bodyTextHash": "e3ca4f0c62f70218823bab3d22f7069557ed23d508015488008545d264d60cfa",
+      "bodyTextPrefix": "기상허브 Weather Data Hub 운영 대시보드 기상자료 시간자료 일자료 다운로드 누락 탐지 데이터 수집 수동",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "기상허브",
+      "hasCanvas": false,
+      "bodyTextLen": 782,
+      "bodyTextHash": "a5665239b288e0e67e2a1d261ca8ec428065b8208da43a289c134050d9a5c73c",
+      "bodyTextPrefix": "사내 공통 기상데이터 플랫폼 ADMIN DATA_MANAGER VIEWER 운영 현황 기상허브 외부 기상 API를 ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built-mobile.png"
+    }
+  },
+  "brandWarnings": [
+    "BRAND NOTE: no custom public/og.jpg — the platform will serve the og.grok.me placeholder. Custom cards are the default for games of every kind (DOM board/word games included), whimsical apps, creative tools, and brand-forward pages — only plain utilities (converters, CRUD trackers, admin dashboards) keep the placeholder. If this app is not a plain utility, finish the brand-asset pass per /workspace/.grok/skills/og/SKILL.md."
+  ],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-built.json",
+  "divergesFromBaseline": true,
+  "baselineReasons": [
+    "desktop: body text changed (295 -> 1003 chars, hash mismatch)",
+    "mobile: body text changed (126 -> 782 chars, hash mismatch)"
+  ]
+}

@@ -1,0 +1,58 @@
+[
+  {
+    "station_id": "108",
+    "station_name": "서울",
+    "region": "수도권",
+    "enabled": true,
+    "favorite": true
+  },
+  {
+    "station_id": "112",
+    "station_name": "인천",
+    "region": "수도권",
+    "enabled": true,
+    "favorite": true
+  },
+  {
+    "station_id": "119",
+    "station_name": "수원",
+    "region": "수도권",
+    "enabled": true,
+    "favorite": false
+  },
+  {
+    "station_id": "133",
+    "station_name": "대전",
+    "region": "충청",
+    "enabled": true,
+    "favorite": false
+  },
+  {
+    "station_id": "143",
+    "station_name": "대구",
+    "region": "경상",
+    "enabled": true,
+    "favorite": false
+  },
+  {
+    "station_id": "156",
+    "station_name": "광주",
+    "region": "전라",
+    "enabled": true,
+    "favorite": false
+  },
+  {
+    "station_id": "159",
+    "station_name": "부산",
+    "region": "경상",
+    "enabled": true,
+    "favorite": true
+  },
+  {
+    "station_id": "184",
+    "station_name": "제주",
+    "region": "제주",
+    "enabled": true,
+    "favorite": false
+  }
+]

@@ -1,15 +1,41 @@
 services:
-  weather-hub:
+  weather-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: weather
+      POSTGRES_USER: weather
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - weather-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U weather"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  weather-app:
     build: .
+    depends_on:
+      weather-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://weather:${POSTGRES_PASSWORD:-change-me}@weather-db:5432/weather
+      KMA_API_KEY: ${KMA_API_KEY:-}
+      WEATHER_HUB_SECRET: ${WEATHER_HUB_SECRET:-}
+      PORT: "8080"
     ports:
       - "8080:8080"
+
+  weather-worker:
+    build: .
+    depends_on:
+      weather-db:
+        condition: service_healthy
     environment:
-      TZ: Asia/Seoul
-      PORT: "8080"
+      DATABASE_URL: postgres://weather:${POSTGRES_PASSWORD:-change-me}@weather-db:5432/weather
       KMA_API_KEY: ${KMA_API_KEY:-}
-    volumes:
-      - weather-data:/app/data
-    restart: unless-stopped
+      WEATHER_HUB_SECRET: ${WEATHER_HUB_SECRET:-}
+    command: ["node", ".output/server/index.mjs"]
 
 volumes:
-  weather-data:
+  weather-pg:

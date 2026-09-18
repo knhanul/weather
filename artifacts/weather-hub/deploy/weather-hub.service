@@ -1,0 +1,16 @@
+[Unit]
+Description=Weather data hub
+After=network.target
+
+[Service]
+Type=simple
+User=weather
+WorkingDirectory=/opt/weather-hub
+EnvironmentFile=/etc/weather-hub.env
+ExecStart=/usr/bin/node /opt/weather-hub/server.mjs
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
