@@ -10,7 +10,27 @@ const PUBLIC = path.join(__dirname, "public");
 const OBS_FILE = path.join(DATA, "hourly.json");
 const SET_FILE = path.join(DATA, "settings.json");
 const JOB_FILE = path.join(DATA, "jobs.json");
+const DAILY_FILE = path.join(DATA, "daily.json");
+const STATION_FILE = path.join(DATA, "stations.json");
 const PORT = Number(process.env.PORT || 8080);
+
+const DEFAULT_STATIONS = [
+  { station_id: "108", station_name: "서울", region: "수도권", enabled: true, favorite: true },
+  { station_id: "112", station_name: "인천", region: "수도권", enabled: true, favorite: true },
+  { station_id: "119", station_name: "수원", region: "수도권", enabled: true, favorite: false },
+  { station_id: "133", station_name: "대전", region: "충청", enabled: true, favorite: false },
+  { station_id: "143", station_name: "대구", region: "경상", enabled: true, favorite: false },
+  { station_id: "156", station_name: "광주", region: "전라", enabled: true, favorite: false },
+  { station_id: "159", station_name: "부산", region: "경상", enabled: true, favorite: true },
+  { station_id: "184", station_name: "제주", region: "제주", enabled: true, favorite: false },
+];
+
+function stations() {
+  const saved = loadJson(STATION_FILE, []);
+  if (saved.length) return saved;
+  saveJson(STATION_FILE, DEFAULT_STATIONS);
+  return DEFAULT_STATIONS;
+}
 const KST_MS = 9 * 60 * 60 * 1000;
 
 fs.mkdirSync(DATA, { recursive: true });
@@ -158,11 +178,18 @@ function addHours(wallClock, hours) {
   return wall(x.getUTCFullYear(), x.getUTCMonth() + 1, x.getUTCDate(), x.getUTCHours());
 }
 
+function normalizeKey(raw) {
+  if (!raw) return null;
+  let v = String(raw).trim();
+  try {
+    if (v.includes("%")) v = decodeURIComponent(v);
+  } catch {
+    /* keep raw */
+  }
+  return v || null;
+}
 function getKey() {
-  const env = process.env.KMA_API_KEY?.trim();
-  if (env) return env;
-  const s = loadJson(SET_FILE, {});
-  return s.apiKey || null;
+  return normalizeKey(process.env.KMA_API_KEY) || normalizeKey(loadJson(SET_FILE, {}).apiKey);
 }
 
 function hint(key) {
@@ -264,6 +291,171 @@ async function collectOfficial({ stationId = "108", from, to }) {
   return job;
 }
 
+function upsertDaily(rows) {
+  const all = loadJson(DAILY_FILE, []);
+  const idx = new Map(all.map((r, i) => [`${r.station_id}|${r.observation_date}`, i]));
+  let inserted = 0;
+  let updated = 0;
+  for (const row of rows) {
+    const k = `${row.station_id}|${row.observation_date}`;
+    if (idx.has(k)) {
+      all[idx.get(k)] = row;
+      updated += 1;
+    } else {
+      idx.set(k, all.length);
+      all.push(row);
+      inserted += 1;
+    }
+  }
+  saveJson(DAILY_FILE, all);
+  return { inserted, updated };
+}
+
+function deriveDaily(stationId, fromDate, toDate) {
+  const hourly = loadJson(OBS_FILE, []).filter(
+    (r) => r.station_id === stationId && r.observation_datetime.slice(0, 10) >= fromDate && r.observation_datetime.slice(0, 10) <= toDate,
+  );
+  const byDay = new Map();
+  for (const r of hourly) {
+    const d = r.observation_datetime.slice(0, 10);
+    if (!byDay.has(d)) byDay.set(d, []);
+    byDay.get(d).push(r);
+  }
+  const official = loadJson(DAILY_FILE, []);
+  const officialIdx = new Map(official.filter((x) => x.station_id === stationId).map((x) => [x.observation_date, x]));
+  const out = [];
+  for (const [date, list] of [...byDay.entries()].sort()) {
+    if (officialIdx.has(date) && officialIdx.get(date).source_kind === "OFFICIAL") {
+      out.push(officialIdx.get(date));
+      continue;
+    }
+    const temps = list.map((x) => x.temperature).filter((v) => v != null);
+    const rains = list.map((x) => x.precipitation).filter((v) => v != null);
+    const hums = list.map((x) => x.humidity).filter((v) => v != null);
+    out.push({
+      station_id: stationId,
+      station_name: list[0]?.station_name,
+      observation_date: date,
+      avg_temperature: temps.length ? Math.round((temps.reduce((a, b) => a + b, 0) / temps.length) * 10) / 10 : null,
+      min_temperature: temps.length ? Math.min(...temps) : null,
+      max_temperature: temps.length ? Math.max(...temps) : null,
+      precipitation: rains.length ? Math.round(rains.reduce((a, b) => a + b, 0) * 10) / 10 : null,
+      avg_humidity: hums.length ? Math.round(hums.reduce((a, b) => a + b, 0) / hums.length) : null,
+      source_kind: "DERIVED",
+      note: "시간자료에서 집계. 공식 일자료와 다를 수 있습니다.",
+    });
+  }
+  return out;
+}
+
+async function collectDaily({ stationId = "108", from, to }) {
+  const key = getKey();
+  const job = {
+    id: Date.now(),
+    dataset: "ASOS_DAILY",
+    status: "RUNNING",
+    trigger: "MANUAL",
+    station_id: stationId,
+    from,
+    to,
+    received: 0,
+    inserted: 0,
+    updated: 0,
+    message: "",
+  };
+  const jobs = loadJson(JOB_FILE, []);
+  if (!key) {
+    job.status = "FAILED";
+    job.message = "인증키가 없습니다.";
+    jobs.unshift(job);
+    saveJson(JOB_FILE, jobs.slice(0, 80));
+    return job;
+  }
+  const url = new URL("https://apis.data.go.kr/1360000/AsosDalyInfoService/getWthrDataList");
+  url.searchParams.set("serviceKey", key);
+  url.searchParams.set("numOfRows", "999");
+  url.searchParams.set("pageNo", "1");
+  url.searchParams.set("dataType", "JSON");
+  url.searchParams.set("dataCd", "ASOS");
+  url.searchParams.set("dateCd", "DAY");
+  url.searchParams.set("startDt", from.slice(0, 10).replaceAll("-", ""));
+  url.searchParams.set("endDt", to.slice(0, 10).replaceAll("-", ""));
+  url.searchParams.set("stnIds", stationId);
+  try {
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    const text = await res.text();
+    const parsed = JSON.parse(text);
+    const header = parsed?.response?.header ?? {};
+    if (header.resultCode && header.resultCode !== "00") {
+      job.status = "FAILED";
+      job.message = `${header.resultCode} ${header.resultMsg || ""}`.trim();
+    } else {
+      const items = parsed?.response?.body?.items?.item;
+      const list = !items ? [] : Array.isArray(items) ? items : [items];
+      const mapped = list.map((it) => ({
+        station_id: String(it.stnId ?? stationId),
+        station_name: it.stnNm || stationId,
+        observation_date: String(it.tm || "").slice(0, 10),
+        avg_temperature: it.avgTa === "" || it.avgTa == null ? null : Number(it.avgTa),
+        min_temperature: it.minTa === "" || it.minTa == null ? null : Number(it.minTa),
+        max_temperature: it.maxTa === "" || it.maxTa == null ? null : Number(it.maxTa),
+        precipitation: it.sumRn === "" || it.sumRn == null ? null : Number(it.sumRn),
+        avg_humidity: it.avgRhm === "" || it.avgRhm == null ? null : Number(it.avgRhm),
+        source_kind: "OFFICIAL",
+      }));
+      const u = upsertDaily(mapped);
+      job.status = "COMPLETED";
+      job.received = mapped.length;
+      job.inserted = u.inserted;
+      job.updated = u.updated;
+      job.message = "공식 ASOS 일자료 UPSERT 완료";
+    }
+  } catch (err) {
+    job.status = "FAILED";
+    job.message = err instanceof Error ? err.message : String(err);
+  }
+  jobs.unshift(job);
+  saveJson(JOB_FILE, jobs.slice(0, 80));
+  return job;
+}
+
+function dashboard() {
+  const hourly = loadJson(OBS_FILE, []);
+  const daily = loadJson(DAILY_FILE, []);
+  const jobs = loadJson(JOB_FILE, []);
+  const seoul = hourly
+    .filter((r) => r.station_id === "108")
+    .sort((a, b) => a.observation_datetime.localeCompare(b.observation_datetime))
+    .slice(-72)
+    .map((r) => ({ t: r.observation_datetime.slice(5, 13), temperature: r.temperature, precipitation: r.precipitation }));
+  const byDs = {};
+  for (const r of hourly) {
+    byDs[r.dataset] ??= { records: 0, stations: new Set(), first: r.observation_datetime, last: r.observation_datetime };
+    byDs[r.dataset].records += 1;
+    byDs[r.dataset].stations.add(r.station_id);
+    if (r.observation_datetime < byDs[r.dataset].first) byDs[r.dataset].first = r.observation_datetime;
+    if (r.observation_datetime > byDs[r.dataset].last) byDs[r.dataset].last = r.observation_datetime;
+  }
+  return {
+    timezone: "Asia/Seoul",
+    latestOfficialHour: latestOfficialHour(),
+    keyRegistered: Boolean(getKey()),
+    keyHint: hint(getKey()),
+    hourlyRecords: hourly.length,
+    dailyRecords: daily.length,
+    coverage: Object.entries(byDs).map(([dataset, v]) => ({
+      dataset,
+      records: v.records,
+      stations: v.stations.size,
+      first: v.first,
+      last: v.last,
+    })),
+    lastJob: jobs[0] || null,
+    series: seoul,
+    stations: stations(),
+  };
+}
+
 function json(res, data, status = 200) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(data));
@@ -289,6 +481,52 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/api/hourly") {
     return json(res, queryHourly(Object.fromEntries(url.searchParams)));
   }
+  if (req.method === "GET" && url.pathname === "/api/dashboard") {
+    return json(res, dashboard());
+  }
+  if (req.method === "GET" && url.pathname === "/api/daily") {
+    const stationId = url.searchParams.get("stationId") || "108";
+    const latest = latestOfficialHour().slice(0, 10);
+    const from = url.searchParams.get("from") || addHours(latestOfficialHour(), -24 * 7).slice(0, 10);
+    const to = url.searchParams.get("to") || latest;
+    return json(res, { timezone: "Asia/Seoul", station_id: stationId, from, to, data: deriveDaily(stationId, from, to) });
+  }
+  if (req.method === "GET" && url.pathname === "/api/stations") {
+    return json(res, { data: stations() });
+  }
+  if (req.method === "POST" && url.pathname === "/api/stations/toggle") {
+    const body = await readBody(req);
+    const list = stations();
+    const row = list.find((s) => s.station_id === body.stationId);
+    if (!row) return json(res, { ok: false }, 404);
+    if (body.field === "favorite") row.favorite = !row.favorite;
+    if (body.field === "enabled") row.enabled = !row.enabled;
+    saveJson(STATION_FILE, list);
+    return json(res, { ok: true, station: row });
+  }
+  if (req.method === "GET" && url.pathname === "/api/export") {
+    const kind = url.searchParams.get("kind") || "hourly";
+    const stationId = url.searchParams.get("stationId") || "108";
+    const from = url.searchParams.get("from") || addHours(latestOfficialHour(), -24);
+    const to = url.searchParams.get("to") || latestOfficialHour();
+    const rows =
+      kind === "daily"
+        ? deriveDaily(stationId, from.slice(0, 10), to.slice(0, 10))
+        : queryHourly({ stationId, from, to }).data;
+    const headers =
+      kind === "daily"
+        ? ["observation_date", "station_id", "avg_temperature", "min_temperature", "max_temperature", "precipitation", "avg_humidity", "source_kind"]
+        : ["observation_datetime", "station_id", "station_name", "temperature", "precipitation", "humidity", "wind_speed", "source_kind"];
+    const lines = [headers.join(",")].concat(
+      rows.map((r) => headers.map((h) => (r[h] == null ? "" : String(r[h]))).join(",")),
+    );
+    const csv = `\uFEFF# source=KMA timezone=Asia/Seoul station=${stationId} from=${from} to=${to}\n${lines.join("\n")}`;
+    res.writeHead(200, {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="weather-${kind}-${stationId}.csv"`,
+    });
+    return res.end(csv);
+  }
   if (req.method === "GET" && url.pathname === "/api/status") {
     const key = getKey();
     const jobs = loadJson(JOB_FILE, []);
@@ -307,10 +545,20 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === "POST" && url.pathname === "/api/key") {
     const body = await readBody(req);
-    const apiKey = String(body.apiKey || "").trim();
-    if (apiKey.length < 8) return json(res, { ok: false, message: "키가 너무 짧습니다." }, 400);
+    const apiKey = normalizeKey(body.apiKey);
+    if (!apiKey || apiKey.length < 8) return json(res, { ok: false, message: "키가 너무 짧습니다." }, 400);
     saveJson(SET_FILE, { apiKey, updatedAt: new Date().toISOString() });
     return json(res, { ok: true, hint: hint(apiKey) });
+  }
+  if (req.method === "POST" && url.pathname === "/api/collect-daily") {
+    const body = await readBody(req);
+    const latest = latestOfficialHour();
+    const job = await collectDaily({
+      stationId: body.stationId || "108",
+      from: body.from || addHours(latest, -7 * 24),
+      to: body.to || latest,
+    });
+    return json(res, job, job.status === "FAILED" ? 400 : 200);
   }
   if (req.method === "POST" && url.pathname === "/api/collect") {
     const body = await readBody(req);
