@@ -129,7 +129,7 @@ async function queryHourly({ stationId = "108", from, to, page = "1", pageSize =
     const q = await db.queryHourlyPg({ stationId, from: start, to: end, page, pageSize });
     return { timezone: "Asia/Seoul", station_id: stationId, from: start, to: end, ...q };
   }
-  const size = Math.min(1000, Math.max(1, Number(pageSize) || 500));
+  const size = Math.min(10000, Math.max(1, Number(pageSize) || 500));
   const p = Math.max(1, Number(page) || 1);
   const rows = loadJson(OBS_FILE, [])
     .filter((r) => r.station_id === stationId && r.observation_datetime >= start && r.observation_datetime <= end)
@@ -146,6 +146,18 @@ async function queryHourly({ stationId = "108", from, to, page = "1", pageSize =
     pages: Math.max(1, Math.ceil(rows.length / size)),
     data: rows.slice(offset, offset + size),
   };
+}
+
+async function queryHourlyAll({ stationId = "108", from, to }) {
+  const latest = latestOfficialHour();
+  const start = from || addHours(latest, -24);
+  const end = to || latest;
+  if (db.usingPg()) {
+    return db.queryHourlyAllPg({ stationId, from: start, to: end });
+  }
+  return loadJson(OBS_FILE, [])
+    .filter((r) => r.station_id === stationId && r.observation_datetime >= start && r.observation_datetime <= end)
+    .sort((a, b) => a.observation_datetime.localeCompare(b.observation_datetime));
 }
 
 async function getKey() {
@@ -530,7 +542,7 @@ const server = http.createServer(async (req, res) => {
       const rows =
         kind === "daily"
           ? await deriveDaily(stationId, from.slice(0, 10), to.slice(0, 10))
-          : (await queryHourly({ stationId, from, to, page: "1", pageSize: "10000" })).data;
+          : await queryHourlyAll({ stationId, from, to });
       const headers =
         kind === "daily"
           ? ["observation_date", "station_id", "avg_temperature", "min_temperature", "max_temperature", "precipitation", "avg_humidity", "source_kind"]
