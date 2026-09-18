@@ -86,7 +86,7 @@ export async function upsertHourly(rows) {
 }
 
 export async function queryHourlyPg({ stationId, from, to, page, pageSize }) {
-  const size = Math.min(1000, Math.max(1, Number(pageSize) || 500));
+  const size = Math.min(500, Math.max(1, Number(pageSize) || 500));
   const p = Math.max(1, Number(page) || 1);
   const offset = (p - 1) * size;
   const count = await pool.query(
@@ -103,6 +103,16 @@ export async function queryHourlyPg({ stationId, from, to, page, pageSize }) {
     [stationId, from, to, size, offset],
   );
   return { total, page: p, pageSize: size, pages: Math.max(1, Math.ceil(total / size)), data: rows.rows };
+}
+
+export async function listHourlyAll({ stationId, from, to }) {
+  const rows = await pool.query(
+    `SELECT * FROM observations_hourly
+     WHERE station_id = $1 AND observation_datetime >= $2 AND observation_datetime <= $3
+     ORDER BY observation_datetime`,
+    [stationId, from, to],
+  );
+  return rows.rows;
 }
 
 export async function countHourly() {

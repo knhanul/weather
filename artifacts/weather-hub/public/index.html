@@ -183,7 +183,7 @@
     async function queryHourly() {
       const q = new URLSearchParams({ stationId: $("hStation").value, from: $("hFrom").value, to: $("hTo").value, page: String(hPage), pageSize: "500" });
       const r = await (await fetch("/api/hourly?" + q)).json();
-      $("hMsg").textContent = `${r.from} ~ ${r.to} · 전체 ${r.total}건 · ${r.page}/${r.pages}페이지`;
+      $("hMsg").textContent = `${r.from} ~ ${r.to} · 전체 ${r.total}건 · ${r.page}/${r.pages}페이지 (화면은 500건씩, 다운로드는 전체)`;
       $("hPager").style.display = r.pages > 1 ? "flex" : "none";
       $("hBody").innerHTML = r.data.map((row) => `<tr><td>${row.observation_datetime}</td><td>${row.station_id} ${row.station_name||""}</td><td>${fmt(row.temperature)}</td><td>${fmt(row.precipitation)}</td><td>${fmt(row.humidity)}</td><td>${fmt(row.wind_speed)}</td><td>${row.source_kind}</td></tr>`).join("") || `<tr><td colspan="7">자료 없음</td></tr>`;
       window.__hPages = r.pages;

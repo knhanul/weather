@@ -129,7 +129,7 @@ async function queryHourly({ stationId = "108", from, to, page = "1", pageSize =
     const q = await db.queryHourlyPg({ stationId, from: start, to: end, page, pageSize });
     return { timezone: "Asia/Seoul", station_id: stationId, from: start, to: end, ...q };
   }
-  const size = Math.min(1000, Math.max(1, Number(pageSize) || 500));
+  const size = Math.min(500, Math.max(1, Number(pageSize) || 500));
   const p = Math.max(1, Number(page) || 1);
   const rows = loadJson(OBS_FILE, [])
     .filter((r) => r.station_id === stationId && r.observation_datetime >= start && r.observation_datetime <= end)
@@ -550,7 +550,11 @@ const server = http.createServer(async (req, res) => {
       const rows =
         kind === "daily"
           ? await deriveDaily(stationId, from.slice(0, 10), to.slice(0, 10))
-          : (await queryHourly({ stationId, from, to, page: "1", pageSize: "10000" })).data;
+          : db.usingPg()
+            ? await db.listHourlyAll({ stationId, from, to })
+            : loadJson(OBS_FILE, []).filter(
+                (r) => r.station_id === stationId && r.observation_datetime >= from && r.observation_datetime <= to,
+              );
       const headers =
         kind === "daily"
           ? ["observation_date", "station_id", "avg_temperature", "min_temperature", "max_temperature", "precipitation", "avg_humidity", "source_kind"]
