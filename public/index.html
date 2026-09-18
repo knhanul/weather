@@ -74,6 +74,10 @@
               <button class="sec" id="hCollect">공식수집</button>
             </div>
             <p class="muted" id="hMsg"></p>
+            <div class="row" id="hPager" style="display:none">
+              <button class="sec" id="hPrev">이전</button>
+              <button class="sec" id="hNext">다음</button>
+            </div>
             <div style="overflow:auto"><table><thead><tr><th>관측일시</th><th>지점</th><th>기온</th><th>강수</th><th>습도</th><th>풍속</th><th>출처</th></tr></thead><tbody id="hBody"></tbody></table></div>
           </div>
         </section>
@@ -167,11 +171,14 @@
       $("xTo").value = $("hTo").value;
       $("pStatus").textContent = `키 ${d.keyRegistered ? "등록됨 " + (d.keyHint||"") : "미등록"} · 공식 최신 ${d.latestOfficialHour}`;
     }
+    let hPage = 1;
     async function queryHourly() {
-      const q = new URLSearchParams({ stationId: $("hStation").value, from: $("hFrom").value, to: $("hTo").value });
+      const q = new URLSearchParams({ stationId: $("hStation").value, from: $("hFrom").value, to: $("hTo").value, page: String(hPage), pageSize: "500" });
       const r = await (await fetch("/api/hourly?" + q)).json();
-      $("hMsg").textContent = `${r.from} ~ ${r.to} · ${r.total}건`;
+      $("hMsg").textContent = `${r.from} ~ ${r.to} · 전체 ${r.total}건 · ${r.page}/${r.pages}페이지`;
+      $("hPager").style.display = r.pages > 1 ? "flex" : "none";
       $("hBody").innerHTML = r.data.map((row) => `<tr><td>${row.observation_datetime}</td><td>${row.station_id} ${row.station_name||""}</td><td>${fmt(row.temperature)}</td><td>${fmt(row.precipitation)}</td><td>${fmt(row.humidity)}</td><td>${fmt(row.wind_speed)}</td><td>${row.source_kind}</td></tr>`).join("") || `<tr><td colspan="7">자료 없음</td></tr>`;
+      window.__hPages = r.pages;
     }
     async function queryDaily() {
       const q = new URLSearchParams({ stationId: $("dStation").value, from: $("dFrom").value, to: $("dTo").value });
@@ -206,7 +213,9 @@
       const map = { "/": "dash", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/jobs": "jobs", "/stations": "stations", "/provider": "provider" };
       show(map[h] || "dash");
     }
-    $("hQuery").onclick = queryHourly;
+    $("hQuery").onclick = () => { hPage = 1; queryHourly(); };
+    $("hPrev").onclick = () => { hPage = Math.max(1, hPage - 1); queryHourly(); };
+    $("hNext").onclick = () => { hPage = Math.min(window.__hPages || 1, hPage + 1); queryHourly(); };
     $("dQuery").onclick = queryDaily;
     $("hCollect").onclick = async () => {
       $("hMsg").textContent = "수집 중…";

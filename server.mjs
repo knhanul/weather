@@ -159,14 +159,27 @@ function upsert(rows) {
   return { inserted, updated, total: all.length };
 }
 
-function queryHourly({ stationId = "108", from, to }) {
+function queryHourly({ stationId = "108", from, to, page = "1", pageSize = "500" }) {
   const latest = latestOfficialHour();
   const start = from || addHours(latest, -24);
   const end = to || latest;
+  const size = Math.min(1000, Math.max(1, Number(pageSize) || 500));
+  const p = Math.max(1, Number(page) || 1);
   const rows = loadJson(OBS_FILE, [])
     .filter((r) => r.station_id === stationId && r.observation_datetime >= start && r.observation_datetime <= end)
     .sort((a, b) => a.observation_datetime.localeCompare(b.observation_datetime));
-  return { timezone: "Asia/Seoul", station_id: stationId, from: start, to: end, total: rows.length, data: rows };
+  const offset = (p - 1) * size;
+  return {
+    timezone: "Asia/Seoul",
+    station_id: stationId,
+    from: start,
+    to: end,
+    total: rows.length,
+    page: p,
+    pageSize: size,
+    pages: Math.max(1, Math.ceil(rows.length / size)),
+    data: rows.slice(offset, offset + size),
+  };
 }
 
 function addHours(wallClock, hours) {
@@ -197,6 +210,68 @@ function hint(key) {
   return key.slice(0, 3) + "…" + key.slice(-4);
 }
 
+function mapHourlyItem(it, stationId) {
+  return {
+    provider: "KMA",
+    dataset: "ASOS_HOURLY",
+    station_id: String(it.stnId ?? stationId),
+    station_name: it.stnNm || stationId,
+    observation_datetime: String(it.tm || "").length === 13 ? `${it.tm}:00:00` : String(it.tm || ""),
+    timezone: "Asia/Seoul",
+    temperature: it.ta === "" || it.ta == null ? null : Number(it.ta),
+    precipitation: it.rn === "" || it.rn == null ? null : Number(it.rn),
+    humidity: it.hm === "" || it.hm == null ? null : Number(it.hm),
+    wind_speed: it.ws === "" || it.ws == null ? null : Number(it.ws),
+    wind_direction: it.wd === "" || it.wd == null ? null : Number(it.wd),
+    pressure: it.pa === "" || it.pa == null ? null : Number(it.pa),
+    quality_temperature: !it.taQcflg || it.taQcflg === "0" ? "NORMAL" : it.taQcflg === "1" ? "INVALID" : it.taQcflg === "9" ? "MISSING" : "SUSPECT",
+    source_kind: "OFFICIAL",
+  };
+}
+
+function splitRange(from, to, hours = 24 * 7) {
+  const chunks = [];
+  let cur = from;
+  while (cur <= to) {
+    let next = addHours(cur, hours - 1);
+    if (next > to) next = to;
+    chunks.push({ from: cur, to: next });
+    cur = addHours(next, 1);
+    if (chunks.length > 400) break;
+  }
+  return chunks;
+}
+
+async function fetchHourlyPage({ key, stationId, from, to, pageNo }) {
+  const url = new URL("https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList");
+  url.searchParams.set("serviceKey", key);
+  url.searchParams.set("numOfRows", "999");
+  url.searchParams.set("pageNo", String(pageNo));
+  url.searchParams.set("dataType", "JSON");
+  url.searchParams.set("dataCd", "ASOS");
+  url.searchParams.set("dateCd", "HR");
+  url.searchParams.set("startDt", from.slice(0, 10).replaceAll("-", ""));
+  url.searchParams.set("startHh", from.slice(11, 13) || "00");
+  url.searchParams.set("endDt", to.slice(0, 10).replaceAll("-", ""));
+  url.searchParams.set("endHh", to.slice(11, 13) || "23");
+  url.searchParams.set("stnIds", stationId);
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  const text = await res.text();
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error(text.slice(0, 180) || `HTTP ${res.status}`);
+  }
+  const header = parsed?.response?.header ?? {};
+  const code = header.resultCode;
+  if (code && code !== "00") throw new Error(`${code} ${header.resultMsg || ""}`.trim());
+  const body = parsed?.response?.body ?? {};
+  const items = body?.items?.item;
+  const list = !items ? [] : Array.isArray(items) ? items : [items];
+  return { list, totalCount: Number(body.totalCount || list.length), numOfRows: Number(body.numOfRows || 999) };
+}
+
 async function collectOfficial({ stationId = "108", from, to }) {
   const key = getKey();
   const job = {
@@ -210,6 +285,7 @@ async function collectOfficial({ stationId = "108", from, to }) {
     received: 0,
     inserted: 0,
     updated: 0,
+    chunks: 0,
     message: "",
   };
   const jobs = loadJson(JOB_FILE, []);
@@ -217,77 +293,33 @@ async function collectOfficial({ stationId = "108", from, to }) {
     job.status = "FAILED";
     job.message = "인증키가 없습니다. 공급원에 공공데이터포털 serviceKey를 등록하세요.";
     jobs.unshift(job);
-    saveJson(JOB_FILE, jobs.slice(0, 40));
+    saveJson(JOB_FILE, jobs.slice(0, 80));
     return job;
   }
-  const startDt = from.slice(0, 10).replaceAll("-", "");
-  const endDt = to.slice(0, 10).replaceAll("-", "");
-  const startHh = from.slice(11, 13) || "00";
-  const endHh = to.slice(11, 13) || "23";
-  const url = new URL("https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList");
-  url.searchParams.set("serviceKey", key);
-  url.searchParams.set("numOfRows", "999");
-  url.searchParams.set("pageNo", "1");
-  url.searchParams.set("dataType", "JSON");
-  url.searchParams.set("dataCd", "ASOS");
-  url.searchParams.set("dateCd", "HR");
-  url.searchParams.set("startDt", startDt);
-  url.searchParams.set("startHh", startHh);
-  url.searchParams.set("endDt", endDt);
-  url.searchParams.set("endHh", endHh);
-  url.searchParams.set("stnIds", stationId);
+  const chunks = splitRange(from, to, 24 * 7);
   try {
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
-    const text = await res.text();
-    let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      job.status = "FAILED";
-      job.message = text.slice(0, 180) || `HTTP ${res.status}`;
-      jobs.unshift(job);
-      saveJson(JOB_FILE, jobs.slice(0, 40));
-      return job;
+    for (const chunk of chunks) {
+      let page = 1;
+      for (;;) {
+        const { list, totalCount } = await fetchHourlyPage({ key, stationId, from: chunk.from, to: chunk.to, pageNo: page });
+        const mapped = list.map((it) => mapHourlyItem(it, stationId));
+        const u = upsert(mapped);
+        job.received += mapped.length;
+        job.inserted += u.inserted;
+        job.updated += u.updated;
+        job.chunks += 1;
+        if (mapped.length < 999 || page * 999 >= totalCount || page >= 20) break;
+        page += 1;
+      }
     }
-    const header = parsed?.response?.header ?? {};
-    const code = header.resultCode;
-    if (code && code !== "00") {
-      job.status = "FAILED";
-      job.message = `${code} ${header.resultMsg || ""}`.trim();
-      jobs.unshift(job);
-      saveJson(JOB_FILE, jobs.slice(0, 40));
-      return job;
-    }
-    const items = parsed?.response?.body?.items?.item;
-    const list = !items ? [] : Array.isArray(items) ? items : [items];
-    const mapped = list.map((it) => ({
-      provider: "KMA",
-      dataset: "ASOS_HOURLY",
-      station_id: String(it.stnId ?? stationId),
-      station_name: it.stnNm || stationId,
-      observation_datetime: String(it.tm || "").length === 13 ? `${it.tm}:00:00` : String(it.tm || ""),
-      timezone: "Asia/Seoul",
-      temperature: it.ta === "" || it.ta == null ? null : Number(it.ta),
-      precipitation: it.rn === "" || it.rn == null ? null : Number(it.rn),
-      humidity: it.hm === "" || it.hm == null ? null : Number(it.hm),
-      wind_speed: it.ws === "" || it.ws == null ? null : Number(it.ws),
-      wind_direction: it.wd === "" || it.wd == null ? null : Number(it.wd),
-      pressure: it.pa === "" || it.pa == null ? null : Number(it.pa),
-      quality_temperature: !it.taQcflg || it.taQcflg === "0" ? "NORMAL" : it.taQcflg === "1" ? "INVALID" : it.taQcflg === "9" ? "MISSING" : "SUSPECT",
-      source_kind: "OFFICIAL",
-    }));
-    const u = upsert(mapped);
     job.status = "COMPLETED";
-    job.received = mapped.length;
-    job.inserted = u.inserted;
-    job.updated = u.updated;
-    job.message = "공식 ASOS 시간자료 UPSERT 완료";
+    job.message = `공식 ASOS 시간자료 UPSERT 완료 · 구간 ${chunks.length}개 · 수신 ${job.received}`;
   } catch (err) {
-    job.status = "FAILED";
+    job.status = job.received ? "PARTIAL" : "FAILED";
     job.message = err instanceof Error ? err.message : String(err);
   }
   jobs.unshift(job);
-  saveJson(JOB_FILE, jobs.slice(0, 40));
+  saveJson(JOB_FILE, jobs.slice(0, 80));
   return job;
 }
 
