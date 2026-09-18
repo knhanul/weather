@@ -149,7 +149,7 @@
       $("dashCards").innerHTML = `
         ${(d.coverage||[]).map((c)=>`<div class="card"><p class="muted">${c.dataset}</p><strong>${c.records.toLocaleString()}건</strong><p class="muted">${c.first}<br>${c.last}<br>지점 ${c.stations}</p></div>`).join("")}
         <div class="card"><p class="muted">최근 수집</p><strong>${d.lastJob?.status || "없음"}</strong><p class="muted">${d.lastJob ? d.lastJob.dataset + " · " + (d.lastJob.message||"") : ""}</p></div>
-        <div class="card"><p class="muted">인증키</p><strong>${d.keyRegistered ? "등록됨" : "미등록"}</strong><p class="muted">${d.keyHint || ""}</p></div>`;
+        <div class="card"><p class="muted">저장소</p><strong>${d.storage || "json"}</strong><p class="muted">${d.keyRegistered ? "키 " + (d.keyHint||"") : "키 미등록"}</p></div>`;
       const series = d.series || [];
       if (series.length) {
         const vals = series.map((s) => s.temperature).filter((v) => v != null);
@@ -169,7 +169,7 @@
       $("dTo").value = d.latestOfficialHour.slice(0,10);
       $("xFrom").value = $("hFrom").value;
       $("xTo").value = $("hTo").value;
-      $("pStatus").textContent = `키 ${d.keyRegistered ? "등록됨 " + (d.keyHint||"") : "미등록"} · 공식 최신 ${d.latestOfficialHour}`;
+      $("pStatus").textContent = `저장 ${d.storage||"json"} · 키 ${d.keyRegistered ? "등록됨 " + (d.keyHint||"") : "미등록"} · 공식 최신 ${d.latestOfficialHour}`;
     }
     let hPage = 1;
     async function queryHourly() {
