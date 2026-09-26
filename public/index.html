@@ -95,6 +95,15 @@
     .legend { display:flex; flex-wrap:wrap; gap:4px 16px; font-size:12px; color:var(--muted); margin-top:4px; }
     .legend i { display:inline-block; width:14px; height:3px; background:var(--pri); vertical-align:middle; margin-right:5px; border-radius:2px; }
     .legend i.r { height:10px; width:8px; background:#6d9dc5; opacity:.7; }
+    .legend i.b { height:10px; background:var(--pri); opacity:.18; }
+    #chart .tband { fill:var(--pri); opacity:.14; }
+    #chart .tband-l { stroke:var(--pri); stroke-width:3; opacity:.25; }
+    .ch-range input { height:34px; min-width:0; flex:1 1 128px; max-width:170px; }
+    .ch-range .tilde { margin:0 -2px; color:var(--muted); }
+    .ch-range button { height:34px; padding:0 14px; }
+    #chErr { margin:0 0 6px; }
+    .ch-empty { padding:28px 8px; text-align:center; }
+    .ch-empty p { margin:4px 0; }
     .tip { position:absolute; top:0; left:0; display:none; pointer-events:none; background:#1c1915; color:#f7f4ec; border-radius:8px; padding:8px 10px; font-size:12px; line-height:1.55; white-space:nowrap; box-shadow:0 4px 14px rgba(0,0,0,.18); font-variant-numeric:tabular-nums; z-index:2; }
     .tip b { font-weight:600; }
     .tip .k { display:inline-block; min-width:30px; opacity:.7; }
@@ -190,6 +199,9 @@
       .g-selbtns { width:100%; }
       .g-selbtns button { flex:1; }
       .g-wide { display:none; }
+      .ch-range > span:first-child { display:none; }
+      .ch-range { flex:1 1 100%; flex-wrap:nowrap; }
+      .ch-range input { flex:1 1 0; width:0; max-width:none; padding:0 6px; }
     }
   </style>
 </head>
@@ -235,7 +247,9 @@
             <div class="controls">
               <div class="ctl"><span>지점</span><div class="seg ctl" id="stSel"></div></div>
               <div class="ctl"><span>기간</span><div class="seg ctl" id="periodSel"></div></div>
+              <div class="ctl ch-range"><span>직접</span><input id="chFrom" type="date" aria-label="시작일" /><span class="tilde">~</span><input id="chTo" type="date" aria-label="종료일" /><button type="button" id="chApply">조회</button></div>
             </div>
+            <p class="bad g-err" id="chErr" role="alert" hidden></p>
             <div class="stats" id="chartStats"></div>
             <div class="chart-box">
               <div id="chart"></div>
@@ -409,7 +423,24 @@
     const shortT = (ms) => { const d = new Date(ms); return `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${p2(d.getUTCHours())}시`; };
     const lagText = (h) => (h >= 48 ? `${Math.floor(h / 24)}일` : `${h}시간`);
     const PERIODS = [[24, "24시간"], [72, "3일"], [168, "7일"], [720, "30일"]];
-    const dashState = { station: null, hours: 72 };
+    const dashState = { station: null, hours: 72, from: null, to: null }; // from/to(날짜)가 있으면 직접 지정한 기간
+    const DASH_MAX_DAYS = 366; // 서버와 같게: 31일까지 시간 단위, 그보다 길면 일 단위
+    const dashCustom = () => Boolean(dashState.from && dashState.to);
+    const dashKey = () => (dashCustom() ? `${dashState.station}|${dashState.from}|${dashState.to}` : `${dashState.station}|${dashState.hours}`);
+    const dDay = (d) => wallMs(`${d} 00:00`);
+    const dValid = (v) => { if (!/^\d{4}-\d{2}-\d{2}$/.test(v || "")) return false; const d = new Date(dDay(v)); return `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())}` === v; };
+    function dashRangeError(from, to) {
+      if (!from || !to) return "시작일과 종료일을 모두 고르세요.";
+      if (!dValid(from) || !dValid(to)) return "날짜 형식이 올바르지 않습니다.";
+      if (from > to) return "시작일이 종료일보다 늦습니다.";
+      const latest = String(dashCache?.latestOfficialHour || "").slice(0, 10);
+      if (latest && from > latest) return `시작일이 공식 최신 날짜(${latest})보다 늦습니다.`;
+      if (latest && to > latest) return `종료일은 공식 최신 날짜(${latest})까지 고를 수 있습니다.`;
+      const span = Math.round((dDay(to) - dDay(from)) / (24 * HOUR)) + 1;
+      if (span > DASH_MAX_DAYS) return `기간은 최대 ${DASH_MAX_DAYS}일까지 볼 수 있습니다(지금 ${nf(span)}일). 31일이 넘으면 일 단위로 보여 줍니다.`;
+      return "";
+    }
+    function setDashErr(msg) { $("chErr").textContent = msg || ""; $("chErr").hidden = !msg; }
     let seriesCache = new Map();
     let seriesReq = 0;
     let currentSeries = null;
@@ -438,7 +469,12 @@
       const hp = hashParams();
       const want = hp.get("station");
       const h = Number(hp.get("hours"));
-      if (PERIODS.some(([v]) => v === h)) dashState.hours = h;
+      const f = hp.get("from"), t = hp.get("to");
+      if (f || t) {
+        const err = dashRangeError(f, t);
+        if (err) setDashErr(`주소의 기간을 쓸 수 없습니다: ${err}`);
+        else { dashState.from = f; dashState.to = t; setDashErr(""); }
+      } else if (PERIODS.some(([v]) => v === h)) { dashState.hours = h; dashState.from = dashState.to = null; }
       if (want && known.has(want)) { dashState.station = want; return; }
       if (dashState.station && known.has(dashState.station)) return;
       const list = dashStations();
@@ -446,7 +482,9 @@
       dashState.station = (withData[0] || list[0] || {}).id || "108";
     }
     function syncHash() {
-      const want = `#/?station=${encodeURIComponent(dashState.station)}&hours=${dashState.hours}`;
+      const want = dashCustom()
+        ? `#/?station=${encodeURIComponent(dashState.station)}&from=${dashState.from}&to=${dashState.to}`
+        : `#/?station=${encodeURIComponent(dashState.station)}&hours=${dashState.hours}`;
       if (location.hash !== want) history.replaceState(null, "", want);
     }
     function selectStation(id) {
@@ -454,8 +492,19 @@
       dashState.station = id; syncHash(); renderDashControls(); loadSeries();
     }
     function selectPeriod(h) {
-      if (h === dashState.hours) return;
-      dashState.hours = h; syncHash(); renderDashControls(); loadSeries();
+      if (h === dashState.hours && !dashCustom()) return;
+      dashState.hours = h; dashState.from = dashState.to = null; setDashErr("");
+      syncHash(); renderDashControls(); loadSeries();
+    }
+    // 날짜 칸의 기간을 검사해 적용(시작일 00시 ~ 종료일 23시)
+    function applyDashRange() {
+      const f = $("chFrom").value, t = $("chTo").value;
+      const err = dashRangeError(f, t);
+      if (err) { setDashErr(err); return; }
+      setDashErr("");
+      if (dashCustom() && f === dashState.from && t === dashState.to) return;
+      dashState.from = f; dashState.to = t;
+      syncHash(); renderDashControls(); loadSeries();
     }
     function renderStationCards() {
       const d = dashCache || {};
@@ -479,7 +528,10 @@
     function renderDashControls() {
       const list = dashStations();
       $("stSel").innerHTML = list.map((s) => `<button type="button" class="${s.id === dashState.station ? "on" : ""}" data-st="${esc(s.id)}"${s.summary ? "" : " disabled title=\"자료 없음\""}>${esc(s.id)} ${esc(s.name)}</button>`).join("");
-      $("periodSel").innerHTML = PERIODS.map(([h, label]) => `<button type="button" class="${h === dashState.hours ? "on" : ""}" data-h="${h}">${label}</button>`).join("");
+      $("periodSel").innerHTML = PERIODS.map(([h, label]) => `<button type="button" class="${h === dashState.hours && !dashCustom() ? "on" : ""}" data-h="${h}">${label}</button>`).join("");
+      const latest = String(dashCache?.latestOfficialHour || "").slice(0, 10);
+      if (latest) { $("chFrom").max = latest; $("chTo").max = latest; }
+      if (dashCustom()) { $("chFrom").value = dashState.from; $("chTo").value = dashState.to; }
       document.querySelectorAll("#stCards .st-card").forEach((el) => {
         const on = el.dataset.st === dashState.station;
         el.classList.toggle("sel", on); el.setAttribute("aria-pressed", String(on));
@@ -501,15 +553,15 @@
     }
     async function loadSeries() {
       const my = ++seriesReq;
-      const key = `${dashState.station}|${dashState.hours}`;
-      const st = dashStations().find((s) => s.id === dashState.station);
-      const label = (PERIODS.find(([h]) => h === dashState.hours) || [0, `${dashState.hours}시간`])[1];
-      $("chartTitle").textContent = `${dashState.station} ${st?.name || ""} · 최근 ${label} 기온`;
+      const key = dashKey();
+      $("chartTitle").textContent = chartTitleText(null);
       let r = seriesCache.get(key);
       if (!r) {
         $("chartRange").textContent = "불러오는 중…";
         try {
-          const res = await fetch(`/api/series?stationId=${encodeURIComponent(dashState.station)}&hours=${dashState.hours}`);
+          const q = new URLSearchParams({ stationId: dashState.station });
+          if (dashCustom()) { q.set("from", dashState.from); q.set("to", dashState.to); } else q.set("hours", String(dashState.hours));
+          const res = await fetch(`/api/series?${q}`);
           r = await res.json();
           if (!res.ok) throw new Error(r.message || `HTTP ${res.status}`);
           seriesCache.set(key, r);
@@ -526,34 +578,61 @@
       renderChartMeta(r);
       drawChart(true);
     }
+    function chartTitleText(r) {
+      const st = dashStations().find((s) => s.id === dashState.station);
+      const head = `${dashState.station} ${st?.name || ""}`;
+      if (dashCustom()) return `${head} · ${dashState.from === dashState.to ? dashState.from : `${dashState.from} ~ ${dashState.to}`} 기온${r?.resolution === "day" ? " (일 단위)" : ""}`;
+      const label = (PERIODS.find(([h]) => h === dashState.hours) || [0, `${dashState.hours}시간`])[1];
+      return `${head} · 최근 ${label} 기온`;
+    }
+    // 선택 기간 안의 미적재를 볼 수 있는 링크(미적재 현황·자료수집)
+    function rangeGapLinks(r) {
+      const sid = encodeURIComponent(r.station_id);
+      const f = String(r.range_from || r.from || "").slice(0, 10), t = String(r.range_to || r.to || "").slice(0, 10);
+      return `<a class="st-link" href="#/gaps?kind=hourly&station=${sid}&from=${f}&to=${t}">미적재 현황 ›</a> · <a class="st-link" href="#/collect?station=${sid}&kind=hourly&from=${encodeURIComponent(`${f} 00:00`)}&to=${encodeURIComponent(`${t} 23:00`)}">자료수집 ›</a>`;
+    }
     function renderChartMeta(r) {
       const pts = r.points || [];
-      if (!r.latest) {
+      const custom = r.mode === "range";
+      const daily = r.resolution === "day";
+      $("chartTitle").textContent = chartTitleText(r);
+      $("chartBadge").innerHTML = !r.latest ? "" : r.stale ? `<span class="badge bad">⚠ 마지막 관측이 공식 최신보다 ${lagText(r.lag_hours)} 늦음 · 수집 중단</span>` : `<span class="badge ok">최신 자료</span>`;
+      if (!custom && r.from && r.to) { $("chFrom").value = r.from.slice(0, 10); $("chTo").value = r.to.slice(0, 10); } // 바로가기 기간을 날짜 칸에 표시
+      if (!custom && !r.latest) {
         $("chartRange").textContent = "이 지점의 관측 자료가 없습니다.";
-        $("chartBadge").innerHTML = ""; $("chartStats").innerHTML = ""; $("chartLegend").innerHTML = "";
+        $("chartStats").innerHTML = ""; $("chartLegend").innerHTML = "";
         return;
       }
-      const slots = Math.round((wallMs(r.to) - wallMs(r.from)) / HOUR) + 1;
-      $("chartRange").textContent = `${r.from} ~ ${r.to} (KST) · 마지막 관측 기준 · 자료 ${pts.length}/${slots}시간`;
-      $("chartBadge").innerHTML = r.stale ? `<span class="badge bad">⚠ 마지막 관측이 공식 최신보다 ${lagText(r.lag_hours)} 늦음 · 수집 중단</span>` : `<span class="badge ok">최신 자료</span>`;
+      if (custom && !pts.length) {
+        $("chartRange").innerHTML = `${esc(r.range_from)} ~ ${esc(r.range_to)} (KST) · 선택 기간 · <span class="bad">이 기간에는 자료가 없습니다</span>`;
+        $("chartStats").innerHTML = ""; $("chartLegend").innerHTML = "";
+        return;
+      }
+      const miss = Math.max(0, (r.expected || 0) - (r.present || 0));
+      if (!custom) {
+        $("chartRange").textContent = `${r.from} ~ ${r.to} (KST) · 마지막 관측 기준 · 자료 ${pts.length}/${r.expected}시간`;
+      } else {
+        const rangeTxt = daily ? `${esc(r.range_from.slice(0, 10))} ~ ${esc(r.range_to.slice(0, 10))} · ${nf(r.days)}일` : `${esc(r.range_from)} ~ ${esc(r.range_to)} (KST)`;
+        $("chartRange").innerHTML = `${rangeTxt} · 선택 기간${daily ? ` · <b>일 단위</b>(시간자료를 하루씩 평균·합계)` : ""} · 자료 ${nf(r.present)}/${nf(r.expected)}시간${miss ? ` · 미적재 ${nf(miss)}시간 ${rangeGapLinks(r)}` : ""}`;
+      }
       let hi = null, lo = null, last = null, rainSum = 0, rainN = 0, tN = 0;
+      const hiV = (p) => (daily ? p.max_temperature : p.temperature), loV = (p) => (daily ? p.min_temperature : p.temperature);
       for (const p of pts) {
-        if (p.temperature != null) {
-          tN++;
-          if (!hi || p.temperature > hi.temperature) hi = p;
-          if (!lo || p.temperature < lo.temperature) lo = p;
-          last = p;
-        }
+        if (hiV(p) != null && (!hi || hiV(p) > hiV(hi))) hi = p;
+        if (loV(p) != null && (!lo || loV(p) < loV(lo))) lo = p;
+        if (p.temperature != null) { tN++; last = p; }
         if (p.precipitation != null) { rainSum += p.precipitation; rainN++; }
       }
-      const tt = (p) => p ? `<small>${shortT(wallMs(p.t))}</small>` : "";
+      const tt = (p) => p ? `<small>${daily ? mdOf(wallMs(p.t)) : shortT(wallMs(p.t))}</small>` : "";
+      const u = daily ? "일" : "시간";
+      const slots = daily ? r.days : r.expected;
       const missing = slots - tN;
       $("chartStats").innerHTML = `
-        <span>최고 <b class="hi">${nf(hi?.temperature, "°C")}</b> ${tt(hi)}</span>
-        <span>최저 <b class="lo">${nf(lo?.temperature, "°C")}</b> ${tt(lo)}</span>
-        <span>최근 <b>${nf(last?.temperature, "°C")}</b> ${tt(last)}</span>
-        <span>강수 합계 <b>${rainN ? nf(Math.round(rainSum * 10) / 10, "mm") : "—"}</b> ${rainN ? `<small>(강수 값 있는 ${rainN}시간)</small>` : "<small>(강수 값 없음)</small>"}</span>
-        ${missing > 0 ? `<span title="관측이 없거나 기온이 NULL인 시각은 선을 끊어 표시합니다">기온 결측 <b>${nf(missing)}</b><small>시간</small></span>` : ""}`;
+        <span>${daily ? "일 최고" : "최고"} <b class="hi">${nf(hi ? hiV(hi) : null, "°C")}</b> ${tt(hi)}</span>
+        <span>${daily ? "일 최저" : "최저"} <b class="lo">${nf(lo ? loV(lo) : null, "°C")}</b> ${tt(lo)}</span>
+        <span>${daily ? "최근 일평균" : "최근"} <b>${nf(last?.temperature, "°C")}</b> ${tt(last)}</span>
+        <span>강수 합계 <b>${rainN ? nf(Math.round(rainSum * 10) / 10, "mm") : "—"}</b> ${rainN ? `<small>(강수 값 있는 ${rainN}${u})</small>` : "<small>(강수 값 없음)</small>"}</span>
+        ${missing > 0 ? `<span title="관측이 없거나 기온이 NULL인 ${u}은 선을 끊어 표시합니다">기온 결측 <b>${nf(missing)}</b><small>${u}</small></span>` : ""}`;
     }
     function niceStep(raw) {
       const pow = Math.pow(10, Math.floor(Math.log10(raw || 1)));
@@ -568,15 +647,26 @@
       if (!force && chartGeo && Math.abs(chartGeo.W - W) < 4) return;
       hideTip();
       const pts = r.points || [];
-      if (!r.latest || !pts.length) { chartGeo = null; box.innerHTML = `<p class="muted" style="padding:30px 0;text-align:center">이 지점·기간에 표시할 관측 자료가 없습니다.</p>`; $("chartLegend").innerHTML = ""; return; }
+      const daily = r.resolution === "day";
+      const unit = daily ? 24 * HOUR : HOUR;
+      if (!pts.length) {
+        chartGeo = null;
+        box.innerHTML = r.mode === "range"
+          ? `<div class="ch-empty"><p><b>이 기간에는 자료가 없습니다.</b></p><p class="muted">${esc(r.station_id)} ${esc(r.station_name || "")} · ${esc(String(r.range_from).slice(0, 10))} ~ ${esc(String(r.range_to).slice(0, 10))}</p><p>${rangeGapLinks(r)}</p></div>`
+          : `<p class="muted" style="padding:30px 0;text-align:center">이 지점·기간에 표시할 관측 자료가 없습니다.</p>`;
+        $("chartLegend").innerHTML = "";
+        return;
+      }
       const narrow = W < 560;
       const H = narrow ? 240 : 290;
       const t0 = wallMs(r.from), t1 = wallMs(r.to);
-      const span = Math.max(t1 - t0, HOUR);
+      const span = Math.max(t1 - t0, unit);
       const times = pts.map((p) => wallMs(p.t));
       let tMin = Infinity, tMax = -Infinity, rMax = 0, tCount = 0;
       for (const p of pts) {
-        if (p.temperature != null) { tCount++; if (p.temperature < tMin) tMin = p.temperature; if (p.temperature > tMax) tMax = p.temperature; }
+        const lo = daily ? p.min_temperature : p.temperature, hi = daily ? p.max_temperature : p.temperature;
+        if (lo != null) { tCount++; if (lo < tMin) tMin = lo; }
+        if (hi != null && hi > tMax) tMax = hi;
         if (p.precipitation != null && p.precipitation > rMax) rMax = p.precipitation;
       }
       if (!tCount) { tMin = 0; tMax = 10; }
@@ -602,7 +692,7 @@
         const rHi = (Math.floor(rMax / rStep + 1e-9) + 1) * rStep; // 막대 위 여유
         const Y2 = (v) => mt + ih - (v / rHi) * ih;
         for (let v = 0; v <= rHi + 1e-9; v += rStep) g += `<text class="ax ax-rain" x="${ml + iw + 6}" y="${f1(Y2(v)) + 4}">${f1(v)}mm</text>`;
-        const bw = Math.max(1, (iw / (span / HOUR + 1)) * 0.8);
+        const bw = Math.max(1, (iw / (span / unit + 1)) * 0.8);
         for (let i = 0; i < pts.length; i++) {
           const v = pts[i].precipitation;
           if (v == null || v <= 0) continue; // NULL은 막대를 그리지 않는다(0으로 바꾸지 않음)
@@ -610,24 +700,44 @@
           rainSvg += `<rect class="rain" x="${f1(X(times[i]) - bw / 2)}" y="${y}" width="${f1(bw)}" height="${f1(mt + ih - y)}"/>`;
         }
       }
-      // 시간 축: 기간·폭에 맞춰 간격 선택
+      // 시간 축: 기간·폭에 맞춰 간격 선택(두 달 넘는 일 단위는 달 첫날 기준)
       const spanH = span / HOUR;
       const maxLabels = Math.max(2, Math.floor(iw / (narrow ? 50 : 66)));
-      const stepH = [1, 2, 3, 6, 12, 24, 48, 72, 168].find((c) => spanH / c <= maxLabels) || 168;
-      const perDay = iw / Math.max(1, spanH / 24);
-      const stepMs = stepH * HOUR;
-      for (let t = Math.ceil(t0 / stepMs) * stepMs; t <= t1; t += stepMs) {
-        const x = f1(X(t));
-        const d = new Date(t);
-        const midnight = d.getUTCHours() === 0;
-        const label = stepH >= 24 ? (stepH === 24 && perDay >= 64 ? `${mdOf(t)}(${WD[d.getUTCDay()]})` : mdOf(t)) : midnight ? mdOf(t) : `${p2(d.getUTCHours())}시`;
-        g += `<line class="${midnight && stepH < 24 ? "grid-day" : "grid"}" x1="${x}" x2="${x}" y1="${mt}" y2="${mt + ih}"/>`;
-        g += `<text class="ax${midnight && stepH < 24 ? " ax-day" : ""}" x="${x}" y="${H - 10}" text-anchor="middle">${label}</text>`;
+      if (daily && spanH / 24 > 62) {
+        const d0 = new Date(t0);
+        const months = [];
+        for (let y = d0.getUTCFullYear(), m = d0.getUTCMonth() + 1; ; m++) {
+          if (m > 11) { m = 0; y++; }
+          const t = Date.UTC(y, m, 1);
+          if (t > t1) break;
+          months.push(t);
+        }
+        const stepM = [1, 2, 3, 6].find((c) => months.length / c <= maxLabels) || 6;
+        months.forEach((t, i) => {
+          if (i % stepM) return;
+          const d = new Date(t), x = f1(X(t));
+          const label = i === 0 || d.getUTCMonth() === 0 ? `${d.getUTCFullYear()}.${d.getUTCMonth() + 1}` : `${d.getUTCMonth() + 1}월`;
+          g += `<line class="grid-day" x1="${x}" x2="${x}" y1="${mt}" y2="${mt + ih}"/><text class="ax" x="${x}" y="${H - 10}" text-anchor="middle">${label}</text>`;
+        });
+      } else {
+        const steps = daily ? [24, 48, 72, 168, 336] : [1, 2, 3, 6, 12, 24, 48, 72, 168, 336];
+        const stepH = steps.find((c) => spanH / c <= maxLabels) || 336;
+        const perDay = iw / Math.max(1, spanH / 24);
+        const stepMs = stepH * HOUR;
+        for (let t = Math.ceil(t0 / stepMs) * stepMs; t <= t1; t += stepMs) {
+          const x = f1(X(t));
+          const d = new Date(t);
+          const midnight = d.getUTCHours() === 0;
+          const label = stepH >= 24 ? (stepH === 24 && perDay >= 64 ? `${mdOf(t)}(${WD[d.getUTCDay()]})` : mdOf(t)) : midnight ? mdOf(t) : `${p2(d.getUTCHours())}시`;
+          g += `<line class="${midnight && stepH < 24 ? "grid-day" : "grid"}" x1="${x}" x2="${x}" y1="${mt}" y2="${mt + ih}"/>`;
+          g += `<text class="ax${midnight && stepH < 24 ? " ax-day" : ""}" x="${x}" y="${H - 10}" text-anchor="middle">${label}</text>`;
+        }
       }
-      // 기온 선: NULL이거나 1시간 넘게 비면 선을 끊는다
+      // 기온 선: NULL이거나 한 칸(1시간/1일) 넘게 비면 선을 끊는다
+      const gapOk = (i) => times[i] - times[i - 1] <= unit * 1.5;
       const conn = new Array(pts.length).fill(false); // conn[i]: i-1 과 i 가 이어짐
-      for (let i = 1; i < pts.length; i++) conn[i] = pts[i].temperature != null && pts[i - 1].temperature != null && times[i] - times[i - 1] <= HOUR * 1.5;
-      let path = "", dots = "";
+      for (let i = 1; i < pts.length; i++) conn[i] = pts[i].temperature != null && pts[i - 1].temperature != null && gapOk(i);
+      let path = "", dots = "", band = "";
       for (let i = 0; i < pts.length; i++) {
         const v = pts[i].temperature;
         if (v == null) continue;
@@ -635,16 +745,35 @@
         path += `${conn[i] ? "L" : "M"}${x},${y}`;
         if (!conn[i] && !conn[i + 1]) dots += `<circle class="tdot" cx="${x}" cy="${y}" r="2.2"/>`;
       }
-      box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="기온 그래프">
-          ${g}${rainSvg}
+      if (daily) {
+        // 일 최고~최저 범위를 옅은 띠로(이어진 날끼리)
+        const ok = (p) => p.max_temperature != null && p.min_temperature != null;
+        for (let i = 0; i < pts.length;) {
+          if (!ok(pts[i])) { i++; continue; }
+          let j = i;
+          while (j + 1 < pts.length && ok(pts[j + 1]) && gapOk(j + 1)) j++;
+          if (j === i) band += `<line class="tband-l" x1="${f1(X(times[i]))}" x2="${f1(X(times[i]))}" y1="${f1(Y(pts[i].max_temperature))}" y2="${f1(Y(pts[i].min_temperature))}"/>`;
+          else {
+            let d = "";
+            for (let k = i; k <= j; k++) d += `${k === i ? "M" : "L"}${f1(X(times[k]))},${f1(Y(pts[k].max_temperature))}`;
+            for (let k = j; k >= i; k--) d += `L${f1(X(times[k]))},${f1(Y(pts[k].min_temperature))}`;
+            band += `<path class="tband" d="${d}Z"/>`;
+          }
+          i = j + 1;
+        }
+      }
+      box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="기온 그래프${daily ? "(일 단위)" : ""}">
+          ${g}${rainSvg}${band}
           <line class="grid-day" x1="${ml}" x2="${ml + iw}" y1="${mt + ih}" y2="${mt + ih}"/>
           <path class="tline" d="${path}"/>${dots}
           <line class="hv" id="hvLine" x1="0" x2="0" y1="${mt}" y2="${mt + ih}" visibility="hidden"/>
           <circle class="hvdot" id="hvDot" r="4" cx="0" cy="0" visibility="hidden"/>
           <rect x="${ml}" y="${mt}" width="${iw}" height="${ih}" fill="transparent" id="hvHit"/>
         </svg>`;
-      chartGeo = { W, H, ml, mt, iw, ih, t0, span, times, pts, X, Y };
-      $("chartLegend").innerHTML = `<span><i></i>기온(°C, 왼쪽 축)</span>${hasRain ? `<span><i class="r"></i>강수(mm, 오른쪽 축)</span>` : ""}<span>빈 구간 = 관측 없음/NULL (0으로 채우지 않음)</span>`;
+      chartGeo = { W, H, ml, mt, iw, ih, t0, span, times, pts, X, Y, daily };
+      $("chartLegend").innerHTML = daily
+        ? `<span><i></i>일평균 기온(°C, 왼쪽 축)</span><span><i class="b"></i>일 최고~최저</span>${hasRain ? `<span><i class="r"></i>일 강수 합계(mm, 오른쪽 축)</span>` : ""}<span>일 단위 = 그날 시간자료의 평균·최고·최저·합계 · 빈 곳 = 관측 없음</span>`
+        : `<span><i></i>기온(°C, 왼쪽 축)</span>${hasRain ? `<span><i class="r"></i>강수(mm, 오른쪽 축)</span>` : ""}<span>빈 구간 = 관측 없음/NULL (0으로 채우지 않음)</span>`;
       const svg = box.querySelector("svg");
       let raf = 0, lastEv = null;
       const onMove = (e) => { lastEv = e; if (!raf) raf = requestAnimationFrame(() => { raf = 0; showTip(lastEv, svg); }); };
@@ -670,7 +799,15 @@
       if (p.temperature != null) { dot.setAttribute("cx", x); dot.setAttribute("cy", g.Y(p.temperature)); dot.setAttribute("visibility", "visible"); }
       else dot.setAttribute("visibility", "hidden");
       const tip = $("chartTip");
-      tip.innerHTML = `<b>${longT(g.times[i])}</b><br>
+      if (g.daily) {
+        const d = new Date(g.times[i]);
+        tip.innerHTML = `<b>${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())} (${WD[d.getUTCDay()]})</b> <span style="opacity:.7">일 단위</span><br>
+        <span class="k">평균</span> ${nf(p.temperature, "°C")}<br>
+        <span class="k">최고</span> ${nf(p.max_temperature, "°C")} · <span class="k">최저</span> ${nf(p.min_temperature, "°C")}<br>
+        <span class="k">강수</span> ${nf(p.precipitation, "mm")} (합계)<br>
+        <span class="k">습도</span> ${nf(p.humidity, "%")} · <span class="k">풍속</span> ${nf(p.wind_speed, "m/s")}<br>
+        <span class="k">관측</span> ${nf(p.hours)}/24시간`;
+      } else tip.innerHTML = `<b>${longT(g.times[i])}</b><br>
         <span class="k">기온</span> ${nf(p.temperature, "°C")}<br>
         <span class="k">강수</span> ${nf(p.precipitation, "mm")}<br>
         <span class="k">습도</span> ${nf(p.humidity, "%")}<br>
@@ -690,6 +827,8 @@
     }
     $("stSel").addEventListener("click", (e) => { const b = e.target.closest("button[data-st]"); if (b && !b.disabled) selectStation(b.dataset.st); });
     $("periodSel").addEventListener("click", (e) => { const b = e.target.closest("button[data-h]"); if (b) selectPeriod(Number(b.dataset.h)); });
+    $("chApply").onclick = applyDashRange;
+    ["chFrom", "chTo"].forEach((id) => $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") applyDashRange(); }));
     $("stCards").addEventListener("click", (e) => { if (e.target.closest("a")) return; const c = e.target.closest(".st-card[data-st]"); if (c) selectStation(c.dataset.st); });
     $("stCards").addEventListener("keydown", (e) => { if (e.key !== "Enter" && e.key !== " ") return; const c = e.target.closest(".st-card[data-st]"); if (c) { e.preventDefault(); selectStation(c.dataset.st); } });
     if (window.ResizeObserver) new ResizeObserver(() => requestAnimationFrame(() => drawChart(false))).observe($("chart"));
@@ -1309,9 +1448,9 @@
       if (name === "gaps" && dashCache) routeGaps();
       if (name === "dash" && dashCache) {
         // 주소의 ?station=&hours= 를 반영(직접 입력·뒤로가기)
-        const before = `${dashState.station}|${dashState.hours}`;
+        const before = dashKey();
         pickDefaultStation();
-        if (`${dashState.station}|${dashState.hours}` !== before) { renderStationCards(); renderDashControls(); loadSeries(); }
+        if (dashKey() !== before) { renderStationCards(); renderDashControls(); loadSeries(); }
         else drawChart(false);
       }
     }

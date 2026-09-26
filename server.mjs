@@ -496,50 +496,133 @@ async function stationSummaries(stationList) {
   });
 }
 
-async function series(stationIdRaw, hoursRaw) {
+// 기간 지정(from/to) 그래프: 31일까지는 시간 단위, 그보다 길면 하루 단위로 묶는다(최대 366일).
+const SERIES_HOURLY_MAX_DAYS = 31;
+const SERIES_RANGE_MAX_DAYS = 366;
+function roundTo(v, d = 1) {
+  const f = 10 ** d;
+  return Math.round(v * f) / f;
+}
+// 시간 단위 점(중복 제거된 것)을 날짜별로 묶는다. NULL은 0으로 바꾸지 않고 값 있는 시각만 집계한다.
+function dailyFromHourly(points) {
+  const byDay = new Map();
+  for (const p of points) {
+    const d = String(p.t).slice(0, 10);
+    if (!byDay.has(d)) byDay.set(d, []);
+    byDay.get(d).push(p);
+  }
+  return [...byDay.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([d, list]) => {
+      const vals = (k) => list.map((x) => x[k]).filter((v) => v != null && Number.isFinite(Number(v))).map(Number);
+      const temps = vals("temperature");
+      const rains = vals("precipitation");
+      const hums = vals("humidity");
+      const winds = vals("wind_speed");
+      const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+      return {
+        t: `${d} 00:00`,
+        temperature: temps.length ? roundTo(avg(temps)) : null,
+        max_temperature: temps.length ? Math.max(...temps) : null,
+        min_temperature: temps.length ? Math.min(...temps) : null,
+        precipitation: rains.length ? roundTo(rains.reduce((x, y) => x + y, 0)) : null,
+        humidity: hums.length ? Math.round(avg(hums)) : null,
+        wind_speed: winds.length ? roundTo(avg(winds)) : null,
+        hours: list.length,
+        temp_hours: temps.length,
+      };
+    });
+}
+async function seriesPoints(stationId, from16, to16) {
+  if (db.usingPg()) {
+    return (await db.seriesPg(stationId, from16, to16)).map((r) => ({
+      t: r.t,
+      temperature: r.temperature,
+      precipitation: r.precipitation,
+      humidity: r.humidity,
+      wind_speed: r.wind_speed,
+    }));
+  }
+  return dedupeHourly(loadJson(OBS_FILE, []).filter((r) => String(r.station_id) === stationId))
+    .filter(([t]) => t >= from16 && t <= to16)
+    .map(([t, r]) => ({
+      t,
+      temperature: r.temperature ?? null,
+      precipitation: r.precipitation ?? null,
+      humidity: r.humidity ?? null,
+      wind_speed: r.wind_speed ?? null,
+    }));
+}
+async function stationLatest(stationId) {
+  if (db.usingPg()) return db.latestHourPg(stationId);
+  const uniq = dedupeHourly(loadJson(OBS_FILE, []).filter((r) => String(r.station_id) === stationId));
+  return uniq.length ? uniq[uniq.length - 1][0] : null;
+}
+
+async function series(stationIdRaw, hoursRaw, fromRaw, toRaw) {
   const list = await stations();
   const stationId = String(stationIdRaw ?? "108").trim();
   const st = list.find((s) => String(s.station_id) === stationId);
   if (!st) return { status: 400, body: { ok: false, message: `알 수 없는 지점입니다: ${stationId.slice(0, 20)}` } };
+  const official = latestOfficialHour();
+  if (fromRaw != null && fromRaw !== "") return seriesRange(st, stationId, String(fromRaw), toRaw == null ? "" : String(toRaw), official);
   let hours = Math.round(Number(hoursRaw ?? 72));
   if (!Number.isFinite(hours)) hours = 72;
   hours = Math.min(SERIES_MAX_HOURS, Math.max(SERIES_MIN_HOURS, hours));
-  const base = { timezone: "Asia/Seoul", station_id: stationId, station_name: st.station_name, hours, latestOfficialHour: latestOfficialHour() };
-  let latest = null;
-  let points = [];
-  if (db.usingPg()) {
-    latest = await db.latestHourPg(stationId);
-    if (latest) {
-      const from = t16(addHours(latest, -(hours - 1)));
-      points = (await db.seriesPg(stationId, from, latest)).map((r) => ({
-        t: r.t,
-        temperature: r.temperature,
-        precipitation: r.precipitation,
-        humidity: r.humidity,
-        wind_speed: r.wind_speed,
-      }));
-    }
-  } else {
-    const uniq = dedupeHourly(loadJson(OBS_FILE, []).filter((r) => String(r.station_id) === stationId));
-    if (uniq.length) {
-      latest = uniq[uniq.length - 1][0];
-      const from = t16(addHours(latest, -(hours - 1)));
-      points = uniq
-        .filter(([t]) => t >= from && t <= latest)
-        .map(([t, r]) => ({
-          t,
-          temperature: r.temperature ?? null,
-          precipitation: r.precipitation ?? null,
-          humidity: r.humidity ?? null,
-          wind_speed: r.wind_speed ?? null,
-        }));
-    }
-  }
+  const base = { timezone: "Asia/Seoul", mode: "hours", resolution: "hour", station_id: stationId, station_name: st.station_name, hours, latestOfficialHour: official };
+  const latest = await stationLatest(stationId);
   const from = latest ? t16(addHours(latest, -(hours - 1))) : null;
-  const lag = latest ? lagHours(latest, base.latestOfficialHour) : null;
+  const points = latest ? await seriesPoints(stationId, from, latest) : [];
+  const lag = latest ? lagHours(latest, official) : null;
   return {
     status: 200,
-    body: { ...base, from, to: latest, latest, lag_hours: lag, stale: lag != null && lag > 24, count: points.length, points },
+    body: { ...base, from, to: latest, latest, lag_hours: lag, stale: lag != null && lag > 24, count: points.length, expected: latest ? hours : 0, present: points.length, points },
+  };
+}
+
+async function seriesRange(st, stationId, fromRaw, toRaw, official) {
+  const bad = (message) => ({ status: 400, body: { ok: false, message } });
+  const officialMs = wallMs(official);
+  const officialDate = official.slice(0, 10);
+  const fromMs = parseGapTime(fromRaw, false);
+  const toMs0 = toRaw ? parseGapTime(toRaw, true) : officialMs;
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs0)) return bad("날짜 형식이 올바르지 않습니다 (YYYY-MM-DD 또는 YYYY-MM-DD HH:MM)");
+  if (fromMs > toMs0) return bad("시작이 종료보다 늦습니다");
+  if (fromMs > officialMs) return bad(`시작이 공식 최신 날짜(${officialDate})보다 늦습니다. 공식 자료는 ${official.slice(0, 16)}까지 제공됩니다`);
+  if (msToYmd(toMs0) > officialDate) return bad(`종료가 공식 최신 날짜(${officialDate})보다 늦습니다`);
+  const toMs = Math.min(toMs0, officialMs);
+  const spanDays = Math.floor(dayFloor(toMs) / DAY_MS - dayFloor(fromMs) / DAY_MS) + 1;
+  if (spanDays > SERIES_RANGE_MAX_DAYS) return bad(`기간은 최대 ${SERIES_RANGE_MAX_DAYS}일까지 볼 수 있습니다 (지금 ${spanDays}일)`);
+  const from16 = `${msToH13(fromMs)}:00`;
+  const to16 = `${msToH13(toMs)}:00`;
+  const resolution = spanDays > SERIES_HOURLY_MAX_DAYS ? "day" : "hour";
+  const [latest, hourly] = await Promise.all([stationLatest(stationId), seriesPoints(stationId, from16, to16)]);
+  const lag = latest ? lagHours(latest, official) : null;
+  const expected = Math.round((toMs - fromMs) / 3600000) + 1;
+  const points = resolution === "day" ? dailyFromHourly(hourly) : hourly;
+  return {
+    status: 200,
+    body: {
+      timezone: "Asia/Seoul",
+      mode: "range",
+      resolution,
+      station_id: stationId,
+      station_name: st.station_name,
+      latestOfficialHour: official,
+      from: resolution === "day" ? `${msToYmd(fromMs)} 00:00` : from16,
+      to: resolution === "day" ? `${msToYmd(toMs)} 00:00` : to16,
+      range_from: from16,
+      range_to: to16,
+      days: spanDays,
+      hours: expected,
+      latest,
+      lag_hours: lag,
+      stale: lag != null && lag > 24,
+      expected,
+      present: hourly.length,
+      count: points.length,
+      points,
+    },
   };
 }
 
@@ -930,7 +1013,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, await dashboard());
     }
     if (req.method === "GET" && url.pathname === "/api/series") {
-      const r = await series(url.searchParams.get("stationId"), url.searchParams.get("hours"));
+      const r = await series(url.searchParams.get("stationId"), url.searchParams.get("hours"), url.searchParams.get("from"), url.searchParams.get("to"));
       return json(res, r.body, r.status);
     }
     if (req.method === "GET" && url.pathname === "/api/gaps") {
