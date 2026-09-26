@@ -1,7 +1,7 @@
 {
   "name": "누니날씨 · nuni weather",
   "short_name": "누니날씨",
-  "description": "기상청 공식 ASOS 관측 자료를 수집·조회·다운로드하는 사내 공통 기상데이터 플랫폼",
+  "description": "기상청 공식 ASOS 관측 자료를 수집·조회·다운로드하는 공통 기상데이터 플랫폼",
   "lang": "ko",
   "start_url": "/",
   "scope": "/",
