@@ -135,6 +135,51 @@ export async function seriesSeoul() {
   }));
 }
 
+// observation_datetime은 TEXT이고 'YYYY-MM-DD HH:MM'(16자)와 'YYYY-MM-DD HH:MM:SS'(19자)가 섞여 있다.
+// 같은 시각이 두 형식으로 중복 저장된 행도 있으므로 left(...,16)으로 정규화하고 시각당 한 행만 쓴다.
+export async function latestHourPg(stationId) {
+  const r = await pool.query(
+    `SELECT max(left(observation_datetime,16)) AS t FROM observations_hourly WHERE station_id = $1`,
+    [stationId],
+  );
+  return r.rows[0]?.t || null;
+}
+
+export async function seriesPg(stationId, from16, to16) {
+  const r = await pool.query(
+    `SELECT DISTINCT ON (left(observation_datetime,16))
+            left(observation_datetime,16) AS t, station_name,
+            temperature, precipitation, humidity, wind_speed
+     FROM observations_hourly
+     WHERE station_id = $1 AND left(observation_datetime,16) BETWEEN $2 AND $3
+     ORDER BY left(observation_datetime,16), length(observation_datetime) DESC`,
+    [stationId, from16, to16],
+  );
+  return r.rows;
+}
+
+// 지점별 요약 한 번에: 시각(16자)별로 묶어 중복을 접고 → 지점별 집계 → 마지막 시각의 행을 붙인다.
+export async function stationSummariesPg() {
+  const r = await pool.query(
+    `WITH u AS (
+       SELECT station_id, left(observation_datetime,16) AS t, count(*) AS n
+       FROM observations_hourly GROUP BY 1, 2
+     ), agg AS (
+       SELECT station_id, sum(n)::int AS rows, count(*)::int AS hours,
+              min(t) AS first_observation, max(t) AS last_observation
+       FROM u GROUP BY 1
+     )
+     SELECT DISTINCT ON (a.station_id)
+            a.station_id, o.station_name, a.first_observation, a.last_observation,
+            o.temperature, o.humidity, o.precipitation, o.wind_speed, a.rows, a.hours
+     FROM agg a
+     JOIN observations_hourly o
+       ON o.station_id = a.station_id AND left(o.observation_datetime,16) = a.last_observation
+     ORDER BY a.station_id, length(o.observation_datetime) DESC`,
+  );
+  return r.rows;
+}
+
 export async function hourlyForDaily(stationId, fromDate, toDate) {
   const r = await pool.query(
     `SELECT * FROM observations_hourly

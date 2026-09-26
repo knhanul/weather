@@ -35,7 +35,58 @@
     .ok { color:#2f6b4f; } .bad { color:#8f3a32; }
     .page { display:none; } .page.on { display:grid; gap:16px; }
     svg { width:100%; height:160px; }
-    @media (max-width:800px) { .layout { display:block; } aside { width:auto; display:flex; gap:8px; overflow:auto; } nav { display:flex; gap:4px; } }
+    /* 대시보드 */
+    .sec-title { margin:4px 0 -4px; font-size:13px; color:var(--muted); font-weight:500; }
+    .card h2 { margin:0; font-size:18px; }
+    .card strong.big { font-size:20px; font-variant-numeric:tabular-nums; }
+    .card .muted { margin:4px 0 0; }
+    .st-grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(165px,1fr)); }
+    .st-card { padding:12px 14px; }
+    .st-card .muted { font-size:12px; }
+    .st-card { cursor:pointer; transition:border-color .15s, box-shadow .15s; }
+    .st-card:hover { border-color:#bfb29b; }
+    .st-card:focus-visible { outline:2px solid var(--pri); outline-offset:2px; }
+    .st-card.sel { border-color:var(--pri); box-shadow:inset 0 0 0 1px var(--pri); }
+    .st-card.stale { background:#fbf1ec; }
+    .st-top { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:4px 8px; }
+    .st-top strong { font-size:16px; }
+    .st-vals { display:flex; flex-wrap:wrap; gap:2px 12px; margin-top:6px; font-size:12px; color:var(--muted); }
+    .st-vals b { color:var(--fg); font-size:16px; font-variant-numeric:tabular-nums; }
+    .badge { display:inline-block; font-size:11px; line-height:1.4; padding:2px 8px; border-radius:999px; white-space:nowrap; }
+    .badge.ok { background:#e2eee5; color:#2f6b4f; }
+    .badge.bad { background:#f3d9d3; color:#8f3a32; font-weight:600; }
+    .badge.off { background:#ece6da; color:var(--muted); }
+    .chart-head { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:8px 16px; }
+    .chart-head p { margin:2px 0 0; }
+    .controls { display:flex; flex-wrap:wrap; gap:10px 24px; margin:12px 0 6px; }
+    .ctl { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+    .ctl > span { font-size:12px; color:var(--muted); margin-right:2px; }
+    .seg button { height:34px; padding:0 12px; background:#efe8d8; color:var(--fg); font-size:14px; }
+    .seg button.on { background:var(--pri); color:var(--pri-fg); }
+    .seg button:disabled { opacity:.45; cursor:default; }
+    .stats { display:flex; flex-wrap:wrap; gap:6px 22px; margin:10px 0 6px; font-size:13px; color:var(--muted); }
+    .stats b { color:var(--fg); font-size:17px; font-variant-numeric:tabular-nums; margin-left:2px; }
+    .stats small { font-size:12px; }
+    .stats .hi { color:#a2452f; } .stats .lo { color:#2c5d8a; }
+    .chart-box { position:relative; min-height:120px; }
+    #chart svg { display:block; width:100%; height:auto; touch-action:pan-y; user-select:none; }
+    #chart .grid { stroke:var(--line); stroke-width:1; }
+    #chart .grid-day { stroke:#c9bda8; stroke-width:1; }
+    #chart .ax { fill:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+    #chart .ax-rain { fill:#4d7ea8; }
+    #chart .ax-day { fill:var(--fg); font-weight:600; }
+    #chart .tline { fill:none; stroke:var(--pri); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
+    #chart .tdot { fill:var(--pri); }
+    #chart .rain { fill:#6d9dc5; opacity:.55; }
+    #chart .hv { stroke:var(--fg); stroke-width:1; stroke-dasharray:3 3; opacity:.55; }
+    #chart .hvdot { fill:var(--surface); stroke:var(--pri); stroke-width:2; }
+    .legend { display:flex; flex-wrap:wrap; gap:4px 16px; font-size:12px; color:var(--muted); margin-top:4px; }
+    .legend i { display:inline-block; width:14px; height:3px; background:var(--pri); vertical-align:middle; margin-right:5px; border-radius:2px; }
+    .legend i.r { height:10px; width:8px; background:#6d9dc5; opacity:.7; }
+    .tip { position:absolute; top:0; left:0; display:none; pointer-events:none; background:#1c1915; color:#f7f4ec; border-radius:8px; padding:8px 10px; font-size:12px; line-height:1.55; white-space:nowrap; box-shadow:0 4px 14px rgba(0,0,0,.18); font-variant-numeric:tabular-nums; z-index:2; }
+    .tip b { font-weight:600; }
+    .tip .k { display:inline-block; min-width:30px; opacity:.7; }
+    @media (max-width:800px) { .layout { display:block; } aside { width:auto; display:flex; gap:8px; overflow:auto; align-items:center; } .brand, nav a { white-space:nowrap; flex-shrink:0; } nav { display:flex; gap:4px; } main { padding:16px 14px 32px; } }
   </style>
 </head>
 <body>
@@ -59,11 +110,29 @@
       </header>
       <main>
         <section class="page" id="dash">
-          <div class="grid4" id="dashCards"></div>
+          <p class="sec-title">즐겨찾기 지점 상태 <span id="stRef"></span></p>
+          <div class="st-grid" id="stCards"></div>
           <div class="card">
-            <h2>서울 108 · 최근 기온</h2>
-            <div id="chart"></div>
+            <div class="chart-head">
+              <div>
+                <h2 id="chartTitle">최근 기온</h2>
+                <p class="muted" id="chartRange"></p>
+              </div>
+              <span id="chartBadge"></span>
+            </div>
+            <div class="controls">
+              <div class="ctl"><span>지점</span><div class="seg ctl" id="stSel"></div></div>
+              <div class="ctl"><span>기간</span><div class="seg ctl" id="periodSel"></div></div>
+            </div>
+            <div class="stats" id="chartStats"></div>
+            <div class="chart-box">
+              <div id="chart"></div>
+              <div class="tip" id="chartTip"></div>
+            </div>
+            <div class="legend" id="chartLegend"></div>
           </div>
+          <p class="sec-title">시스템</p>
+          <div class="grid4" id="dashCards"></div>
         </section>
         <section class="page" id="hourly">
           <div class="card">
@@ -152,22 +221,8 @@
     async function loadDash() {
       dashCache = await (await fetch("/api/dashboard")).json();
       const d = dashCache;
-      $("dashCards").innerHTML = `
-        ${(d.coverage||[]).map((c)=>`<div class="card"><p class="muted">${c.dataset}</p><strong>${c.records.toLocaleString()}건</strong><p class="muted">${c.first}<br>${c.last}<br>지점 ${c.stations}</p></div>`).join("")}
-        <div class="card"><p class="muted">최근 수집</p><strong>${d.lastJob?.status || "없음"}</strong><p class="muted">${d.lastJob ? d.lastJob.dataset + " · " + (d.lastJob.message||"") : ""}</p></div>
-        <div class="card"><p class="muted">저장소</p><strong>${d.storage || "json"}</strong><p class="muted">${d.keyRegistered ? "키 " + (d.keyHint||"") : "키 미등록"}</p></div>`;
-      const series = d.series || [];
-      if (series.length) {
-        const vals = series.map((s) => s.temperature).filter((v) => v != null);
-        const min = Math.min(...vals) - 1, max = Math.max(...vals) + 1;
-        const w = 640, h = 160, pad = 8;
-        const pts = series.map((s, i) => {
-          const x = pad + (i / Math.max(series.length - 1, 1)) * (w - pad * 2);
-          const y = h - pad - ((s.temperature - min) / (max - min || 1)) * (h - pad * 2);
-          return `${x},${y}`;
-        }).join(" ");
-        $("chart").innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline fill="none" stroke="#1f4e5f" stroke-width="2" points="${pts}"/></svg>`;
-      }
+      seriesCache = new Map();
+      renderDash();
       fillStations($("hStation")); fillStations($("dStation")); fillStations($("xStation"));
       $("hFrom").value = toPicker(d.latestOfficialHour.slice(0,10) + " 00:00:00");
       $("hTo").value = toPicker(d.latestOfficialHour);
@@ -177,6 +232,304 @@
       $("xTo").value = $("hTo").value;
       $("pStatus").textContent = `저장 ${d.storage||"json"} · 키 ${d.keyRegistered ? "등록됨 " + (d.keyHint||"") : "미등록"} · 공식 최신 ${d.latestOfficialHour}`;
     }
+    // ---------- 대시보드 ----------
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const p2 = (n) => String(n).padStart(2, "0");
+    const nf = (v, unit = "") => (v === null || v === undefined || v === "" ? "—" : `${Number(v).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}${unit}`);
+    const WD = ["일", "월", "화", "수", "목", "금", "토"];
+    const HOUR = 3600000;
+    // 서버 시각('YYYY-MM-DD HH:MM[:SS]', KST 벽시계)을 UTC 기준 ms로 그대로 옮겨 계산한다(표시도 getUTC*).
+    const wallMs = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(s || ""); return m ? Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5]) : NaN; };
+    const mdOf = (ms) => { const d = new Date(ms); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`; };
+    const longT = (ms) => { const d = new Date(ms); return `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())} (${WD[d.getUTCDay()]}) ${p2(d.getUTCHours())}:00`; };
+    const shortT = (ms) => { const d = new Date(ms); return `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${p2(d.getUTCHours())}시`; };
+    const lagText = (h) => (h >= 48 ? `${Math.floor(h / 24)}일` : `${h}시간`);
+    const PERIODS = [[24, "24시간"], [72, "3일"], [168, "7일"], [720, "30일"]];
+    const dashState = { station: null, hours: 72 };
+    let seriesCache = new Map();
+    let seriesReq = 0;
+    let currentSeries = null;
+    let chartGeo = null;
+
+    function hashParams() {
+      const q = (location.hash.split("?")[1] || "");
+      return new URLSearchParams(q);
+    }
+    function dashStations() {
+      const d = dashCache || {};
+      const sums = new Map((d.stationSummaries || []).map((s) => [String(s.station_id), s]));
+      const all = d.stations || [];
+      let list = all.filter((s) => s.favorite);
+      if (!list.length) list = all.filter((s) => sums.has(String(s.station_id)));
+      if (!list.length) list = [...sums.values()];
+      const out = list.map((s) => ({ id: String(s.station_id), name: s.station_name || sums.get(String(s.station_id))?.station_name || "", enabled: s.enabled, summary: sums.get(String(s.station_id)) || null }));
+      // URL로 즐겨찾기 밖의 지점을 고른 경우 버튼에 추가
+      const extra = dashState.station && !out.some((s) => s.id === dashState.station) ? all.find((s) => String(s.station_id) === dashState.station) : null;
+      if (extra) out.push({ id: String(extra.station_id), name: extra.station_name, enabled: extra.enabled, summary: sums.get(String(extra.station_id)) || null });
+      return out;
+    }
+    function pickDefaultStation() {
+      const d = dashCache || {};
+      const known = new Set((d.stations || []).map((s) => String(s.station_id)));
+      const hp = hashParams();
+      const want = hp.get("station");
+      const h = Number(hp.get("hours"));
+      if (PERIODS.some(([v]) => v === h)) dashState.hours = h;
+      if (want && known.has(want)) { dashState.station = want; return; }
+      if (dashState.station && known.has(dashState.station)) return;
+      const list = dashStations();
+      const withData = list.filter((s) => s.summary).sort((a, b) => String(b.summary.last_observation).localeCompare(String(a.summary.last_observation)));
+      dashState.station = (withData[0] || list[0] || {}).id || "108";
+    }
+    function syncHash() {
+      const want = `#/?station=${encodeURIComponent(dashState.station)}&hours=${dashState.hours}`;
+      if (location.hash !== want) history.replaceState(null, "", want);
+    }
+    function selectStation(id) {
+      if (!id || id === dashState.station) return;
+      dashState.station = id; syncHash(); renderDashControls(); loadSeries();
+    }
+    function selectPeriod(h) {
+      if (h === dashState.hours) return;
+      dashState.hours = h; syncHash(); renderDashControls(); loadSeries();
+    }
+    function renderStationCards() {
+      const d = dashCache || {};
+      $("stRef").textContent = d.latestOfficialHour ? `· 공식 최신 ${d.latestOfficialHour.slice(0, 16)} 기준, 24시간 넘게 뒤처지면 경고` : "";
+      const list = dashStations();
+      $("stCards").innerHTML = list.map((s) => {
+        const m = s.summary;
+        const badge = !m ? `<span class="badge bad">자료 없음</span>`
+          : m.stale ? `<span class="badge bad" title="공식 최신 시각보다 ${m.lag_hours}시간 늦음">⚠ 수집 중단 · ${lagText(m.lag_hours)} 지연</span>`
+          : `<span class="badge ok">정상</span>`;
+        const body = m ? `
+            <p class="muted">마지막 관측 ${esc(m.last_observation)}</p>
+            <div class="st-vals"><span>기온 <b>${nf(m.temperature, "°C")}</b></span><span>습도 <b>${nf(m.humidity, "%")}</b></span><span>강수 <b>${nf(m.precipitation, "mm")}</b></span></div>
+            <p class="muted" title="관측 시각 ${nf(m.hours)}개 · ${esc(m.first_observation)}부터">${nf(m.rows)}건${m.duplicates ? ` · <span title="같은 시각이 'HH:MM'과 'HH:MM:SS' 두 형식으로 중복 저장됨">중복 ${nf(m.duplicates)}</span>` : ""}${s.enabled === false ? ` · <span class="badge off">사용 중지</span>` : ""}</p>`
+          : `<p class="muted">이 지점의 시간자료가 아직 없습니다.</p>`;
+        return `<div class="card st-card${s.id === dashState.station ? " sel" : ""}${m?.stale || !m ? " stale" : ""}" role="button" tabindex="0" data-st="${esc(s.id)}" aria-pressed="${s.id === dashState.station}">
+            <div class="st-top"><strong>${esc(s.id)} ${esc(s.name)}</strong>${badge}</div>${body}
+          </div>`;
+      }).join("") || `<div class="card muted">즐겨찾기 지점이 없습니다. 관측지점 메뉴에서 ★를 눌러 추가하세요.</div>`;
+    }
+    function renderDashControls() {
+      const list = dashStations();
+      $("stSel").innerHTML = list.map((s) => `<button type="button" class="${s.id === dashState.station ? "on" : ""}" data-st="${esc(s.id)}"${s.summary ? "" : " disabled title=\"자료 없음\""}>${esc(s.id)} ${esc(s.name)}</button>`).join("");
+      $("periodSel").innerHTML = PERIODS.map(([h, label]) => `<button type="button" class="${h === dashState.hours ? "on" : ""}" data-h="${h}">${label}</button>`).join("");
+      document.querySelectorAll("#stCards .st-card").forEach((el) => {
+        const on = el.dataset.st === dashState.station;
+        el.classList.toggle("sel", on); el.setAttribute("aria-pressed", String(on));
+      });
+    }
+    function renderSysCards() {
+      const d = dashCache || {};
+      $("dashCards").innerHTML = `
+        ${(d.coverage || []).map((c) => `<div class="card"><p class="muted">${esc(c.dataset)}</p><strong class="big">${nf(c.records)}건</strong><p class="muted">${esc(String(c.first || "").slice(0, 16))} ~ ${esc(String(c.last || "").slice(0, 16))}<br>지점 ${nf(c.stations)}곳</p></div>`).join("")}
+        <div class="card"><p class="muted">최근 수집</p><strong class="big ${d.lastJob ? (d.lastJob.status === "COMPLETED" ? "ok" : "bad") : ""}">${esc(d.lastJob?.status || "없음")}</strong><p class="muted">${d.lastJob ? `${esc(d.lastJob.dataset)} · ${esc(d.lastJob.station_id || "")}<br>${esc(d.lastJob.message || "")}` : ""}</p></div>
+        <div class="card"><p class="muted">저장소</p><strong class="big">${esc(d.storage || "json")}</strong><p class="muted">${d.keyRegistered ? "인증키 " + esc(d.keyHint || "") : "인증키 미등록"}<br>공식 최신 ${esc((d.latestOfficialHour || "").slice(0, 16))}</p></div>`;
+    }
+    function renderDash() {
+      pickDefaultStation();
+      renderStationCards();
+      renderDashControls();
+      renderSysCards();
+      loadSeries();
+    }
+    async function loadSeries() {
+      const my = ++seriesReq;
+      const key = `${dashState.station}|${dashState.hours}`;
+      const st = dashStations().find((s) => s.id === dashState.station);
+      const label = (PERIODS.find(([h]) => h === dashState.hours) || [0, `${dashState.hours}시간`])[1];
+      $("chartTitle").textContent = `${dashState.station} ${st?.name || ""} · 최근 ${label} 기온`;
+      let r = seriesCache.get(key);
+      if (!r) {
+        $("chartRange").textContent = "불러오는 중…";
+        try {
+          const res = await fetch(`/api/series?stationId=${encodeURIComponent(dashState.station)}&hours=${dashState.hours}`);
+          r = await res.json();
+          if (!res.ok) throw new Error(r.message || `HTTP ${res.status}`);
+          seriesCache.set(key, r);
+        } catch (e) {
+          if (my !== seriesReq) return;
+          currentSeries = null; chartGeo = null;
+          $("chartRange").innerHTML = `<span class="bad">불러오지 못했습니다: ${esc(e.message)}</span>`;
+          $("chartStats").innerHTML = ""; $("chart").innerHTML = ""; $("chartBadge").innerHTML = ""; $("chartLegend").innerHTML = "";
+          return;
+        }
+      }
+      if (my !== seriesReq) return;
+      currentSeries = r;
+      renderChartMeta(r);
+      drawChart(true);
+    }
+    function renderChartMeta(r) {
+      const pts = r.points || [];
+      if (!r.latest) {
+        $("chartRange").textContent = "이 지점의 관측 자료가 없습니다.";
+        $("chartBadge").innerHTML = ""; $("chartStats").innerHTML = ""; $("chartLegend").innerHTML = "";
+        return;
+      }
+      const slots = Math.round((wallMs(r.to) - wallMs(r.from)) / HOUR) + 1;
+      $("chartRange").textContent = `${r.from} ~ ${r.to} (KST) · 마지막 관측 기준 · 자료 ${pts.length}/${slots}시간`;
+      $("chartBadge").innerHTML = r.stale ? `<span class="badge bad">⚠ 마지막 관측이 공식 최신보다 ${lagText(r.lag_hours)} 늦음 · 수집 중단</span>` : `<span class="badge ok">최신 자료</span>`;
+      let hi = null, lo = null, last = null, rainSum = 0, rainN = 0, tN = 0;
+      for (const p of pts) {
+        if (p.temperature != null) {
+          tN++;
+          if (!hi || p.temperature > hi.temperature) hi = p;
+          if (!lo || p.temperature < lo.temperature) lo = p;
+          last = p;
+        }
+        if (p.precipitation != null) { rainSum += p.precipitation; rainN++; }
+      }
+      const tt = (p) => p ? `<small>${shortT(wallMs(p.t))}</small>` : "";
+      const missing = slots - tN;
+      $("chartStats").innerHTML = `
+        <span>최고 <b class="hi">${nf(hi?.temperature, "°C")}</b> ${tt(hi)}</span>
+        <span>최저 <b class="lo">${nf(lo?.temperature, "°C")}</b> ${tt(lo)}</span>
+        <span>최근 <b>${nf(last?.temperature, "°C")}</b> ${tt(last)}</span>
+        <span>강수 합계 <b>${rainN ? nf(Math.round(rainSum * 10) / 10, "mm") : "—"}</b> ${rainN ? `<small>(강수 값 있는 ${rainN}시간)</small>` : "<small>(강수 값 없음)</small>"}</span>
+        ${missing > 0 ? `<span title="관측이 없거나 기온이 NULL인 시각은 선을 끊어 표시합니다">기온 결측 <b>${nf(missing)}</b><small>시간</small></span>` : ""}`;
+    }
+    function niceStep(raw) {
+      const pow = Math.pow(10, Math.floor(Math.log10(raw || 1)));
+      const n = raw / pow;
+      return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * pow;
+    }
+    function drawChart(force) {
+      const box = $("chart");
+      const r = currentSeries;
+      const W = Math.round(box.clientWidth);
+      if (!r || !W) return;
+      if (!force && chartGeo && Math.abs(chartGeo.W - W) < 4) return;
+      hideTip();
+      const pts = r.points || [];
+      if (!r.latest || !pts.length) { chartGeo = null; box.innerHTML = `<p class="muted" style="padding:30px 0;text-align:center">이 지점·기간에 표시할 관측 자료가 없습니다.</p>`; $("chartLegend").innerHTML = ""; return; }
+      const narrow = W < 560;
+      const H = narrow ? 240 : 290;
+      const t0 = wallMs(r.from), t1 = wallMs(r.to);
+      const span = Math.max(t1 - t0, HOUR);
+      const times = pts.map((p) => wallMs(p.t));
+      let tMin = Infinity, tMax = -Infinity, rMax = 0, tCount = 0;
+      for (const p of pts) {
+        if (p.temperature != null) { tCount++; if (p.temperature < tMin) tMin = p.temperature; if (p.temperature > tMax) tMax = p.temperature; }
+        if (p.precipitation != null && p.precipitation > rMax) rMax = p.precipitation;
+      }
+      if (!tCount) { tMin = 0; tMax = 10; }
+      const hasRain = rMax > 0;
+      const ml = 46, mr = hasRain ? 44 : 14, mt = 12, mb = 30;
+      const iw = W - ml - mr, ih = H - mt - mb;
+      const X = (ms) => ml + ((ms - t0) / span) * iw;
+      // 기온 축
+      if (tMax - tMin < 2) { const c = (tMax + tMin) / 2; tMin = c - 1; tMax = c + 1; }
+      const tStep = Math.max(1, niceStep((tMax - tMin) / (narrow ? 4 : 5)));
+      const lo = Math.floor(tMin / tStep) * tStep, hi = Math.ceil(tMax / tStep) * tStep;
+      const Y = (v) => mt + ih - ((v - lo) / (hi - lo || 1)) * ih;
+      const f1 = (v) => Math.round(v * 10) / 10;
+      let g = "";
+      for (let v = lo; v <= hi + 1e-9; v += tStep) {
+        const y = f1(Y(v));
+        g += `<line class="grid" x1="${ml}" x2="${ml + iw}" y1="${y}" y2="${y}"/><text class="ax" x="${ml - 6}" y="${y + 4}" text-anchor="end">${f1(v)}°C</text>`;
+      }
+      // 강수 축(보조, 오른쪽)
+      let rainSvg = "";
+      if (hasRain) {
+        const rStep = niceStep(rMax / 3);
+        const rHi = (Math.floor(rMax / rStep + 1e-9) + 1) * rStep; // 막대 위 여유
+        const Y2 = (v) => mt + ih - (v / rHi) * ih;
+        for (let v = 0; v <= rHi + 1e-9; v += rStep) g += `<text class="ax ax-rain" x="${ml + iw + 6}" y="${f1(Y2(v)) + 4}">${f1(v)}mm</text>`;
+        const bw = Math.max(1, (iw / (span / HOUR + 1)) * 0.8);
+        for (let i = 0; i < pts.length; i++) {
+          const v = pts[i].precipitation;
+          if (v == null || v <= 0) continue; // NULL은 막대를 그리지 않는다(0으로 바꾸지 않음)
+          const y = f1(Y2(v));
+          rainSvg += `<rect class="rain" x="${f1(X(times[i]) - bw / 2)}" y="${y}" width="${f1(bw)}" height="${f1(mt + ih - y)}"/>`;
+        }
+      }
+      // 시간 축: 기간·폭에 맞춰 간격 선택
+      const spanH = span / HOUR;
+      const maxLabels = Math.max(2, Math.floor(iw / (narrow ? 50 : 66)));
+      const stepH = [1, 2, 3, 6, 12, 24, 48, 72, 168].find((c) => spanH / c <= maxLabels) || 168;
+      const perDay = iw / Math.max(1, spanH / 24);
+      const stepMs = stepH * HOUR;
+      for (let t = Math.ceil(t0 / stepMs) * stepMs; t <= t1; t += stepMs) {
+        const x = f1(X(t));
+        const d = new Date(t);
+        const midnight = d.getUTCHours() === 0;
+        const label = stepH >= 24 ? (stepH === 24 && perDay >= 64 ? `${mdOf(t)}(${WD[d.getUTCDay()]})` : mdOf(t)) : midnight ? mdOf(t) : `${p2(d.getUTCHours())}시`;
+        g += `<line class="${midnight && stepH < 24 ? "grid-day" : "grid"}" x1="${x}" x2="${x}" y1="${mt}" y2="${mt + ih}"/>`;
+        g += `<text class="ax${midnight && stepH < 24 ? " ax-day" : ""}" x="${x}" y="${H - 10}" text-anchor="middle">${label}</text>`;
+      }
+      // 기온 선: NULL이거나 1시간 넘게 비면 선을 끊는다
+      const conn = new Array(pts.length).fill(false); // conn[i]: i-1 과 i 가 이어짐
+      for (let i = 1; i < pts.length; i++) conn[i] = pts[i].temperature != null && pts[i - 1].temperature != null && times[i] - times[i - 1] <= HOUR * 1.5;
+      let path = "", dots = "";
+      for (let i = 0; i < pts.length; i++) {
+        const v = pts[i].temperature;
+        if (v == null) continue;
+        const x = f1(X(times[i])), y = f1(Y(v));
+        path += `${conn[i] ? "L" : "M"}${x},${y}`;
+        if (!conn[i] && !conn[i + 1]) dots += `<circle class="tdot" cx="${x}" cy="${y}" r="2.2"/>`;
+      }
+      box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="기온 그래프">
+          ${g}${rainSvg}
+          <line class="grid-day" x1="${ml}" x2="${ml + iw}" y1="${mt + ih}" y2="${mt + ih}"/>
+          <path class="tline" d="${path}"/>${dots}
+          <line class="hv" id="hvLine" x1="0" x2="0" y1="${mt}" y2="${mt + ih}" visibility="hidden"/>
+          <circle class="hvdot" id="hvDot" r="4" cx="0" cy="0" visibility="hidden"/>
+          <rect x="${ml}" y="${mt}" width="${iw}" height="${ih}" fill="transparent" id="hvHit"/>
+        </svg>`;
+      chartGeo = { W, H, ml, mt, iw, ih, t0, span, times, pts, X, Y };
+      $("chartLegend").innerHTML = `<span><i></i>기온(°C, 왼쪽 축)</span>${hasRain ? `<span><i class="r"></i>강수(mm, 오른쪽 축)</span>` : ""}<span>빈 구간 = 관측 없음/NULL (0으로 채우지 않음)</span>`;
+      const svg = box.querySelector("svg");
+      let raf = 0, lastEv = null;
+      const onMove = (e) => { lastEv = e; if (!raf) raf = requestAnimationFrame(() => { raf = 0; showTip(lastEv, svg); }); };
+      svg.addEventListener("pointermove", onMove);
+      svg.addEventListener("pointerdown", onMove);
+      svg.addEventListener("pointerleave", hideTip);
+    }
+    function showTip(e, svg) {
+      const g = chartGeo;
+      if (!g || !e) return;
+      const rect = svg.getBoundingClientRect();
+      const scale = g.W / rect.width;
+      const px = (e.clientX - rect.left) * scale;
+      if (px < g.ml - 8 || px > g.ml + g.iw + 8) return hideTip();
+      const ms = g.t0 + ((px - g.ml) / g.iw) * g.span;
+      let a = 0, b = g.times.length - 1;
+      while (b - a > 1) { const m = (a + b) >> 1; if (g.times[m] < ms) a = m; else b = m; }
+      const i = Math.abs(g.times[a] - ms) <= Math.abs(g.times[b] - ms) ? a : b;
+      const p = g.pts[i];
+      const x = g.X(g.times[i]);
+      const line = svg.querySelector("#hvLine"), dot = svg.querySelector("#hvDot");
+      line.setAttribute("x1", x); line.setAttribute("x2", x); line.setAttribute("visibility", "visible");
+      if (p.temperature != null) { dot.setAttribute("cx", x); dot.setAttribute("cy", g.Y(p.temperature)); dot.setAttribute("visibility", "visible"); }
+      else dot.setAttribute("visibility", "hidden");
+      const tip = $("chartTip");
+      tip.innerHTML = `<b>${longT(g.times[i])}</b><br>
+        <span class="k">기온</span> ${nf(p.temperature, "°C")}<br>
+        <span class="k">강수</span> ${nf(p.precipitation, "mm")}<br>
+        <span class="k">습도</span> ${nf(p.humidity, "%")}<br>
+        <span class="k">풍속</span> ${nf(p.wind_speed, "m/s")}`;
+      tip.style.display = "block";
+      const cssX = x / scale, cssW = rect.width;
+      const tw = tip.offsetWidth;
+      let left = cssX + 12;
+      if (left + tw > cssW) left = cssX - tw - 12;
+      tip.style.left = `${Math.max(0, left)}px`;
+      tip.style.top = `${Math.max(0, (g.mt + 4) / scale)}px`;
+    }
+    function hideTip() {
+      const tip = $("chartTip"); if (tip) tip.style.display = "none";
+      const svg = $("chart").querySelector("svg");
+      if (svg) { svg.querySelector("#hvLine")?.setAttribute("visibility", "hidden"); svg.querySelector("#hvDot")?.setAttribute("visibility", "hidden"); }
+    }
+    $("stSel").addEventListener("click", (e) => { const b = e.target.closest("button[data-st]"); if (b && !b.disabled) selectStation(b.dataset.st); });
+    $("periodSel").addEventListener("click", (e) => { const b = e.target.closest("button[data-h]"); if (b) selectPeriod(Number(b.dataset.h)); });
+    $("stCards").addEventListener("click", (e) => { const c = e.target.closest(".st-card[data-st]"); if (c) selectStation(c.dataset.st); });
+    $("stCards").addEventListener("keydown", (e) => { if (e.key !== "Enter" && e.key !== " ") return; const c = e.target.closest(".st-card[data-st]"); if (c) { e.preventDefault(); selectStation(c.dataset.st); } });
+    if (window.ResizeObserver) new ResizeObserver(() => requestAnimationFrame(() => drawChart(false))).observe($("chart"));
+    else window.addEventListener("resize", () => drawChart(false));
     let hPage = 1;
     async function queryHourly() {
       const q = new URLSearchParams({ stationId: $("hStation").value, from: dtVal("hFrom"), to: dtVal("hTo"), page: String(hPage), pageSize: "500" });
@@ -215,9 +568,17 @@
       if (name === "stations") loadStations();
     }
     function route() {
-      const h = location.hash.replace("#", "") || "/";
+      const h = location.hash.replace("#", "").split("?")[0] || "/";
       const map = { "/": "dash", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/jobs": "jobs", "/stations": "stations", "/provider": "provider" };
-      show(map[h] || "dash");
+      const name = map[h] || "dash";
+      show(name);
+      if (name === "dash" && dashCache) {
+        // 주소의 ?station=&hours= 를 반영(직접 입력·뒤로가기)
+        const before = `${dashState.station}|${dashState.hours}`;
+        pickDefaultStation();
+        if (`${dashState.station}|${dashState.hours}` !== before) { renderStationCards(); renderDashControls(); loadSeries(); }
+        else drawChart(false);
+      }
     }
     $("hQuery").onclick = () => { hPage = 1; queryHourly(); };
     $("hPrev").onclick = () => { hPage = Math.max(1, hPage - 1); queryHourly(); };

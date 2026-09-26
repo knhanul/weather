@@ -422,6 +422,127 @@ async function collectDaily({ stationId = "108", from, to }) {
   return job;
 }
 
+// ---- 대시보드: 지점별 요약 · 기온 시계열 ----
+// observation_datetime은 16자('YYYY-MM-DD HH:MM')와 19자('...:SS')가 섞여 있어 16자로 정규화해 비교한다.
+const SERIES_MIN_HOURS = 24;
+const SERIES_MAX_HOURS = 720;
+function t16(v) {
+  return String(v ?? "").slice(0, 16);
+}
+function wallMs(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(String(v ?? ""));
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : NaN;
+}
+function lagHours(last, ref) {
+  const a = wallMs(last);
+  const b = wallMs(ref);
+  return Number.isFinite(a) && Number.isFinite(b) ? Math.round((b - a) / 3600000) : null;
+}
+// 같은 시각이 두 형식으로 중복된 행은 하나만 남긴다(19자 우선).
+function dedupeHourly(rows) {
+  const byT = new Map();
+  for (const r of rows) {
+    const k = t16(r.observation_datetime);
+    const prev = byT.get(k);
+    if (!prev || String(r.observation_datetime).length > String(prev.observation_datetime).length) byT.set(k, r);
+  }
+  return [...byT.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+async function stationSummaries(stationList) {
+  const official = latestOfficialHour();
+  let rows;
+  if (db.usingPg()) {
+    rows = await db.stationSummariesPg();
+  } else {
+    const byStation = new Map();
+    for (const r of loadJson(OBS_FILE, [])) {
+      if (!byStation.has(r.station_id)) byStation.set(r.station_id, []);
+      byStation.get(r.station_id).push(r);
+    }
+    rows = [...byStation.entries()]
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+      .map(([stationId, list]) => {
+        const uniq = dedupeHourly(list);
+        const [lastT, last] = uniq[uniq.length - 1];
+        return {
+          station_id: stationId,
+          station_name: last.station_name,
+          first_observation: uniq[0][0],
+          last_observation: lastT,
+          temperature: last.temperature ?? null,
+          humidity: last.humidity ?? null,
+          precipitation: last.precipitation ?? null,
+          wind_speed: last.wind_speed ?? null,
+          rows: list.length,
+          hours: uniq.length,
+        };
+      });
+  }
+  const meta = new Map(stationList.map((s) => [String(s.station_id), s]));
+  return rows.map((r) => {
+    const m = meta.get(String(r.station_id));
+    const lag = lagHours(r.last_observation, official);
+    return {
+      ...r,
+      station_id: String(r.station_id),
+      station_name: m?.station_name || r.station_name || String(r.station_id),
+      favorite: Boolean(m?.favorite),
+      enabled: Boolean(m?.enabled),
+      duplicates: Math.max(0, (r.rows || 0) - (r.hours || 0)),
+      lag_hours: lag,
+      stale: lag != null && lag > 24,
+    };
+  });
+}
+
+async function series(stationIdRaw, hoursRaw) {
+  const list = await stations();
+  const stationId = String(stationIdRaw ?? "108").trim();
+  const st = list.find((s) => String(s.station_id) === stationId);
+  if (!st) return { status: 400, body: { ok: false, message: `알 수 없는 지점입니다: ${stationId.slice(0, 20)}` } };
+  let hours = Math.round(Number(hoursRaw ?? 72));
+  if (!Number.isFinite(hours)) hours = 72;
+  hours = Math.min(SERIES_MAX_HOURS, Math.max(SERIES_MIN_HOURS, hours));
+  const base = { timezone: "Asia/Seoul", station_id: stationId, station_name: st.station_name, hours, latestOfficialHour: latestOfficialHour() };
+  let latest = null;
+  let points = [];
+  if (db.usingPg()) {
+    latest = await db.latestHourPg(stationId);
+    if (latest) {
+      const from = t16(addHours(latest, -(hours - 1)));
+      points = (await db.seriesPg(stationId, from, latest)).map((r) => ({
+        t: r.t,
+        temperature: r.temperature,
+        precipitation: r.precipitation,
+        humidity: r.humidity,
+        wind_speed: r.wind_speed,
+      }));
+    }
+  } else {
+    const uniq = dedupeHourly(loadJson(OBS_FILE, []).filter((r) => String(r.station_id) === stationId));
+    if (uniq.length) {
+      latest = uniq[uniq.length - 1][0];
+      const from = t16(addHours(latest, -(hours - 1)));
+      points = uniq
+        .filter(([t]) => t >= from && t <= latest)
+        .map(([t, r]) => ({
+          t,
+          temperature: r.temperature ?? null,
+          precipitation: r.precipitation ?? null,
+          humidity: r.humidity ?? null,
+          wind_speed: r.wind_speed ?? null,
+        }));
+    }
+  }
+  const from = latest ? t16(addHours(latest, -(hours - 1))) : null;
+  const lag = latest ? lagHours(latest, base.latestOfficialHour) : null;
+  return {
+    status: 200,
+    body: { ...base, from, to: latest, latest, lag_hours: lag, stale: lag != null && lag > 24, count: points.length, points },
+  };
+}
+
 async function dashboard() {
   const key = await getKey();
   if (db.usingPg()) {
@@ -433,6 +554,7 @@ async function dashboard() {
       db.seriesSeoul(),
       stations(),
     ]);
+    const stationSummaryList = await stationSummaries(st);
     return {
       timezone: "Asia/Seoul",
       latestOfficialHour: latestOfficialHour(),
@@ -445,11 +567,13 @@ async function dashboard() {
       lastJob: jobs[0] || null,
       series,
       stations: st,
+      stationSummaries: stationSummaryList,
     };
   }
   const hourly = loadJson(OBS_FILE, []);
   const daily = loadJson(DAILY_FILE, []);
   const jobs = await listJobs();
+  const st = await stations();
   const seoul = hourly
     .filter((r) => r.station_id === "108")
     .sort((a, b) => a.observation_datetime.localeCompare(b.observation_datetime))
@@ -480,7 +604,8 @@ async function dashboard() {
     })),
     lastJob: jobs[0] || null,
     series: seoul,
-    stations: await stations(),
+    stations: st,
+    stationSummaries: await stationSummaries(st),
   };
 }
 
@@ -512,6 +637,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "GET" && url.pathname === "/api/dashboard") {
       return json(res, await dashboard());
+    }
+    if (req.method === "GET" && url.pathname === "/api/series") {
+      const r = await series(url.searchParams.get("stationId"), url.searchParams.get("hours"));
+      return json(res, r.body, r.status);
     }
     if (req.method === "GET" && url.pathname === "/api/daily") {
       const stationId = url.searchParams.get("stationId") || "108";
