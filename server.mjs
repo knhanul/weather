@@ -1119,7 +1119,11 @@ const server = http.createServer(async (req, res) => {
         return res.end("not found");
       }
       const ext = path.extname(full);
-      const types = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript" };
+      const types = {
+        ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+        ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webp": "image/webp",
+        ".json": "application/json; charset=utf-8", ".webmanifest": "application/manifest+json; charset=utf-8",
+      };
       res.writeHead(200, { "content-type": types[ext] || "application/octet-stream" });
       res.end(buf);
     });

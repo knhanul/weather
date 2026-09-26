@@ -1,0 +1,16 @@
+{
+  "name": "누니날씨 · nuni weather",
+  "short_name": "누니날씨",
+  "description": "기상청 공식 ASOS 관측 자료를 수집·조회·다운로드하는 사내 공통 기상데이터 플랫폼",
+  "lang": "ko",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f8ff",
+  "theme_color": "#026ef8",
+  "icons": [
+    { "src": "/brand/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/brand/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/brand/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

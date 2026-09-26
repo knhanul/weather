@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="82 107.2 1710.3 758.8"
+     width="1710.3"
+     height="758.8">
+  <defs>
+    <radialGradient id="nuniGlow" cx="50%" cy="50%" fx="50%" fy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="14%" stop-color="#F4FBFF"/>
+      <stop offset="36%" stop-color="#7AD2FF"/>
+      <stop offset="66%" stop-color="#1E9CFF"/>
+      <stop offset="100%" stop-color="#026EF8"/>
+    </radialGradient>
+  </defs>
+
+  <g fill="none" stroke="#026EF8" stroke-width="170" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M167 776 V545.5 A164.5 164.5 0 0 1 496 545.5 V776"/>
+    <path d="M689 381 V624 A157 157 0 0 0 1003 624 V381"/>
+    <path d="M1197 776 V545.5 A159.5 159.5 0 0 1 1516 545.5 V776"/>
+    <path d="M1703.5 381 V776"/>
+  </g>
+
+  <circle cx="1703.5" cy="196" r="88.8" fill="url(#nuniGlow)"/>
+</svg>
