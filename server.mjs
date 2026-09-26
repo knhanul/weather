@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as db from "./db.mjs";
+import { createAuth } from "./auth.mjs";
+import { createPgStore, createJsonStore } from "./auth-store.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(__dirname, "data");
@@ -12,6 +14,7 @@ const SET_FILE = path.join(DATA, "settings.json");
 const JOB_FILE = path.join(DATA, "jobs.json");
 const DAILY_FILE = path.join(DATA, "daily.json");
 const STATION_FILE = path.join(DATA, "stations.json");
+const AUTH_FILE = path.join(DATA, "auth.json"); // 로컬 개발(DATABASE_URL 없음)에서만 사용
 const PORT = Number(process.env.PORT || 8080);
 const KST_MS = 9 * 60 * 60 * 1000;
 
@@ -1003,14 +1006,30 @@ function readBody(req) {
 
 seedIfEmpty();
 
+// 카카오 로그인(관리 기능 보호). 서버 시작 시 DB 연결 뒤에 만든다. 키가 없으면 꺼진 상태(기존과 동일).
+let auth = createAuth({ env: {} });
+// 공개 응답에서 관리자 전용 정보(인증키 일부, 수집 메시지)를 뺀다. 로그인 기능이 꺼져 있으면 그대로.
+async function publicView(req, d) {
+  if (await auth.isAdmin(req)) return d;
+  const j = d.lastJob;
+  return {
+    ...d,
+    keyHint: null,
+    lastJob: j ? { id: j.id, dataset: j.dataset, status: j.status, station_id: j.station_id, from: j.from, to: j.to } : null,
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", `http://127.0.0.1:${PORT}`);
+    const denied = await auth.guard(req, url);
+    if (denied) return json(res, denied.body, denied.status);
+    if (await auth.handle(req, res, url)) return;
     if (req.method === "GET" && url.pathname === "/api/hourly") {
       return json(res, await queryHourly(Object.fromEntries(url.searchParams)));
     }
     if (req.method === "GET" && url.pathname === "/api/dashboard") {
-      return json(res, await dashboard());
+      return json(res, await publicView(req, await dashboard()));
     }
     if (req.method === "GET" && url.pathname === "/api/series") {
       const r = await series(url.searchParams.get("stationId"), url.searchParams.get("hours"), url.searchParams.get("from"), url.searchParams.get("to"));
@@ -1066,7 +1085,7 @@ const server = http.createServer(async (req, res) => {
       const key = await getKey();
       const jobs = await listJobs();
       const hourlyRecords = db.usingPg() ? await db.countHourly() : loadJson(OBS_FILE, []).length;
-      return json(res, {
+      return json(res, await publicView(req, {
         timezone: "Asia/Seoul",
         latestOfficialHour: latestOfficialHour(),
         keyRegistered: Boolean(key),
@@ -1074,7 +1093,7 @@ const server = http.createServer(async (req, res) => {
         storage: db.usingPg() ? "postgresql" : "json",
         hourlyRecords,
         lastJob: jobs[0] || null,
-      });
+      }));
     }
     if (req.method === "GET" && url.pathname === "/api/jobs") {
       return json(res, await listJobs());
@@ -1143,6 +1162,23 @@ const ready = (async () => {
     }
   } catch (err) {
     console.error("postgresql init failed, json fallback", err);
+  }
+  const authKeys = Boolean(process.env.KAKAO_REST_API_KEY?.trim() && process.env.KAKAO_CLIENT_SECRET?.trim());
+  const store = authKeys ? (db.usingPg() ? createPgStore(db.getPool()) : createJsonStore(AUTH_FILE)) : null;
+  if (store) {
+    // 로그인 기능이 켜질 때만 app_users/app_sessions 생성(IF NOT EXISTS). 실패해도 관리 기능은 잠긴 채로 둔다(fail closed).
+    try {
+      await store.ensureSchema();
+    } catch (err) {
+      console.error("auth schema init failed (관리 기능은 잠김 상태 유지)", err instanceof Error ? err.message : err);
+    }
+  }
+  auth = createAuth({ env: process.env, store });
+  console.log(auth.startupLine);
+  if (auth.enabled) {
+    const n = await auth.cleanup();
+    if (n) console.log(`auth expired sessions removed=${n}`);
+    setInterval(() => auth.cleanup(), 3600000).unref();
   }
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`weather-hub ${PORT} latest=${latestOfficialHour()} pg=${db.usingPg()}`);

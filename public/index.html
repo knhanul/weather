@@ -78,6 +78,48 @@
     .ph-desc { margin:2px 0 0; font-size:13px; color:#fff; }
     .ph-chips { position:relative; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; margin:0; padding:0; list-style:none; }
     .ph-chips:empty { display:none; }
+    /* 카카오 로그인 영역: 로그인 기능이 켜진 서버에서만 보임 */
+    header.ph.has-auth { display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-areas:"main auth" "main chips"; align-items:center; gap:8px 20px; }
+    header.ph.has-auth .ph-main { grid-area:main; }
+    header.ph.has-auth .ph-auth { grid-area:auth; justify-self:end; }
+    header.ph.has-auth .ph-chips { grid-area:chips; justify-self:end; }
+    .ph-auth { position:relative; display:flex; align-items:center; gap:8px; }
+    .ph-auth[hidden] { display:none; }
+    .kakao-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; height:36px; padding:0 14px; border-radius:10px; background:#fee500; color:rgba(0,0,0,.85);
+      font-size:14px; font-weight:600; text-decoration:none; white-space:nowrap; box-shadow:0 2px 8px rgba(0,30,110,.18); }
+    .kakao-btn:hover { color:rgba(0,0,0,.85); background:#fada0a; }
+    .kakao-btn svg { width:18px; height:18px; flex:none; }
+    .kakao-btn.lg { height:48px; padding:0 22px; border-radius:12px; font-size:15px; box-shadow:none; }
+    .kakao-btn.lg svg { width:20px; height:20px; }
+    .me { display:inline-flex; align-items:center; gap:7px; font-size:13px; color:#fff; min-width:0; }
+    .me b { font-weight:700; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .me img, .me .av { width:26px; height:26px; border-radius:50%; flex:none; object-fit:cover; background:rgba(255,255,255,.25); display:inline-grid; place-items:center; font-size:12px; font-weight:700; }
+    .me em { font-style:normal; font-size:11.5px; font-weight:700; color:#5c3b00; background:#ffd166; border-radius:999px; padding:1px 8px; white-space:nowrap; }
+    .me em.blk { color:#fff; background:#c0262d; }
+    button.logout { height:28px; padding:0 10px; border-radius:999px; font-size:12px; font-weight:600; color:#fff; background:rgba(0,30,110,.34); border:1px solid rgba(255,255,255,.3); }
+    button.logout:hover:not(:disabled) { background:rgba(0,30,110,.55); }
+    .nav-lock { width:14px; height:14px; flex:none; opacity:.55; }
+    nav a.locked { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+    nav a.locked.active .nav-lock { opacity:.9; }
+    .lock-card { text-align:center; padding:34px 22px 30px; }
+    .lock-ico { width:56px; height:56px; margin:0 auto 12px; border-radius:18px; display:grid; place-items:center; background:var(--soft); color:var(--pri); }
+    .lock-ico svg { width:28px; height:28px; }
+    .lock-card h2 { font-size:19px; margin:0 0 6px; }
+    .lock-card p { max-width:520px; margin:0 auto 6px; }
+    .lock-actions { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:10px 16px; margin-top:18px; }
+    .lock-actions a.lock-alt { font-size:14px; font-weight:600; }
+    .lock-id { display:inline-block; margin-top:6px; padding:4px 10px; border-radius:8px; background:#f1f5fb; font-variant-numeric:tabular-nums; font-size:13px; }
+    .login-note { margin:0; padding:10px 14px; border-radius:12px; background:var(--warn-bg); color:var(--warn); font-size:14px; display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .login-note[hidden], nav a[hidden] { display:none !important; }
+    .login-note button { height:28px; padding:0 10px; font-size:12px; background:transparent; color:var(--warn); border:1px solid currentColor; }
+    .login-note button:hover:not(:disabled) { background:rgba(138,75,0,.08); }
+    #uBody td { vertical-align:middle; }
+    #users td.nw, #users th { white-space:nowrap; }
+    .u-name { display:flex; align-items:center; gap:8px; }
+    .u-name img, .u-name .av { width:28px; height:28px; border-radius:50%; object-fit:cover; background:var(--soft); color:var(--pri); display:inline-grid; place-items:center; font-weight:700; font-size:12px; flex:none; }
+    .u-acts { display:flex; flex-wrap:wrap; gap:6px; }
+    .u-acts button { height:30px; padding:0 10px; font-size:13px; }
+    .badge.pend { background:var(--warn-bg); color:var(--warn); }
     .chip { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 10px; border-radius:999px; font-size:12px; font-weight:600; white-space:nowrap;
       color:#fff; background:rgba(0,30,110,.34); border:1px solid rgba(255,255,255,.22); text-decoration:none; font-variant-numeric:tabular-nums; }
     a.chip:hover { color:#fff; background:rgba(0,30,110,.5); }
@@ -259,6 +301,12 @@
       header.ph { padding:11px 16px 12px; min-height:0; gap:8px; }
       .ph-main h1 { font-size:18px; }
       .ph-chips { justify-content:flex-start; flex:1 1 100%; gap:5px; }
+      header.ph.has-auth { grid-template-areas:"main auth" "chips chips"; gap:8px 10px; }
+      header.ph.has-auth .ph-chips { justify-self:start; }
+      header.ph.has-auth .ph-auth { align-self:start; }
+      .kakao-btn { height:32px; padding:0 11px; font-size:13px; gap:6px; } .kakao-btn svg { width:16px; height:16px; }
+      .me b { max-width:90px; } button.logout { height:26px; padding:0 8px; }
+      nav a.locked { display:inline-flex; justify-content:flex-start; gap:3px; } .nav-lock { width:12px; height:12px; }
       .chip { height:24px; padding:0 8px; font-size:11.5px; gap:5px; } .chip small { font-size:11.5px; }
       .ph-chips { gap:4px; } .chip { padding:0 7px; } .chip .wide { display:none; }
     }
@@ -313,6 +361,7 @@
           <a href="#/jobs" data-page="jobs">수집이력</a>
           <a href="#/stations" data-page="stations">관측지점</a>
           <a href="#/provider" data-page="provider">공급원</a>
+          <a href="#/users" data-page="users" id="navUsers" hidden>사용자</a>
         </div>
       </nav>
       </div>
@@ -324,9 +373,11 @@
           <h1 id="phTitle">대시보드</h1>
           <p class="ph-desc" id="phDesc">관측지점 상태와 기온·강수 추이</p>
         </div>
+        <div class="ph-auth" id="phAuth" hidden></div>
         <ul class="ph-chips" id="phChips" aria-label="시스템 상태"></ul>
       </header>
       <main>
+        <p class="login-note" id="loginNote" role="status" hidden><span id="loginNoteText"></span><button type="button" id="loginNoteClose">닫기</button></p>
         <section class="page" id="dash">
           <p class="sec-title">즐겨찾기 지점 상태 <span id="stRef"></span> · <a class="st-link" href="#/gaps">지점별 미적재 현황 ›</a></p>
           <div class="st-grid" id="stCards"></div>
@@ -450,6 +501,16 @@
           <div class="card">
             <p class="muted">버튼을 눌러 사용 여부와 즐겨찾기(대시보드 상태 카드 표시)를 바꿉니다. 사용 중인 지점만 조회·수집 목록에 나옵니다.</p>
             <div style="overflow:auto"><table><thead><tr><th>지점</th><th>이름</th><th>지역</th><th>사용</th><th>즐겨찾기</th></tr></thead><tbody id="sBody"></tbody></table></div>
+          </div>
+        </section>
+        <section class="page" id="locked">
+          <div class="card lock-card" id="lockCard"></div>
+        </section>
+        <section class="page" id="users">
+          <div class="card">
+            <p class="muted">카카오로 로그인한 사용자 목록입니다. 처음 로그인하면 <b>승인 대기</b>로 등록되고, 승인한 사용자만 관리 메뉴(자료수집·미적재 현황·수집이력·관측지점·공급원)를 쓸 수 있습니다. 차단하면 로그인 세션도 바로 끊깁니다.</p>
+            <p class="muted" id="uMsg"></p>
+            <div style="overflow:auto"><table><thead><tr><th>사용자</th><th>카카오 회원번호</th><th>상태</th><th>처음 로그인</th><th>최근 로그인</th><th>관리</th></tr></thead><tbody id="uBody"></tbody></table></div>
           </div>
         </section>
         <section class="page" id="provider">
@@ -637,7 +698,7 @@
       $("dashCards").innerHTML = `
         ${(d.coverage || []).map((c) => `<div class="card"><p class="muted">${esc(c.dataset)}</p><strong class="big">${nf(c.records)}건</strong><p class="muted">${esc(String(c.first || "").slice(0, 16))} ~ ${esc(String(c.last || "").slice(0, 16))}<br>지점 ${nf(c.stations)}곳</p></div>`).join("")}
         <div class="card"><p class="muted">최근 수집</p><strong class="big ${d.lastJob ? (d.lastJob.status === "COMPLETED" ? "ok" : "bad") : ""}">${esc(d.lastJob?.status || "없음")}</strong><p class="muted">${d.lastJob ? `${esc(d.lastJob.dataset)} · ${esc(d.lastJob.station_id || "")}<br>${esc(d.lastJob.message || "")}` : ""}</p></div>
-        <div class="card"><p class="muted">저장소</p><strong class="big">${esc(d.storage || "json")}</strong><p class="muted">${d.keyRegistered ? "인증키 " + esc(d.keyHint || "") : "인증키 미등록"}<br>공식 최신 ${esc((d.latestOfficialHour || "").slice(0, 16))}</p></div>`;
+        <div class="card"><p class="muted">저장소</p><strong class="big">${esc(d.storage || "json")}</strong><p class="muted">${d.keyRegistered ? "인증키 " + (d.keyHint ? esc(d.keyHint) : "등록됨") : "인증키 미등록"}<br>공식 최신 ${esc((d.latestOfficialHour || "").slice(0, 16))}</p></div>`;
     }
     function renderDash() {
       pickDefaultStation();
@@ -1522,6 +1583,7 @@
       jobs: ["관리", "수집이력", "지금까지 실행한 수집 작업 기록"],
       stations: ["관리", "관측지점", "등록된 관측지점과 사용 여부"],
       provider: ["관리", "공급원", "자료를 받아오는 곳과 인증키 상태"],
+      users: ["관리", "사용자", "카카오 로그인 사용자 승인과 차단"],
     };
     function setPageHead(name) {
       const [g, t, d] = PAGE_HEAD[name] || PAGE_HEAD.dash;
@@ -1546,10 +1608,143 @@
       } else chips.push(`<li><a class="chip" href="#/jobs"><i></i>수집 이력 없음</a></li>`);
       $("phChips").innerHTML = chips.join("");
     }
+    // ---------- 카카오 로그인 (서버에 키가 설정된 경우에만 켜짐) ----------
+    let me = { authEnabled: false, loggedIn: false, role: "none" };
+    const ADMIN_PAGES = new Set(["collect", "gaps", "jobs", "stations", "provider", "users"]);
+    const canAdmin = () => !me.authEnabled || me.role === "admin";
+    const isLockedPage = (name) => ADMIN_PAGES.has(name) && !canAdmin();
+    const KAKAO_SYMBOL = `<svg viewBox="0 0 18 18" aria-hidden="true" focusable="false"><path fill="#000" d="M9 1.6C4.58 1.6 1 4.42 1 7.9c0 2.24 1.49 4.2 3.73 5.32-.16.58-.6 2.18-.68 2.52-.11.42.15.41.32.3.13-.09 2.09-1.42 2.94-2 .55.08 1.12.12 1.69.12 4.42 0 8-2.82 8-6.3S13.42 1.6 9 1.6z"/></svg>`;
+    const LOCK_SVG = `<svg class="nav-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>`;
+    const loginHref = () => "/auth/kakao/login?next=" + encodeURIComponent(location.hash && location.hash.startsWith("#/") ? location.hash : "#/");
+    const kakaoBtn = (cls = "") => `<a class="kakao-btn ${cls}" href="${esc(loginHref())}">${KAKAO_SYMBOL}<span>카카오 로그인</span></a>`;
+    const avatarHtml = (img, nick) => img ? `<img src="${esc(img)}" alt="" referrerpolicy="no-referrer" />` : `<span class="av" aria-hidden="true">${esc(String(nick || "?").slice(0, 1))}</span>`;
+    const _fetch = window.fetch.bind(window);
+    let authLostBusy = false;
+    // 관리 API가 401/403(로그인 필요·승인 대기)을 돌려주면 원래 오류 대신 잠금 화면으로 전환
+    window.fetch = async (input, init) => {
+      const res = await _fetch(input, init);
+      const u = String(input && input.url ? input.url : input);
+      if (me.authEnabled && (res.status === 401 || res.status === 403) && u.startsWith("/api/") && u !== "/api/me") {
+        res.clone().json().then((b) => { if (b && b.auth && b.auth !== "csrf") onAuthLost(); }).catch(() => {});
+      }
+      return res;
+    };
+    async function onAuthLost() {
+      if (authLostBusy) return;
+      authLostBusy = true;
+      try { if ($("gDlg").open) $("gDlg").close(); } catch (e) {}
+      await loadMe();
+      authLostBusy = false;
+      route();
+    }
+    async function loadMe() {
+      try {
+        const r = await _fetch("/api/me", { cache: "no-store" });
+        if (r.ok) me = await r.json();
+      } catch (e) { /* 이전 서버(로그인 없음)와 같게 동작 */ }
+      renderAuth();
+    }
+    function renderAuth() {
+      const on = Boolean(me.authEnabled);
+      document.querySelector("header.ph").classList.toggle("has-auth", on);
+      $("navUsers").hidden = !(on && me.role === "admin");
+      document.querySelectorAll('nav a[data-page]').forEach((a) => {
+        const lock = isLockedPage(a.dataset.page);
+        a.classList.toggle("locked", lock);
+        const has = a.querySelector(".nav-lock");
+        if (lock && !has) { a.insertAdjacentHTML("beforeend", LOCK_SVG); a.title = "관리자 로그인이 필요합니다"; }
+        if (!lock && has) { has.remove(); a.removeAttribute("title"); }
+      });
+      const box = $("phAuth");
+      if (!on) { box.hidden = true; box.innerHTML = ""; return; }
+      box.hidden = false;
+      if (!me.loggedIn) { box.innerHTML = kakaoBtn(); return; }
+      const tag = me.role === "admin" ? "" : me.role === "blocked" ? `<em class="blk">차단됨</em>` : `<em>승인 대기</em>`;
+      box.innerHTML = `<span class="me" title="카카오 회원번호 ${esc(me.kakaoId || "")}">${avatarHtml(me.profileImage, me.nickname)}<b>${esc(me.nickname || "카카오 사용자")}</b>${tag}</span><button type="button" class="logout" id="btnLogout">로그아웃</button>`;
+      $("btnLogout").onclick = logout;
+    }
+    async function logout() {
+      $("btnLogout").disabled = true;
+      try { await _fetch("/auth/logout", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); } catch (e) {}
+      await loadMe();
+      await loadDash().catch(() => {});
+      route();
+    }
+    function renderLocked(name) {
+      const t = (PAGE_HEAD[name] || PAGE_HEAD.dash)[1];
+      const ico = `<div class="lock-ico">${LOCK_SVG.replace('class="nav-lock"', "")}</div>`;
+      let html;
+      if (!me.loggedIn) {
+        html = `${ico}<h2>관리자 로그인이 필요합니다</h2>
+          <p class="muted">${esc(t)} 화면은 승인된 카카오 계정으로 로그인한 관리자만 쓸 수 있습니다.</p>
+          <p class="muted">대시보드·시간자료·일자료·다운로드는 로그인하지 않아도 이용할 수 있습니다.</p>
+          <div class="lock-actions">${kakaoBtn("lg")}<a class="lock-alt" href="#/">대시보드로 가기</a></div>`;
+      } else if (me.role === "blocked") {
+        html = `${ico}<h2>사용이 차단된 계정입니다</h2><p class="muted">${esc(me.nickname || "")}님 계정은 관리 기능을 쓸 수 없습니다. 필요하면 관리자에게 문의하세요.</p>
+          <div class="lock-actions"><a class="lock-alt" href="#/">대시보드로 가기</a></div>`;
+      } else {
+        html = `${ico}<h2>관리자 승인 대기 중입니다</h2>
+          <p class="muted">${esc(me.nickname || "카카오 사용자")}님, 카카오 로그인은 완료되었습니다. 관리자가 승인하면 ${esc(t)} 화면을 쓸 수 있습니다.</p>
+          <p class="muted">승인을 요청할 때 아래 회원번호를 알려 주세요.</p><span class="lock-id">카카오 회원번호 <b>${esc(me.kakaoId || "")}</b></span>
+          <div class="lock-actions"><button type="button" class="sec" id="lockRecheck">승인 여부 다시 확인</button><a class="lock-alt" href="#/">대시보드로 가기</a></div>`;
+      }
+      $("lockCard").innerHTML = html;
+      if ($("lockRecheck")) $("lockRecheck").onclick = async () => { await loadMe(); if (canAdmin()) await loadDash().catch(() => {}); route(); };
+    }
+    function showLoginNote() {
+      const q = new URLSearchParams(location.search);
+      const k = q.get("login");
+      if (!k) return;
+      const msg = { cancelled: "카카오 로그인을 취소했습니다.", failed: "카카오 로그인에 실패했습니다. 잠시 후 다시 시도해 주세요.", blocked: "사용이 차단된 계정이라 로그인할 수 없습니다." }[k];
+      history.replaceState(null, "", location.pathname + location.hash);
+      if (!msg) return;
+      $("loginNoteText").textContent = msg;
+      $("loginNote").hidden = false;
+    }
+    $("loginNoteClose").onclick = () => { $("loginNote").hidden = true; };
+    const isoKst = (v) => { const n = Date.parse(v || ""); return Number.isFinite(n) ? fmtWall(n + 9 * HOUR).slice(0, 16) : "—"; };
+    async function loadUsers() {
+      $("uMsg").textContent = "불러오는 중…";
+      const r = await fetch("/api/admin/users");
+      if (!r.ok) { $("uMsg").textContent = "사용자 목록을 불러오지 못했습니다."; $("uBody").innerHTML = ""; return; }
+      const d = await r.json();
+      const lab = { pending: ["pend", "승인 대기"], approved: ["ok", "승인됨"], blocked: ["bad", "차단"] };
+      const pend = d.users.filter((u) => u.status === "pending").length;
+      $("uMsg").textContent = d.users.length ? `사용자 ${d.users.length}명${pend ? ` · 승인 대기 ${pend}명` : ""}` : "아직 로그인한 사용자가 없습니다.";
+      $("uBody").innerHTML = d.users.map((u) => {
+        const [c, t] = lab[u.status] || ["off", u.status];
+        const self = u.kakaoId === d.me;
+        const btn = (st, label, cls = "") => `<button type="button" class="${cls}" data-uid="${esc(u.kakaoId)}" data-st="${st}">${label}</button>`;
+        const acts = self ? `<span class="muted">내 계정</span>` : [
+          u.status !== "approved" ? btn("approved", "승인") : "",
+          u.status === "approved" ? btn("pending", "승인 취소", "sec") : "",
+          u.status !== "blocked" ? btn("blocked", "차단", "sec") : btn("pending", "차단 해제", "sec"),
+        ].join("");
+        return `<tr><td><span class="u-name">${avatarHtml(u.profileImage, u.nickname)}<b>${esc(u.nickname || "카카오 사용자")}</b></span></td>
+          <td class="nw">${esc(u.kakaoId)}</td>
+          <td class="nw"><span class="badge ${c}">${t}</span>${u.envAdmin ? ` <span class="badge off" title="ADMIN_KAKAO_IDS 환경변수">기본 관리자</span>` : ""}</td>
+          <td class="nw">${esc(isoKst(u.createdAt))}</td><td class="nw">${esc(isoKst(u.lastLoginAt))}</td>
+          <td><span class="u-acts">${acts}</span></td></tr>`;
+      }).join("");
+    }
+    $("uBody").addEventListener("click", async (e) => {
+      const b = e.target.closest("button[data-uid]");
+      if (!b) return;
+      if (b.dataset.st === "blocked" && !confirm("이 사용자를 차단할까요? 로그인 세션도 바로 끊깁니다.")) return;
+      b.disabled = true;
+      const r = await fetch("/api/admin/users/status", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kakaoId: b.dataset.uid, status: b.dataset.st }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) $("uMsg").textContent = d.message || "바꾸지 못했습니다.";
+      await loadUsers();
+    });
     function show(name) {
       setPageHead(name);
-      document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p.id === name));
+      const target = isLockedPage(name) ? "locked" : name;
+      document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p.id === target));
       document.querySelectorAll("nav a").forEach((a) => a.classList.toggle("active", a.dataset.page === name));
+      renderAuth(); // 로그인 버튼의 돌아올 화면(next) 갱신
+      if (target === "locked") { renderLocked(name); return; }
+      if (name === "users") loadUsers();
       if (name === "hourly") queryHourly();
       if (name === "daily") queryDaily();
       if (name === "jobs") loadJobs();
@@ -1558,9 +1753,11 @@
     }
     function route() {
       const h = location.hash.replace("#", "").split("?")[0] || "/";
-      const map = { "/": "dash", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider" };
-      const name = map[h] || "dash";
+      const map = { "/": "dash", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/users": "users" };
+      let name = map[h] || "dash";
+      if (name === "users" && !me.authEnabled) name = "dash";
       show(name);
+      if (isLockedPage(name)) return;
       if (name === "collect" && dashCache) {
         // #/collect?station=156&kind=hourly 로 지점·종류를 미리 고를 수 있음
         const hp = hashParams();
@@ -1609,7 +1806,8 @@
     window.toggleSt = toggleSt;
     window.addEventListener("hashchange", route);
     setPageHead(({ "/hourly": "hourly", "/daily": "daily", "/download": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider" })[location.hash.replace("#", "").split("?")[0]] || "dash");
-    loadDash().then(route);
+    showLoginNote();
+    Promise.all([loadMe(), loadDash()]).then(route);
   </script>
 </body>
 </html>

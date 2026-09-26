@@ -10,3 +10,7 @@ npm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# 로컬 개발용 로그인 사용자·세션 (운영은 Postgres)
+data/auth.json
+data/auth.json.*.tmp

@@ -8,6 +8,9 @@ let pool = null;
 export function usingPg() {
   return Boolean(pool);
 }
+export function getPool() {
+  return pool;
+}
 
 export async function initDb() {
   const url = process.env.DATABASE_URL?.trim();

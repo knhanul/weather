@@ -202,3 +202,97 @@ docker compose up -d --build
 cp data/settings.json.bak data/settings.json
 cp data/jobs.json.bak     data/jobs.json
 ```
+
+---
+
+## 7) 카카오 로그인 (관리 메뉴 보호)
+
+조회 화면(대시보드·시간자료·일자료·다운로드)은 누구나 볼 수 있고, 관리 메뉴(자료수집·미적재 현황·수집이력·관측지점·공급원·사용자)와 모든 쓰기 API는 **승인된 카카오 계정**만 쓸 수 있습니다.
+
+**키가 없으면 로그인 기능은 꺼져 있습니다.** 이때는 예전과 똑같이 동작하고(로그인 버튼 없음, 쓰기 API 공개), 시작할 때 로그에 다음 한 줄이 남습니다.
+`auth disabled (KAKAO_REST_API_KEY/KAKAO_CLIENT_SECRET not set) · 관리 기능 공개 상태`
+
+### 7-1. 카카오 개발자 콘솔 설정 (developers.kakao.com)
+
+- 앱 > 플랫폼 > Web 사이트 도메인: `https://weather.nuni.co.kr`
+- 카카오 로그인: 활성화 ON, Redirect URI: `https://weather.nuni.co.kr/auth/kakao/callback`
+- 동의항목: 닉네임(필수). 프로필 사진은 선택이고, 이메일은 쓰지 않습니다.
+- 보안 > Client Secret: 코드 발급 후 **사용함**으로 설정
+- 앱 키 > **REST API 키**와 Client Secret 코드를 받아 둡니다.
+
+### 7-2. 환경변수 (`/etc/weather-hub.env`, systemd가 읽음)
+
+| 변수 | 필수 | 설명 |
+|---|---|---|
+| `KAKAO_REST_API_KEY` | 필수 | 카카오 앱의 REST API 키 |
+| `KAKAO_CLIENT_SECRET` | 필수 | 카카오 로그인 Client Secret 코드 |
+| `SESSION_SECRET` | 권장 | 로그인 state·세션 해시 서명용 무작위 값(32자 이상). 없으면 재시작할 때마다 임시 값이 생겨 **로그인이 모두 풀립니다** |
+| `KAKAO_REDIRECT_URI` | 선택 | 기본값 `https://weather.nuni.co.kr/auth/kakao/callback` |
+| `ADMIN_KAKAO_IDS` | 선택 | 쉼표로 구분한 카카오 회원번호. 승인 여부와 상관없이 관리자로 취급합니다(비상용) |
+
+`KAKAO_AUTH_BASE`, `KAKAO_API_BASE`, `COOKIE_SECURE`는 로컬 테스트 전용이니 운영에서는 넣지 마세요.
+
+### 7-3. 켜기 (서버에서 실행)
+
+```bash
+# 1) 세션 비밀값 만들기 (화면에 나온 값을 아래 SESSION_SECRET에 넣음)
+openssl rand -base64 48
+
+# 2) 환경파일에 추가 (값은 직접 입력, 따옴표 없이)
+sudo tee -a /etc/weather-hub.env > /dev/null <<'ENV'
+KAKAO_REST_API_KEY=<REST API 키>
+KAKAO_CLIENT_SECRET=<Client Secret 코드>
+SESSION_SECRET=<1)에서 만든 값>
+ENV
+sudo chown root:root /etc/weather-hub.env
+sudo chmod 600 /etc/weather-hub.env
+
+# 3) 재시작
+sudo systemctl restart weather-hub
+systemctl is-active weather-hub
+```
+
+### 7-4. 확인
+
+```bash
+journalctl -u weather-hub -n 20 --no-pager
+#  → "auth enabled · kakao login · store=postgresql · cookie=__Host-nw_session (Secure) · admin ids=0" 한 줄이 보여야 함
+#    (SESSION_SECRET 경고가 같이 나오면 값이 비었거나 32자 미만입니다)
+
+curl -s https://weather.nuni.co.kr/api/me
+#  → {"authEnabled":true,"loggedIn":false,...}
+
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://weather.nuni.co.kr/api/collect \
+  -H 'Origin: https://weather.nuni.co.kr' -H 'content-type: application/json' -d '{}'
+#  → 401 (로그인 필요). 수집은 일어나지 않습니다.
+
+curl -s -o /dev/null -w '%{http_code}\n' https://weather.nuni.co.kr/api/gaps
+#  → 401
+```
+
+키를 넣고 처음 시작하면 PostgreSQL에 `app_users`, `app_sessions` 테이블이 `CREATE TABLE IF NOT EXISTS`로 만들어집니다(`auth-schema.sql`). 기존 테이블과 자료는 건드리지 않습니다.
+
+### 7-5. 첫 관리자 승인
+
+카카오로 처음 로그인한 계정은 **승인 대기**로 저장되고, 관리 메뉴에는 "관리자 승인 대기 중입니다"와 카카오 회원번호가 표시됩니다.
+
+```bash
+cd /opt/weather-hub
+node scripts/approve-user.mjs --list          # 로그인한 사용자 목록 (회원번호, 닉네임, 상태)
+node scripts/approve-user.mjs <카카오회원번호>   # 승인
+node scripts/approve-user.mjs --block <회원번호>    # 차단 (그 사용자의 세션도 바로 끊김)
+node scripts/approve-user.mjs --pending <회원번호>  # 승인 대기로 되돌리기
+```
+
+스크립트는 `DATABASE_URL` 환경변수를 쓰고, 없으면 `/etc/weather-hub.env`에서 읽습니다(root로 실행). 승인된 사용자는 화면에서 **승인 여부 다시 확인**을 누르거나 새로고침하면 됩니다. 그 뒤에는 관리 > **사용자** 화면에서 다른 사람을 승인하거나 차단할 수 있습니다.
+
+### 7-6. 끄기 / 롤백
+
+`/etc/weather-hub.env`에서 `KAKAO_REST_API_KEY`, `KAKAO_CLIENT_SECRET` 줄을 지우고 `systemctl restart weather-hub` 하면 예전(공개) 동작으로 돌아갑니다. `app_*` 테이블은 남아 있어도 문제없습니다.
+
+### 7-7. 보호 범위
+
+- 로그인이 켜져 있을 때 GET/HEAD/OPTIONS가 아닌 모든 요청은 같은 출처(Origin/Referer 호스트 일치)가 아니면 403이고, `/auth/logout`을 뺀 나머지는 승인된 관리자만 쓸 수 있습니다. 응답은 401 `{"auth":"login"}`, 403 `{"auth":"pending"|"blocked"|"csrf"}`입니다.
+- 관리자 전용 GET: `/api/gaps`, `/api/jobs`, `/api/admin/*`
+- 공개 `/api/dashboard`, `/api/status`: 관리자가 아니면 인증키 일부(keyHint)와 수집 작업의 상세 메시지를 숨기고, 등록 여부만 보여 줍니다.
+- 세션 쿠키 `__Host-nw_session`: HttpOnly, Secure, SameSite=Lax, 30일 유지. 로그인할 때마다 새로 발급하고, DB에는 토큰 원문이 아닌 HMAC 해시만 저장합니다. 만료된 세션은 매시간 지웁니다.
