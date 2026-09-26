@@ -605,6 +605,10 @@ async function gaps(params) {
     if (startMs != null) startMs = dayFloor(startMs);
   }
   const minStart = dayFloor(endMs) - (GAP_MAX_DAYS - 1) * DAY_MS;
+  if (period === "custom") {
+    if (startMs > endMs) return { status: 400, body: { ok: false, message: `시작이 종료(공식 최신 ${official.slice(0, 16)}까지)보다 늦습니다` } };
+    if (startMs < minStart) return { status: 400, body: { ok: false, message: `기간은 최대 ${GAP_MAX_DAYS}일까지 조회할 수 있습니다` } };
+  }
   const ids = targets.map((s) => String(s.station_id));
 
   // 1) 지점별 첫·마지막 관측

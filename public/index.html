@@ -122,17 +122,35 @@
     .g-actions button, .g-ivs button, .g-dlg button { height:34px; padding:0 12px; font-size:14px; }
     .g-ivs { margin-top:10px; overflow:auto; }
     .g-ivs td { white-space:nowrap; vertical-align:middle; }
-    .g-ivs td.act { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; }
-    .g-ivs td.act a { font-size:13px; color:var(--pri); }
+    .g-ivs td.lnk a { font-size:13px; color:var(--pri); }
+    .g-ivs th.ck, .g-ivs td.ck { width:28px; padding-right:0; }
+    .g-ivs tr.sel td { background:#f1ead9; }
+    .g-ivs input[type="checkbox"], .g-selall input, .g-nck input { width:18px; height:18px; margin:0; accent-color:var(--pri); vertical-align:middle; cursor:pointer; }
+    .g-selall { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--fg); margin:2px 0 6px; cursor:pointer; width:max-content; max-width:100%; }
+    .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
     .g-none { padding:4px 16px; }
     .g-nrow { display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; padding:10px 0; font-size:13px; }
     .g-nrow + .g-nrow { border-top:1px solid var(--line); }
+    .g-nrow.sel { background:#f1ead9; margin:0 -16px; padding:10px 16px; }
     .g-nrow strong { min-width:78px; font-size:14px; }
+    .g-nck { display:flex; align-items:center; gap:8px; margin:0; color:var(--fg); font-size:14px; cursor:pointer; }
     .g-ntext { flex:1; min-width:210px; font-variant-numeric:tabular-nums; }
-    .g-nact { display:flex; align-items:center; gap:10px; }
-    .g-nact button { height:34px; padding:0 12px; font-size:14px; white-space:nowrap; }
     #gaps .controls { margin:12px 0 4px; align-items:center; }
     #gaps .controls select { height:34px; }
+    .g-range { display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px 24px; margin:6px 0 4px; }
+    .g-range > .ctl { padding-bottom:3px; }
+    .g-dates { display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px 10px; }
+    .g-dates > div { min-width:140px; }
+    .g-dates input { height:34px; width:100%; }
+    .g-dates button { height:34px; padding:0 16px; }
+    .g-err { margin:8px 0 0; font-size:13px; background:#fbf1ec; border-radius:8px; padding:8px 10px; }
+    .g-selbar { position:sticky; bottom:0; z-index:3; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 14px; background:var(--surface); border:1px solid var(--pri); border-radius:12px; padding:10px 14px; box-shadow:0 -4px 16px rgba(28,25,21,.10); font-size:14px; font-variant-numeric:tabular-nums; }
+    .g-selbtns { display:flex; gap:8px; margin-left:auto; }
+    .g-selbar button { height:36px; padding:0 14px; font-size:14px; }
+    #gaps button:disabled, .g-dlg button:disabled { opacity:.5; cursor:default; }
+    .g-dlist { max-height:220px; overflow:auto; margin-top:10px; border-top:1px solid var(--line); padding-top:6px; font-size:13px; }
+    .g-dst + .g-dst { margin-top:6px; }
+    .g-dst ul { margin:2px 0 0; padding-left:18px; font-variant-numeric:tabular-nums; }
     dialog.g-dlg { border:1px solid var(--line); border-radius:12px; padding:18px 18px 14px; width:min(560px, calc(100vw - 24px)); background:var(--surface); color:var(--fg); }
     dialog.g-dlg::backdrop { background:rgba(28,25,21,.45); }
     .g-dlg h3 { margin:0 0 10px; font-size:17px; }
@@ -159,10 +177,19 @@
       .g-ivs thead { display:none; }
       .g-ivs tr { display:flex; flex-wrap:wrap; align-items:center; gap:2px 10px; padding:8px 0; border-top:1px solid var(--line); }
       .g-ivs td { border:0; padding:0; }
-      .g-ivs td:nth-child(2)::before { content:"~ "; }
-      .g-ivs td:nth-child(3), .g-ivs td:nth-child(4) { color:var(--muted); }
-      .g-ivs td:nth-child(4)::before { content:"기상청 요청 "; }
-      .g-ivs td.act { flex-basis:100%; margin-top:4px; }
+      .g-ivs tr { position:relative; padding-left:30px; }
+      .g-ivs td.ck { position:absolute; left:2px; top:8px; width:auto; }
+      .g-ivs td:nth-child(3)::before { content:"~ "; }
+      .g-ivs td:nth-child(4), .g-ivs td:nth-child(5) { color:var(--muted); }
+      .g-ivs td:nth-child(5)::before { content:"기상청 요청 "; }
+      .g-ivs td.lnk { flex-basis:100%; }
+      .g-ivs tr.sel td { background:none; }
+      .g-ivs tr.sel { background:#f1ead9; }
+      .g-dates > div { min-width:0; flex:1 1 130px; }
+      .g-selbar { padding:8px 10px; }
+      .g-selbtns { width:100%; }
+      .g-selbtns button { flex:1; }
+      .g-wide { display:none; }
     }
   </style>
 </head>
@@ -286,17 +313,28 @@
         <section class="page" id="gaps">
           <div class="card">
             <div class="card-head"><h2>미적재 현황</h2><a href="#/collect">자료수집 ›</a></div>
-            <p class="muted">관측지점별로 DB에 저장되지 않은 시각(시간자료) 또는 날짜(일자료)를 찾아 구간으로 보여 줍니다. 점검 끝은 공식 최신 시각이고, 같은 시각이 'HH:MM'과 'HH:MM:SS' 두 형식으로 중복 저장된 행은 한 시각으로 셉니다. 이 화면을 여는 것만으로는 수집하지 않으며, 구간의 <b>수집</b> 버튼을 눌러 확인한 경우에만 기상청 API를 호출합니다.</p>
+            <p class="muted">관측지점별로 DB에 저장되지 않은 시각(시간자료) 또는 날짜(일자료)를 찾아 구간으로 보여 줍니다. 점검 끝은 공식 최신 시각이고, 같은 시각이 'HH:MM'과 'HH:MM:SS' 두 형식으로 중복 저장된 행은 한 시각으로 셉니다. 이 화면을 여는 것만으로는 수집하지 않으며, 수집할 구간을 <b>체크</b>하고 <b>선택 구간 수집</b>을 눌러 확인한 경우에만 기상청 API를 호출합니다.</p>
             <div class="controls">
               <div class="ctl"><span>종류</span><div class="seg ctl" id="gKind"></div></div>
-              <div class="ctl"><span>기간</span><div class="seg ctl" id="gPeriod"></div></div>
               <div class="ctl"><span>지점</span><select id="gStation"></select></div>
-              <button class="sec" id="gReload" style="height:34px">새로고침</button>
             </div>
+            <div class="g-range">
+              <div class="ctl"><span>기간</span><div class="seg ctl" id="gPreset"></div></div>
+              <div class="g-dates">
+                <div><label for="gFrom">시작일</label><input id="gFrom" type="date" /></div>
+                <div><label for="gTo">종료일</label><input id="gTo" type="date" /></div>
+                <button id="gApply" type="button">조회</button>
+              </div>
+            </div>
+            <p class="bad g-err" id="gErr" role="alert" hidden></p>
             <p class="muted" id="gMsg"></p>
             <div class="g-legend" id="gLegend"></div>
           </div>
           <div class="g-list" id="gList"></div>
+          <div class="g-selbar" id="gSelBar" hidden>
+            <span id="gSelText"></span>
+            <span class="g-selbtns"><button type="button" class="sec" id="gSelClear">선택 해제</button><button type="button" id="gSelGo" disabled>선택 구간 수집</button></span>
+          </div>
         </section>
         <section class="page" id="jobs">
           <div class="card">
@@ -800,14 +838,39 @@
     $("cReset").onclick = applyCollectDefaults;
     $("cGo").onclick = runCollect;
     // ---------- 미적재 현황 ----------
+    // 기간은 시작일~종료일(날짜)로 지정. 시간자료는 시작일 00시 ~ 종료일 23시(공식 최신 시각을 넘지 않음).
+    // 수집은 체크한 구간만: 구간 표의 체크박스 → '선택 구간 수집' → 확인창 → 28일씩 나눠 차례로 호출.
     const G_KINDS = [["hourly", "시간자료"], ["daily", "일자료"]];
-    const G_PERIODS = [["30", "30일"], ["90", "90일"], ["365", "1년"], ["all", "전체"]];
+    const G_PRESETS = [[30, "30일"], [90, "90일"], [365, "1년"]];
+    const G_MAX_DAYS = 1100;
+    const G_AUTO_OPEN = 10;    // 구간이 이 개수 이하인 지점은 표를 펼쳐서 보여 줌
     const G_PIECE_HOURS = 672; // 서버 요청 1번 = 최대 28일(기상청 요청 4회, 서버가 7일씩 나눠 호출) → 응답 제한시간 안에 끝나게 나눔
     const G_PIECE_DAYS = 365;  // 일자료는 기상청 요청 1번에 최대 999일
     const G_WARN_REQUESTS = 100;
-    const gapState = { kind: "hourly", period: "90", station: "", data: null, open: new Set(), req: 0, busy: false, stop: false, pending: null };
+    const DAYMS = 24 * HOUR;
+    const gapState = { kind: "hourly", from: "", to: "", station: "", data: null, open: new Set(), closed: new Set(), sel: new Set(), req: 0, busy: false, stop: false, pending: null };
     const gUnit = (kind) => (kind === "daily" ? "일" : "시간");
     const gLen = (kind, n) => kind === "daily" ? `${nf(n)}일` : n >= 48 ? `${nf(n)}시간 (${nf(Math.round((n / 24) * 10) / 10)}일)` : `${nf(n)}시간`;
+    const gYmd = (ms) => fmtWall(ms).slice(0, 10);
+    const gDayMs = (d) => wallMs(`${d} 00:00`);
+    const gLatestDate = () => String(dashCache?.latestOfficialHour || "").slice(0, 10);
+    const gValidDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || "") && Number.isFinite(gDayMs(v)) && gYmd(gDayMs(v)) === v;
+    const gKey = (kind, sid, iv) => `${kind}|${sid}|${iv.start}|${iv.end}`;
+    function gapPreset(days) {
+      const t = gLatestDate();
+      return { from: gYmd(gDayMs(t) - (days - 1) * DAYMS), to: t };
+    }
+    // 오류 문구(없으면 "")
+    function gapRangeError(from, to) {
+      if (!from || !to) return "시작일과 종료일을 모두 고르세요.";
+      if (!gValidDate(from) || !gValidDate(to)) return "날짜 형식이 올바르지 않습니다.";
+      if (from > to) return "시작일이 종료일보다 늦습니다.";
+      const latest = gLatestDate();
+      if (latest && from > latest) return `시작일이 공식 최신 날짜(${latest})보다 늦습니다. 공식 자료는 ${latest}까지 제공됩니다.`;
+      const span = Math.round((gDayMs(to > latest && latest ? latest : to) - gDayMs(from)) / DAYMS) + 1;
+      if (span > G_MAX_DAYS) return `기간은 최대 ${nf(G_MAX_DAYS)}일까지 조회할 수 있습니다(지금 ${nf(span)}일). 기간을 줄여 주세요.`;
+      return "";
+    }
     function gapPieces(kind, iv) {
       const out = [];
       if (kind === "hourly") {
@@ -819,21 +882,21 @@
           s = pe + HOUR;
         }
       } else {
-        const D = 24 * HOUR;
-        let s = wallMs(iv.start + " 00:00"); const e = wallMs(iv.end + " 00:00");
+        let s = gDayMs(iv.start); const e = gDayMs(iv.end);
         while (s <= e) {
-          const pe = Math.min(e, s + (G_PIECE_DAYS - 1) * D);
-          out.push({ from: fmtWall(s).slice(0, 10), to: fmtWall(pe).slice(0, 10), len: Math.round((pe - s) / D) + 1, reqs: 1 });
-          s = pe + D;
+          const pe = Math.min(e, s + (G_PIECE_DAYS - 1) * DAYMS);
+          out.push({ from: gYmd(s), to: gYmd(pe), len: Math.round((pe - s) / DAYMS) + 1, reqs: 1 });
+          s = pe + DAYMS;
         }
       }
       return out;
     }
+    const gReqs = (kind, iv) => gapPieces(kind, iv).reduce((a, p) => a + p.reqs, 0);
     function gapCollectHref(stationId, kind, iv) {
       return `#/collect?station=${encodeURIComponent(stationId)}&kind=${kind}&from=${encodeURIComponent(iv.start)}&to=${encodeURIComponent(iv.end)}`;
     }
     function syncGapHash() {
-      const q = new URLSearchParams({ kind: gapState.kind, period: gapState.period });
+      const q = new URLSearchParams({ kind: gapState.kind, from: gapState.from, to: gapState.to });
       if (gapState.station) q.set("station", gapState.station);
       const want = `#/gaps?${q}`;
       if (location.hash !== want) history.replaceState(null, "", want);
@@ -849,14 +912,33 @@
     }
     function renderGapControls() {
       $("gKind").innerHTML = G_KINDS.map(([v, l]) => `<button type="button" class="${v === gapState.kind ? "on" : ""}" data-k="${v}">${l}</button>`).join("");
-      $("gPeriod").innerHTML = G_PERIODS.map(([v, l]) => `<button type="button" class="${v === gapState.period ? "on" : ""}" data-p="${v}"${v === "all" ? ' title="지점별 첫 관측부터 공식 최신까지 (최대 1100일)"' : ""}>${l}</button>`).join("");
+      $("gPreset").innerHTML = G_PRESETS.map(([n, l]) => {
+        const p = gapPreset(n);
+        const on = p.from === gapState.from && p.to === gapState.to;
+        return `<button type="button" class="${on ? "on" : ""}" data-n="${n}" title="${p.from} ~ ${p.to}">${l}</button>`;
+      }).join("");
+      const latest = gLatestDate();
+      ["gFrom", "gTo"].forEach((id) => { if (latest) $(id).max = latest; });
+      $("gFrom").value = gapState.from; $("gTo").value = gapState.to;
       $("gLegend").innerHTML = gapState.kind === "daily"
         ? `<span><i class="g-c-off"></i>공식 일자료</span><span><i class="g-c-full"></i>시간자료 집계(24시각)</span><span><i class="g-c-part"></i>시간자료 일부만 있음</span><span><i class="g-c-miss"></i>미적재</span>`
         : `<span><i class="g-c-full"></i>그날 전부 적재</span><span><i class="g-c-part"></i>일부 시각 누락</span><span><i class="g-c-miss"></i>그날 전부 미적재</span><span>막대 한 칸 = 하루</span>`;
     }
+    function setGapErr(msg) { $("gErr").textContent = msg || ""; $("gErr").hidden = !msg; }
+    // 입력칸의 기간을 검사해 적용하고 다시 조회
+    function applyGapRange(from, to) {
+      const err = gapRangeError(from, to);
+      if (err) { setGapErr(err); return false; }
+      const latest = gLatestDate();
+      setGapErr("");
+      gapState.from = from;
+      gapState.to = latest && to > latest ? latest : to;
+      syncGapHash(); renderGapControls(); loadGaps();
+      return true;
+    }
     async function loadGaps() {
       const my = ++gapState.req;
-      const q = new URLSearchParams({ kind: gapState.kind, period: gapState.period });
+      const q = new URLSearchParams({ kind: gapState.kind, from: gapState.from, to: gapState.to });
       if (gapState.station) q.set("stationId", gapState.station);
       $("gMsg").textContent = "불러오는 중…";
       try {
@@ -871,6 +953,7 @@
         gapState.data = null;
         $("gMsg").innerHTML = `<span class="bad">불러오지 못했습니다: ${esc(e.message)}</span>`;
         $("gList").innerHTML = "";
+        updateGapSelUI();
       }
     }
     function gapStrip(s, kind) {
@@ -883,8 +966,8 @@
       const LABEL = kind === "daily"
         ? { "g-c-off": "공식 일자료", "g-c-full": "시간자료 집계", "g-c-part": "시간자료 일부만 있음", "g-c-miss": "미적재" }
         : { "g-c-full": "전부 적재", "g-c-part": "일부 시각 누락", "g-c-miss": "미적재" };
-      const d0 = wallMs(st.start + " 00:00");
-      const day = (i) => fmtWall(d0 + i * 24 * HOUR).slice(0, 10);
+      const d0 = gDayMs(st.start);
+      const day = (i) => gYmd(d0 + i * DAYMS);
       let rects = "";
       for (let i = 0; i < n;) {
         const c = cls(i);
@@ -897,9 +980,14 @@
       const mid = n >= 20 ? `<span>${day(Math.floor(n / 2))}</span>` : "";
       return `<div class="g-strip"><svg viewBox="0 0 ${n} 1" preserveAspectRatio="none" shape-rendering="crispEdges" role="img" aria-label="${esc(s.station_id)} 일별 적재 상태">${rects}</svg><div class="g-axis"><span>${esc(st.start)}</span>${mid}<span>${day(n - 1)}</span></div></div>`;
     }
+    function gapIsOpen(kind, s) {
+      const k = `${kind}|${s.station_id}`;
+      if (gapState.closed.has(k)) return false;
+      return gapState.open.has(k) || s.interval_count <= G_AUTO_OPEN;
+    }
     function gapCard(s, kind) {
       const u = gUnit(kind);
-      const open = gapState.open.has(`${kind}|${s.station_id}`);
+      const open = gapIsOpen(kind, s);
       const badges = [];
       if (!s.enabled) badges.push(`<span class="badge off">사용 중지</span>`);
       if (s.stale) badges.push(`<span class="badge bad" title="마지막 관측이 공식 최신보다 ${s.lag_hours}시간 늦음">⚠ 수집 중단 · ${lagText(s.lag_hours)} 지연</span>`);
@@ -912,18 +1000,22 @@
       if (s.first_observation) obs.push(`첫 관측 ${esc(s.first_observation)}`);
       if (kind === "hourly" && s.duplicates) obs.push(`<span title="같은 시각이 'HH:MM'과 'HH:MM:SS' 두 형식으로 저장된 행. 한 시각으로 셉니다.">중복 행 ${nf(s.duplicates)}</span>`);
       if (kind === "daily") obs.push(`공식 일자료 ${nf(s.official_days || 0)}일 · 시간자료 집계 ${nf(s.derived_days || 0)}일${s.partial_days ? ` <span title="그날 시간자료가 24시각보다 적어 집계값이 부정확할 수 있습니다">(그중 일부만 있는 날 ${nf(s.partial_days)}일)</span>` : ""}`);
-      lines.push(obs.join(" · "));
+      if (obs.length) lines.push(obs.join(" · "));
       let table = "";
       if (open && s.interval_count) {
         const rows = s.intervals.map((iv, i) => {
-          const reqs = gapPieces(kind, iv).reduce((a, p) => a + p.reqs, 0);
-          return `<tr><td>${esc(iv.start)}</td><td>${esc(iv.end)}</td><td>${gLen(kind, iv.length)}</td><td>약 ${nf(reqs)}회</td><td class="act"><button type="button" data-act="one" data-i="${i}">수집</button><a href="${gapCollectHref(s.station_id, kind, iv)}">수집 화면 ›</a></td></tr>`;
+          const on = gapState.sel.has(gKey(kind, s.station_id, iv));
+          return `<tr class="${on ? "sel" : ""}"><td class="ck"><input type="checkbox" data-iv="${i}"${on ? " checked" : ""} aria-label="${esc(iv.start)} ~ ${esc(iv.end)} 구간 선택"></td><td>${esc(iv.start)}</td><td>${esc(iv.end)}</td><td>${gLen(kind, iv.length)}</td><td>약 ${nf(gReqs(kind, iv))}회</td><td class="lnk"><a href="${gapCollectHref(s.station_id, kind, iv)}">수집 화면 ›</a></td></tr>`;
         }).join("");
-        table = `<div class="g-ivs"><table><thead><tr><th>시작</th><th>종료</th><th>길이</th><th>기상청 요청</th><th></th></tr></thead><tbody>${rows}</tbody></table>${s.intervals_truncated ? `<p class="muted">구간이 많아 앞 ${nf(s.intervals.length)}개만 표시합니다(전체 ${nf(s.interval_count)}개). 기간을 좁혀 보세요.</p>` : ""}</div>`;
+        table = `<div class="g-ivs">
+            <label class="g-selall"><input type="checkbox" data-selall> 이 지점 미적재 구간 전체 선택 (${nf(s.intervals.length)}개)</label>
+            <table><thead><tr><th class="ck"><span class="sr">선택</span></th><th>시작</th><th>종료</th><th>길이</th><th>기상청 요청</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+            ${s.intervals_truncated ? `<p class="muted">구간이 많아 앞 ${nf(s.intervals.length)}개만 표시합니다(전체 ${nf(s.interval_count)}개). 기간을 좁혀 보세요.</p>` : ""}
+          </div>`;
       }
       const actions = s.interval_count ? `<div class="g-actions">
-          <button type="button" class="sec" data-act="toggle" aria-expanded="${open}">${open ? "구간 접기 ▴" : `미적재 구간 ${nf(s.interval_count)}개 보기 ▾`}</button>
-          <button type="button" data-act="all">${s.interval_count > 1 ? `미적재 ${nf(s.interval_count)}개 구간 모두 수집` : "이 구간 수집"}</button>
+          <button type="button" class="sec" data-act="toggle" aria-expanded="${open}">${open ? "구간 접기 ▴" : `미적재 구간 ${nf(s.interval_count)}개 보기 ▾`}<span class="g-selcnt"></span></button>
+          <button type="button" data-act="collect-st" disabled>선택 구간 수집</button>
         </div>` : "";
       return `<div class="card g-card${s.stale ? " stale" : ""}" data-st="${esc(s.station_id)}">
           <div class="st-top"><strong>${esc(s.station_id)} ${esc(s.station_name)}</strong><span class="g-badges">${badges.join("")}</span></div>
@@ -932,15 +1024,67 @@
           ${gapStrip(s, kind)}${actions}${table}
         </div>`;
     }
+    // 새로 받은 결과에 없는 구간(수집으로 채워졌거나 기간이 바뀜)은 선택에서 뺀다
+    function pruneGapSel() {
+      const d = gapState.data;
+      const valid = new Set();
+      if (d) for (const s of d.stations || []) for (const iv of s.intervals || []) valid.add(gKey(d.kind, s.station_id, iv));
+      for (const k of [...gapState.sel]) if (!valid.has(k)) gapState.sel.delete(k);
+    }
+    function gapSelected(onlySid) {
+      const d = gapState.data;
+      const out = [];
+      if (!d) return out;
+      for (const s of d.stations || []) {
+        if (onlySid && s.station_id !== onlySid) continue;
+        for (const iv of s.intervals || []) if (gapState.sel.has(gKey(d.kind, s.station_id, iv))) out.push({ s, iv });
+      }
+      return out;
+    }
+    function gapSelSummary(items, kind) {
+      const len = items.reduce((a, x) => a + x.iv.length, 0);
+      const reqs = items.reduce((a, x) => a + gReqs(kind, x.iv), 0);
+      return { n: items.length, len, reqs, stations: new Set(items.map((x) => x.s.station_id)).size };
+    }
+    // 체크 상태에 맞춰 버튼 문구·전체선택 체크박스·하단 요약줄만 갱신(표를 다시 그리지 않음)
+    function updateGapSelUI() {
+      const d = gapState.data;
+      const kind = d?.kind || gapState.kind;
+      document.querySelectorAll("#gList [data-st]").forEach((host) => {
+        const sid = host.dataset.st;
+        const s = gapStationById(sid);
+        if (!s) return;
+        const items = gapSelected(sid);
+        const sum = gapSelSummary(items, kind);
+        const btn = host.querySelector('button[data-act="collect-st"]');
+        if (btn) { btn.disabled = !sum.n || gapState.busy; btn.textContent = sum.n ? `선택 구간 수집 (${nf(sum.n)}개 · ${gLen(kind, sum.len)})` : "선택 구간 수집"; }
+        const cnt = host.querySelector(".g-selcnt");
+        if (cnt) cnt.textContent = sum.n ? ` · ${nf(sum.n)}개 선택` : "";
+        const all = host.querySelector("input[data-selall]");
+        if (all) { const total = (s.intervals || []).length; all.checked = total > 0 && sum.n === total; all.indeterminate = sum.n > 0 && sum.n < total; }
+        host.querySelectorAll("input[data-iv]").forEach((cb) => { const iv = s.intervals[Number(cb.dataset.iv)]; const on = Boolean(iv && gapState.sel.has(gKey(kind, sid, iv))); cb.checked = on; cb.closest("tr, .g-nrow")?.classList.toggle("sel", on); });
+      });
+      const items = gapSelected();
+      const sum = gapSelSummary(items, kind);
+      const anyIv = (d?.stations || []).some((s) => (s.intervals || []).length);
+      $("gSelBar").hidden = !anyIv;
+      $("gSelText").innerHTML = sum.n
+        ? `선택 <b>${nf(sum.n)}개</b> 구간 · <b>${gLen(kind, sum.len)}</b>${sum.stations > 1 ? ` · 지점 ${nf(sum.stations)}곳` : ""} · 기상청 요청 약 ${nf(sum.reqs)}회`
+        : `수집할 구간을 체크하세요`;
+      $("gSelGo").disabled = !sum.n || gapState.busy;
+      $("gSelGo").innerHTML = sum.n ? `선택 구간 수집<span class="g-wide"> (${nf(sum.n)}개 · ${gLen(kind, sum.len)})</span>` : "선택 구간 수집";
+      $("gSelClear").disabled = !sum.n;
+    }
     function renderGaps() {
       const d = gapState.data;
       if (!d) return;
+      pruneGapSel();
       const kind = d.kind, u = gUnit(kind);
       const list = d.stations || [];
       const withData = list.filter((s) => s.has_data);
       const noData = list.filter((s) => !s.has_data);
       const totalMissing = withData.reduce((a, s) => a + (s.missing || 0), 0);
-      $("gMsg").innerHTML = `점검 ${d.from ? esc(d.from) : "지점별 첫 관측"} ~ ${esc(d.to)} (KST) · 공식 최신 ${esc(String(d.latestOfficialHour || "").slice(0, 16))} · 자료 있는 지점 ${nf(withData.length)}곳의 미적재 합계 <b>${nf(totalMissing)}${u}</b>`;
+      $("gMsg").innerHTML = `점검 ${esc(d.from || "")} ~ ${esc(d.to)} (KST) · 공식 최신 ${esc(String(d.latestOfficialHour || "").slice(0, 16))} · 자료 있는 지점 ${nf(withData.length)}곳의 미적재 합계 <b>${nf(totalMissing)}${u}</b>`;
       const on = withData.filter((s) => s.enabled), off = withData.filter((s) => !s.enabled);
       let html = "";
       if (on.length) html += `<p class="g-group">사용 지점</p>` + on.map((s) => gapCard(s, kind)).join("");
@@ -948,40 +1092,48 @@
       if (noData.length) {
         const rows = noData.map((s) => {
           const iv = s.intervals?.[0];
-          const act = iv ? `<button type="button" data-act="all">이 기간 수집</button> <a href="${gapCollectHref(s.station_id, kind, iv)}" class="st-link">수집 화면 ›</a>` : `<span class="muted">기간을 30일·90일·1년으로 고르면 수집할 구간을 계산합니다</span>`;
-          return `<div class="g-nrow" data-st="${esc(s.station_id)}"><strong>${esc(s.station_id)} ${esc(s.station_name)}${s.enabled ? "" : ` <span class="badge off">사용 중지</span>`}</strong><span class="g-ntext">${iv ? `${esc(s.from)} ~ ${esc(s.to)} · ${gLen(kind, s.missing)} 전부 미적재` : "저장된 자료 없음"}</span><span class="g-nact">${act}</span></div>`;
+          const on = iv && gapState.sel.has(gKey(kind, s.station_id, iv));
+          const name = `<strong>${esc(s.station_id)} ${esc(s.station_name)}${s.enabled ? "" : ` <span class="badge off">사용 중지</span>`}</strong>`;
+          if (!iv) return `<div class="g-nrow" data-st="${esc(s.station_id)}">${name}<span class="g-ntext">저장된 자료 없음</span></div>`;
+          return `<div class="g-nrow${on ? " sel" : ""}" data-st="${esc(s.station_id)}"><label class="g-nck"><input type="checkbox" data-iv="0"${on ? " checked" : ""} aria-label="${esc(s.station_id)} ${esc(s.station_name)} 기간 전체 선택">${name}</label><span class="g-ntext">${esc(iv.start)} ~ ${esc(iv.end)} · ${gLen(kind, iv.length)} 전부 미적재 · 기상청 요청 약 ${nf(gReqs(kind, iv))}회</span><a href="${gapCollectHref(s.station_id, kind, iv)}" class="st-link">수집 화면 ›</a></div>`;
         }).join("");
         html += `<p class="g-group">저장된 자료가 없는 지점</p><div class="card g-none">${rows}</div>`;
       }
       $("gList").innerHTML = html || `<div class="card muted">표시할 지점이 없습니다.</div>`;
+      updateGapSelUI();
     }
     function gapStationById(id) {
       return (gapState.data?.stations || []).find((s) => String(s.station_id) === String(id)) || null;
     }
-    function openGapCollect(s, ivs) {
-      if (gapState.busy || !ivs.length) return;
-      const kind = gapState.data.kind, u = gUnit(kind);
-      const pieces = ivs.flatMap((iv) => gapPieces(kind, iv));
-      const total = ivs.reduce((a, iv) => a + iv.length, 0);
-      const reqs = pieces.reduce((a, p) => a + p.reqs, 0);
-      gapState.pending = { s, kind, pieces };
-      const rangeText = ivs.length === 1 ? `${esc(ivs[0].start)} ~ ${esc(ivs[0].end)}`
-        : `${nf(ivs.length)}개 구간 · ${esc(ivs[0].start)} ~ ${esc(ivs[ivs.length - 1].end)} 사이` + `<br><span class="muted">${ivs.slice(0, 4).map((iv) => `${esc(iv.start)} ~ ${esc(iv.end)} (${gLen(kind, iv.length)})`).join("<br>")}${ivs.length > 4 ? `<br>외 ${nf(ivs.length - 4)}개` : ""}</span>`;
+    function openGapCollect(items) {
+      if (gapState.busy || !items.length || !gapState.data) return;
+      const kind = gapState.data.kind;
+      const pieces = items.flatMap((x) => gapPieces(kind, x.iv).map((p) => ({ ...p, sid: x.s.station_id, key: gKey(kind, x.s.station_id, x.iv) })));
+      const sum = gapSelSummary(items, kind);
+      gapState.pending = { kind, pieces };
+      // 지점별로 묶어 선택 구간을 보여 줌
+      const byStation = new Map();
+      for (const x of items) { if (!byStation.has(x.s.station_id)) byStation.set(x.s.station_id, { s: x.s, ivs: [] }); byStation.get(x.s.station_id).ivs.push(x.iv); }
+      const listHtml = [...byStation.values()].map(({ s, ivs }) => {
+        const len = ivs.reduce((a, iv) => a + iv.length, 0);
+        return `<div class="g-dst"><b>${esc(s.station_id)} ${esc(s.station_name)}</b>${s.enabled ? "" : ` <span class="badge off">사용 중지</span>`} <span class="muted">· ${nf(ivs.length)}개 구간 · ${gLen(kind, len)}</span>
+          <ul>${ivs.map((iv) => `<li>${esc(iv.start)} ~ ${esc(iv.end)} <span class="muted">· ${gLen(kind, iv.length)} · 요청 약 ${nf(gReqs(kind, iv))}회</span></li>`).join("")}</ul></div>`;
+      }).join("");
       const warns = [];
       if (!dashCache?.keyRegistered) warns.push(`인증키가 등록되지 않아 수집할 수 없습니다. <a href="#/provider">공급원</a>에서 먼저 등록하세요.`);
-      if (!s.enabled) warns.push("사용 중지된 지점입니다. 수집은 할 수 있습니다.");
-      if (reqs > G_WARN_REQUESTS) warns.push(`기상청 API 요청이 약 ${nf(reqs)}회로 많습니다. 공공데이터포털 일일 호출 한도를 넘지 않는지 확인하세요. 필요하면 기간을 나눠 수집하세요.`);
-      if (s.intervals_truncated && ivs.length > 1) warns.push(`구간이 많아 앞 ${nf(ivs.length)}개만 수집합니다. 끝난 뒤 새로고침해서 남은 구간을 다시 확인하세요.`);
-      $("gDlgTitle").textContent = `${kind === "daily" ? "일자료" : "시간자료"} 미적재 구간 수집`;
+      const offNames = [...byStation.values()].filter((x) => !x.s.enabled).map((x) => `${x.s.station_id} ${x.s.station_name}`);
+      if (offNames.length) warns.push(`사용 중지된 지점이 포함되어 있습니다(${esc(offNames.join(", "))}). 수집은 할 수 있습니다.`);
+      if (sum.reqs > G_WARN_REQUESTS) warns.push(`기상청 API 요청이 약 ${nf(sum.reqs)}회로 많습니다. 공공데이터포털 일일 호출 한도를 넘지 않는지 확인하세요. 필요하면 구간을 나눠 수집하세요.`);
+      $("gDlgTitle").textContent = `${kind === "daily" ? "일자료" : "시간자료"} 선택 구간 수집`;
       $("gDlgBody").innerHTML = `<dl class="g-dl">
-          <dt>지점</dt><dd>${esc(s.station_id)} ${esc(s.station_name)}</dd>
           <dt>자료</dt><dd>${kind === "daily" ? "공식 ASOS 일자료" : "공식 ASOS 시간자료"}</dd>
-          <dt>구간</dt><dd>${rangeText}</dd>
-          <dt>범위</dt><dd>${gLen(kind, total)}</dd>
-          <dt>기상청 요청</dt><dd>약 ${nf(reqs)}회${pieces.length > 1 ? ` · 서버 요청 ${nf(pieces.length)}번으로 나눠 차례로 실행` : ""}</dd>
+          <dt>선택</dt><dd>${nf(sum.n)}개 구간${sum.stations > 1 ? ` · 지점 ${nf(sum.stations)}곳` : ""}</dd>
+          <dt>범위</dt><dd>${gLen(kind, sum.len)}</dd>
+          <dt>기상청 요청</dt><dd>약 ${nf(sum.reqs)}회${pieces.length > 1 ? ` · 서버 요청 ${nf(pieces.length)}번으로 나눠 차례로 실행` : ""}</dd>
         </dl>
+        <div class="g-dlist">${listHtml}</div>
         ${warns.map((w) => `<div class="g-warn">${w}</div>`).join("")}
-        <p class="g-note">받은 자료는 DB에 저장(UPSERT)되고, 같은 시각 자료는 새 값으로 갱신됩니다. 진행 중에는 창을 닫을 수 없고, '중지'를 누르면 지금 요청이 끝난 뒤 멈춥니다. 한 요청이 실패하면 나머지는 실행하지 않습니다.</p>`;
+        <p class="g-note">체크한 구간만 수집합니다. 받은 자료는 DB에 저장(UPSERT)되고, 같은 시각 자료는 새 값으로 갱신됩니다. 진행 중에는 창을 닫을 수 없고, '중지'를 누르면 지금 요청이 끝난 뒤 멈춥니다. 한 요청이 실패하면 나머지는 실행하지 않습니다.</p>`;
       $("gDlgLog").innerHTML = "";
       const ok = $("gDlgOk");
       ok.hidden = false; ok.disabled = !dashCache?.keyRegistered; ok.textContent = "수집 시작";
@@ -992,30 +1144,37 @@
       const p = gapState.pending;
       if (!p || gapState.busy) return;
       gapState.busy = true; gapState.stop = false;
+      updateGapSelUI();
       const ok = $("gDlgOk"), cancel = $("gDlgCancel"), log = $("gDlgLog");
       ok.disabled = true; ok.textContent = "수집 중…";
       cancel.textContent = "중지";
       const url = p.kind === "daily" ? "/api/collect-daily" : "/api/collect";
-      let sum = { received: 0, inserted: 0, updated: 0 }, done = 0, failed = null;
+      const sum = { received: 0, inserted: 0, updated: 0 };
+      let done = 0, failed = null;
       log.innerHTML = "";
       for (let i = 0; i < p.pieces.length; i++) {
         if (gapState.stop) break;
         const pc = p.pieces[i];
+        const head = `${i + 1}/${p.pieces.length} · ${esc(pc.sid)} · ${esc(pc.from.slice(0, 16))} ~ ${esc(pc.to.slice(0, 16))}`;
         const line = document.createElement("div");
-        line.innerHTML = `${i + 1}/${p.pieces.length} · ${esc(pc.from.slice(0, 16))} ~ ${esc(pc.to.slice(0, 16))} · <span class="muted">수집 중…</span>`;
+        line.innerHTML = `${head} · <span class="muted">수집 중…</span>`;
         log.appendChild(line); line.scrollIntoView({ block: "nearest" });
         let d;
         try {
-          const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ stationId: p.s.station_id, from: pc.from, to: pc.to }) });
+          const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ stationId: pc.sid, from: pc.from, to: pc.to }) });
           try { d = await res.json(); } catch (e) { d = { status: "FAILED", message: `HTTP ${res.status}` }; }
         } catch (e) { d = { status: "FAILED", message: e.message }; }
         const good = d.status === "COMPLETED";
         sum.received += d.received || 0; sum.inserted += d.inserted || 0; sum.updated += d.updated || 0;
-        line.innerHTML = `${i + 1}/${p.pieces.length} · ${esc(pc.from.slice(0, 16))} ~ ${esc(pc.to.slice(0, 16))} · <b class="${good ? "ok" : "bad"}">${esc(d.status || "FAILED")}</b> 수신 ${nf(d.received || 0)} · 신규 ${nf(d.inserted || 0)} · 갱신 ${nf(d.updated || 0)}${good ? "" : `<br><span class="bad">${esc(d.message || "")}</span>`}`;
+        line.innerHTML = `${head} · <b class="${good ? "ok" : "bad"}">${esc(d.status || "FAILED")}</b> 수신 ${nf(d.received || 0)} · 신규 ${nf(d.inserted || 0)} · 갱신 ${nf(d.updated || 0)}${good ? "" : `<br><span class="bad">${esc(d.message || "")}</span>`}`;
         done++;
         if (d.status === "FAILED") { failed = d.message || "실패"; break; }
       }
       const stopped = gapState.stop && done < p.pieces.length && !failed;
+      // 끝까지 요청한 구간은 선택에서 뺀다(같은 구간을 실수로 다시 수집하지 않게). 실패·중지로 남은 구간은 선택 유지.
+      const okKeys = new Set(p.pieces.slice(0, failed ? done - 1 : done).map((pc) => pc.key));
+      for (const pc of p.pieces.slice(failed ? done - 1 : done)) okKeys.delete(pc.key);
+      for (const k of okKeys) gapState.sel.delete(k);
       const box = document.createElement("div");
       box.className = `result ${failed ? "bad" : stopped ? "run" : "ok"}`;
       box.innerHTML = `${failed ? "실패로 중단" : stopped ? "중지함" : "완료"} · ${nf(done)}/${nf(p.pieces.length)}번 요청 · 수신 <b>${nf(sum.received)}</b> · 신규 <b>${nf(sum.inserted)}</b> · 갱신 <b>${nf(sum.updated)}</b>${sum.received === 0 && !failed ? "<br>기상청이 이 구간 자료를 주지 않았습니다(관측 결측이거나 아직 제공 전일 수 있음)." : ""}`;
@@ -1031,9 +1190,27 @@
     };
     $("gDlg").addEventListener("cancel", (e) => { if (gapState.busy) e.preventDefault(); else gapState.pending = null; });
     $("gKind").addEventListener("click", (e) => { const b = e.target.closest("button[data-k]"); if (!b || b.dataset.k === gapState.kind) return; gapState.kind = b.dataset.k; syncGapHash(); renderGapControls(); loadGaps(); });
-    $("gPeriod").addEventListener("click", (e) => { const b = e.target.closest("button[data-p]"); if (!b || b.dataset.p === gapState.period) return; gapState.period = b.dataset.p; syncGapHash(); renderGapControls(); loadGaps(); });
-    $("gStation").addEventListener("change", () => { gapState.station = $("gStation").value; if (gapState.station) gapState.open.add(`${gapState.kind}|${gapState.station}`); syncGapHash(); loadGaps(); });
-    $("gReload").onclick = loadGaps;
+    $("gPreset").addEventListener("click", (e) => { const b = e.target.closest("button[data-n]"); if (!b) return; const p = gapPreset(Number(b.dataset.n)); applyGapRange(p.from, p.to); });
+    $("gApply").onclick = () => applyGapRange($("gFrom").value, $("gTo").value);
+    ["gFrom", "gTo"].forEach((id) => $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") $("gApply").click(); }));
+    $("gStation").addEventListener("change", () => { gapState.station = $("gStation").value; syncGapHash(); loadGaps(); });
+    $("gSelClear").onclick = () => { gapState.sel.clear(); updateGapSelUI(); };
+    $("gSelGo").onclick = () => openGapCollect(gapSelected());
+    $("gList").addEventListener("change", (e) => {
+      const cb = e.target.closest('input[type="checkbox"]');
+      const d = gapState.data;
+      if (!cb || !d) return;
+      const host = cb.closest("[data-st]");
+      const s = host && gapStationById(host.dataset.st);
+      if (!s) return;
+      if (cb.hasAttribute("data-selall")) {
+        for (const iv of s.intervals || []) { const k = gKey(d.kind, s.station_id, iv); if (cb.checked) gapState.sel.add(k); else gapState.sel.delete(k); }
+      } else if (cb.dataset.iv != null) {
+        const iv = s.intervals[Number(cb.dataset.iv)];
+        if (iv) { const k = gKey(d.kind, s.station_id, iv); if (cb.checked) gapState.sel.add(k); else gapState.sel.delete(k); }
+      }
+      updateGapSelUI();
+    });
     $("gList").addEventListener("click", (e) => {
       const b = e.target.closest("button[data-act]");
       if (!b || !gapState.data) return;
@@ -1042,26 +1219,31 @@
       if (!s) return;
       const kind = gapState.data.kind;
       if (b.dataset.act === "toggle") {
-        const key = `${kind}|${s.station_id}`;
-        if (gapState.open.has(key)) gapState.open.delete(key); else gapState.open.add(key);
+        const k = `${kind}|${s.station_id}`;
+        if (gapIsOpen(kind, s)) { gapState.closed.add(k); gapState.open.delete(k); } else { gapState.open.add(k); gapState.closed.delete(k); }
         renderGaps();
-      } else if (b.dataset.act === "one") {
-        const iv = s.intervals[Number(b.dataset.i)];
-        if (iv) openGapCollect(s, [iv]);
-      } else if (b.dataset.act === "all") {
-        openGapCollect(s, s.intervals || []);
+      } else if (b.dataset.act === "collect-st") {
+        openGapCollect(gapSelected(s.station_id));
       }
     });
     function routeGaps() {
       const hp = hashParams();
-      const k = hp.get("kind"), p = hp.get("period"), st = hp.get("station");
+      const k = hp.get("kind"), st = hp.get("station");
       if (k === "hourly" || k === "daily") gapState.kind = k;
-      if (G_PERIODS.some(([v]) => v === p)) gapState.period = p;
       if (st !== null) gapState.station = st;
+      const from = hp.get("from"), to = hp.get("to"), period = Number(hp.get("period"));
+      let err = "";
+      if (from || to) {
+        err = gapRangeError(from, to);
+        if (!err) { const latest = gLatestDate(); gapState.from = from; gapState.to = latest && to > latest ? latest : to; }
+      } else if (G_PRESETS.some(([n]) => n === period)) {
+        Object.assign(gapState, gapPreset(period)); // 예전 주소(#/gaps?period=30) 호환
+      }
+      if (!gapState.from || !gapState.to) Object.assign(gapState, gapPreset(90));
       fillGapStations();
-      if (gapState.station) gapState.open.add(`${gapState.kind}|${gapState.station}`);
       syncGapHash();
       renderGapControls();
+      setGapErr(err ? `주소의 기간을 쓸 수 없어 이전 기간으로 조회합니다: ${err}` : "");
       loadGaps();
     }
     let hPage = 1;
