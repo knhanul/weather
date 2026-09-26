@@ -64,14 +64,28 @@
     main > .page, .page > * { min-width:0; } /* 표가 넓어도 페이지 전체가 가로로 밀리지 않게(표 칸만 스크롤) */
     #collect .row > div > select { width:100%; }
     #collect th, #cJobs td.nw { white-space:nowrap; }
-    #cJobs td.msg { min-width:220px; }
+    #cJobs td.msg, #jBody td.msg { min-width:220px; }
+    #jobs th, #jBody td.nw { white-space:nowrap; }
     .wrap { flex:1; min-width:0; }
-    header { position:relative; overflow:hidden; background:linear-gradient(120deg,#0050e0 0%,#0263f2 45%,#026ef8 100%); color:var(--pri-fg); padding:16px 24px; }
-    header strong { position:relative; font-size:16px; font-weight:700; letter-spacing:-.01em; }
-    header p { position:relative; margin:4px 0 0; font-size:13px; color:#fff; }
-    header::after { content:""; position:absolute; right:28px; top:50%; width:46px; height:46px; margin-top:-23px; border-radius:50%; pointer-events:none;
-      background:radial-gradient(circle at 50% 48%, #fff 0%, #f3fbff 12%, #a9d8ff 28%, #32a7ff 52%, #0b7fff 76%, rgba(0,108,255,0) 100%); opacity:.9; }
-    header::before { content:""; position:absolute; right:-60px; top:-80px; width:260px; height:220px; border-radius:50%; background:radial-gradient(closest-side, rgba(0,160,240,.55), rgba(0,160,240,0)); pointer-events:none; }
+    /* 상단 띠: 왼쪽 현재 화면 이름·설명, 오른쪽 시스템 상태 칩(/api/dashboard 실제 값) */
+    header.ph { position:relative; overflow:hidden; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px 20px;
+      background:linear-gradient(120deg,#0050e0 0%,#0263f2 45%,#026ef8 100%); color:var(--pri-fg); padding:13px 24px 14px; min-height:72px; }
+    header.ph::before { content:""; position:absolute; right:-60px; top:-90px; width:300px; height:230px; border-radius:50%; background:radial-gradient(closest-side, rgba(0,160,240,.5), rgba(0,160,240,0)); pointer-events:none; }
+    .ph-main { position:relative; min-width:0; }
+    .ph-group { margin:0 0 1px; font-size:11.5px; font-weight:600; letter-spacing:.06em; color:#fff; opacity:.92; }
+    .ph-group span { opacity:.75; margin:0 4px; }
+    .ph-main h1 { margin:0; font-size:20px; line-height:1.3; font-weight:800; letter-spacing:-.02em; }
+    .ph-desc { margin:2px 0 0; font-size:13px; color:#fff; }
+    .ph-chips { position:relative; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; margin:0; padding:0; list-style:none; }
+    .ph-chips:empty { display:none; }
+    .chip { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 10px; border-radius:999px; font-size:12px; font-weight:600; white-space:nowrap;
+      color:#fff; background:rgba(0,30,110,.34); border:1px solid rgba(255,255,255,.22); text-decoration:none; font-variant-numeric:tabular-nums; }
+    a.chip:hover { color:#fff; background:rgba(0,30,110,.5); }
+    .chip i { width:7px; height:7px; border-radius:50%; background:#bfe3ff; flex:none; }
+    .chip.c-ok i { background:#5ee39a; box-shadow:0 0 0 2px rgba(94,227,154,.25); }
+    .chip.c-bad i { background:#ff8e8e; box-shadow:0 0 0 2px rgba(255,142,142,.28); }
+    .chip.c-warn i { background:#ffd166; box-shadow:0 0 0 2px rgba(255,209,102,.28); }
+    .chip small { font-size:12px; font-weight:500; opacity:.9; }
     main { padding:20px 24px 40px; display:grid; gap:16px; }
     .card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:16px; box-shadow:var(--shadow-sm); }
     .grid4 { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); }
@@ -242,9 +256,14 @@
       nav a { white-space:nowrap; flex-shrink:0; padding:6px 10px; margin:0; font-size:14px; }
       main { padding:16px 14px 32px; }
       .site-foot { padding:12px 14px 20px; }
-      header { padding:14px 16px; } header::after { right:16px; width:36px; height:36px; margin-top:-18px; } header p { padding-right:48px; }
+      header.ph { padding:11px 16px 12px; min-height:0; gap:8px; }
+      .ph-main h1 { font-size:18px; }
+      .ph-chips { justify-content:flex-start; flex:1 1 100%; gap:5px; }
+      .chip { height:24px; padding:0 8px; font-size:11.5px; gap:5px; } .chip small { font-size:11.5px; }
+      .ph-chips { gap:4px; } .chip { padding:0 7px; } .chip .wide { display:none; }
     }
     @media (max-width:560px) {
+      .ph-chips li.opt { display:none; } /* 좁은 화면: 저장소 칩은 정상(DB 연결됨)일 때 숨김 */
       /* 미적재 구간 표: 좁은 화면에선 한 구간을 여러 줄로 */
       .g-ivs thead { display:none; }
       .g-ivs tr { display:flex; flex-wrap:wrap; align-items:center; gap:2px 10px; padding:8px 0; border-top:1px solid var(--line); }
@@ -299,9 +318,13 @@
       </div>
     </aside>
     <div class="wrap">
-      <header>
-        <strong>사내 공통 기상데이터 플랫폼</strong>
-        <p>공식 ASOS · Asia/Seoul · NULL을 0으로 바꾸지 않습니다</p>
+      <header class="ph">
+        <div class="ph-main">
+          <p class="ph-group" id="phGroup">조회</p>
+          <h1 id="phTitle">대시보드</h1>
+          <p class="ph-desc" id="phDesc">관측지점 상태와 기온·강수 추이</p>
+        </div>
+        <ul class="ph-chips" id="phChips" aria-label="시스템 상태"></ul>
       </header>
       <main>
         <section class="page" id="dash">
@@ -333,7 +356,6 @@
         </section>
         <section class="page" id="hourly">
           <div class="card">
-            <h2>시간자료</h2>
             <div class="row">
               <div><label>지점</label><select id="hStation"></select></div>
               <div><label>시작</label><input id="hFrom" type="datetime-local" step="3600" /></div>
@@ -350,7 +372,6 @@
         </section>
         <section class="page" id="daily">
           <div class="card">
-            <h2>일자료</h2>
             <p class="muted">공식 일자료가 없으면 시간자료 집계(DERIVED)를 보여 줍니다. 둘은 다를 수 있습니다. 공식 일자료는 관리 › 자료수집에서 받습니다.</p>
             <div class="row">
               <div><label>지점</label><select id="dStation"></select></div>
@@ -364,7 +385,6 @@
         </section>
         <section class="page" id="download">
           <div class="card">
-            <h2>다운로드</h2>
             <div class="row">
               <div><label>종류</label><select id="xKind"><option value="hourly">시간자료</option><option value="daily">일자료</option></select></div>
               <div><label>지점</label><select id="xStation"></select></div>
@@ -376,7 +396,6 @@
         </section>
         <section class="page" id="collect">
           <div class="card">
-            <h2>자료수집</h2>
             <p class="muted">기상청(KMA) 공공데이터포털 ASOS API를 <a href="#/provider">공급원</a>에 등록된 인증키로 호출해 받은 자료를 DB에 저장(UPSERT)합니다. 같은 시각 자료는 새 값으로 갱신되고, 빈 값은 NULL 그대로 둡니다. 조회 화면에서는 수집이 일어나지 않습니다.</p>
             <p class="muted" id="cKey"></p>
             <div class="row">
@@ -397,7 +416,7 @@
         </section>
         <section class="page" id="gaps">
           <div class="card">
-            <div class="card-head"><h2>미적재 현황</h2><a href="#/collect">자료수집 ›</a></div>
+            <div class="card-head"><h2>점검 범위</h2><a href="#/collect">자료수집 ›</a></div>
             <p class="muted">관측지점별로 DB에 저장되지 않은 시각(시간자료) 또는 날짜(일자료)를 찾아 구간으로 보여 줍니다. 점검 끝은 공식 최신 시각이고, 같은 시각이 'HH:MM'과 'HH:MM:SS' 두 형식으로 중복 저장된 행은 한 시각으로 셉니다. 이 화면을 여는 것만으로는 수집하지 않으며, 수집할 구간을 <b>체크</b>하고 <b>선택 구간 수집</b>을 눌러 확인한 경우에만 기상청 API를 호출합니다.</p>
             <div class="controls">
               <div class="ctl"><span>종류</span><div class="seg ctl" id="gKind"></div></div>
@@ -423,13 +442,13 @@
         </section>
         <section class="page" id="jobs">
           <div class="card">
-            <h2>수집이력</h2>
+            <p class="muted" id="jMsg"></p>
             <div style="overflow:auto"><table><thead><tr><th>시각</th><th>자료</th><th>지점</th><th>상태</th><th>수신/신규/갱신</th><th>메시지</th></tr></thead><tbody id="jBody"></tbody></table></div>
           </div>
         </section>
         <section class="page" id="stations">
           <div class="card">
-            <h2>관측지점</h2>
+            <p class="muted">버튼을 눌러 사용 여부와 즐겨찾기(대시보드 상태 카드 표시)를 바꿉니다. 사용 중인 지점만 조회·수집 목록에 나옵니다.</p>
             <div style="overflow:auto"><table><thead><tr><th>지점</th><th>이름</th><th>지역</th><th>사용</th><th>즐겨찾기</th></tr></thead><tbody id="sBody"></tbody></table></div>
           </div>
         </section>
@@ -448,7 +467,7 @@
       </main>
       <footer class="site-foot">
         <a class="foot-logo" href="https://www.nuni.co.kr" aria-label="nuni 홈페이지"><img src="/brand/logo-en.svg" alt="nuni" width="41" height="18" /><span>weather</span></a>
-        <span>누니날씨 · 공식 ASOS 관측 자료(기상청) · Asia/Seoul</span>
+        <span>누니날씨 · 공식 ASOS 관측 자료(기상청) · Asia/Seoul · 관측값이 없으면 NULL 그대로 두고 0으로 바꾸지 않습니다</span>
       </footer>
     </div>
   </div>
@@ -474,6 +493,7 @@
       dashCache = await (await fetch("/api/dashboard")).json();
       const d = dashCache;
       seriesCache = new Map();
+      renderHeadChips();
       renderDash();
       fillStations($("hStation")); fillStations($("dStation")); fillStations($("xStation"));
       $("hFrom").value = toPicker(d.latestOfficialHour.slice(0,10) + " 00:00:00");
@@ -1478,7 +1498,8 @@
     }
     async function loadJobs() {
       const jobs = await (await fetch("/api/jobs")).json();
-      $("jBody").innerHTML = jobs.map((j) => `<tr><td>${j.id}</td><td>${j.dataset}</td><td>${j.station_id||""}</td><td class="${j.status==="COMPLETED"?"ok":"bad"}">${j.status}</td><td>${j.received||0}/${j.inserted||0}/${j.updated||0}</td><td>${j.message||""}</td></tr>`).join("");
+      $("jMsg").textContent = jobs.length ? `최근 ${jobs.length}건 · 최신순` : "수집 이력이 없습니다.";
+      $("jBody").innerHTML = jobs.map((j) => `<tr><td class="nw">${esc(jobTime(j.id))}</td><td class="nw" title="${esc(j.dataset)}">${j.dataset === "ASOS_DAILY" ? "일자료" : j.dataset === "ASOS_HOURLY" ? "시간자료" : esc(j.dataset)}</td><td>${esc(j.station_id || "")}</td><td class="nw ${j.status === "COMPLETED" ? "ok" : "bad"}">${esc(j.status)}</td><td class="nw">${nf(j.received || 0)}/${nf(j.inserted || 0)}/${nf(j.updated || 0)}</td><td class="msg">${esc(j.message || "")}</td></tr>`).join("");
     }
     async function loadStations() {
       const r = await (await fetch("/api/stations")).json();
@@ -1490,7 +1511,43 @@
       await fetch("/api/stations/toggle", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ stationId, field }) });
       await loadDash(); await loadStations();
     }
+    // ---------- 상단 띠: 화면 이름·설명, 상태 칩 ----------
+    const PAGE_HEAD = {
+      dash: ["조회", "대시보드", "관측지점 상태와 기온·강수 추이"],
+      hourly: ["조회", "시간자료", "지점·기간별 시간 단위 관측값 조회"],
+      daily: ["조회", "일자료", "하루 단위 기온·강수 요약 조회"],
+      download: ["조회", "다운로드", "관측 자료를 CSV 파일로 내려받기"],
+      collect: ["관리", "자료수집", "기상청 API에서 지정한 구간의 자료 수집"],
+      gaps: ["관리", "미적재 현황", "지점별 빠진 자료 확인과 선택 수집"],
+      jobs: ["관리", "수집이력", "지금까지 실행한 수집 작업 기록"],
+      stations: ["관리", "관측지점", "등록된 관측지점과 사용 여부"],
+      provider: ["관리", "공급원", "자료를 받아오는 곳과 인증키 상태"],
+    };
+    function setPageHead(name) {
+      const [g, t, d] = PAGE_HEAD[name] || PAGE_HEAD.dash;
+      $("phGroup").textContent = g; $("phTitle").textContent = t; $("phDesc").textContent = d;
+      document.title = `${t} · 누니날씨`;
+    }
+    function renderHeadChips() {
+      const d = dashCache;
+      if (!d) { $("phChips").innerHTML = ""; return; }
+      const chips = [];
+      const md = (v) => String(v || "").slice(5, 16); // 'YYYY-MM-DD HH:MM' → 'MM-DD HH:MM'
+      if (d.latestOfficialHour) chips.push(`<li><span class="chip" title="기상청 공식 자료가 나오는 최신 시각 (${esc(d.timezone || "Asia/Seoul")})"><i></i><span><span class="wide">공식 </span>최신 ${esc(md(d.latestOfficialHour))}</span></span></li>`);
+      const pg = d.storage === "postgresql";
+      chips.push(`<li${pg ? ` class="opt"` : ""}><span class="chip ${pg ? "c-ok" : "c-warn"}" title="저장소: ${esc(d.storage || "json")}"><i></i>${pg ? "DB 연결됨" : "JSON 모드"}</span></li>`);
+      chips.push(`<li><a class="chip ${d.keyRegistered ? "c-ok" : "c-bad"}" href="#/provider" title="공공데이터포털 인증키 ${d.keyRegistered ? "등록됨 " + esc(d.keyHint || "") : "미등록"}"><i></i>인증키 ${d.keyRegistered ? "등록됨" : "없음"}</a></li>`);
+      const j = d.lastJob;
+      if (j) {
+        const ok = j.status === "COMPLETED", bad = j.status === "FAILED";
+        const label = ok ? "완료" : bad ? "실패" : j.status;
+        const when = Number(j.id) > 1e12 ? md(jobTime(j.id)) : "";
+        chips.push(`<li><a class="chip ${ok ? "c-ok" : bad ? "c-bad" : "c-warn"}" href="#/jobs" title="${j.dataset === "ASOS_DAILY" ? "일자료" : "시간자료"} ${esc(j.station_id || "")} · ${esc(j.message || j.status)}"><i></i><span><span class="wide">최근 </span>수집 ${esc(label)}${when ? ` <small>· ${esc(when)}</small>` : ""}</span></a></li>`);
+      } else chips.push(`<li><a class="chip" href="#/jobs"><i></i>수집 이력 없음</a></li>`);
+      $("phChips").innerHTML = chips.join("");
+    }
     function show(name) {
+      setPageHead(name);
       document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p.id === name));
       document.querySelectorAll("nav a").forEach((a) => a.classList.toggle("active", a.dataset.page === name));
       if (name === "hourly") queryHourly();
@@ -1551,6 +1608,7 @@
     });
     window.toggleSt = toggleSt;
     window.addEventListener("hashchange", route);
+    setPageHead(({ "/hourly": "hourly", "/daily": "daily", "/download": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider" })[location.hash.replace("#", "").split("?")[0]] || "dash");
     loadDash().then(route);
   </script>
 </body>
