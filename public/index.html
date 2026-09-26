@@ -26,6 +26,8 @@
     button.sec { background:#efe8d8; color:var(--fg); }
     .row { display:flex; flex-wrap:wrap; gap:10px; align-items:end; }
     .row > div { flex:1; min-width:130px; }
+    .row > div > input { width:100%; box-sizing:border-box; }
+    .row > div:has(> input[type="datetime-local"]) { min-width:220px; }
     table { width:100%; border-collapse:collapse; font-variant-numeric: tabular-nums; }
     th, td { text-align:left; padding:8px 6px; border-top:1px solid var(--line); font-size:13px; }
     th { color:var(--muted); font-weight:500; }
@@ -68,8 +70,8 @@
             <h2>시간자료</h2>
             <div class="row">
               <div><label>지점</label><select id="hStation"></select></div>
-              <div><label>시작</label><input id="hFrom" /></div>
-              <div><label>종료</label><input id="hTo" /></div>
+              <div><label>시작</label><input id="hFrom" type="datetime-local" step="3600" /></div>
+              <div><label>종료</label><input id="hTo" type="datetime-local" step="3600" /></div>
               <button id="hQuery">조회</button>
               <button class="sec" id="hCollect">공식수집</button>
             </div>
@@ -87,8 +89,8 @@
             <p class="muted">공식 일자료가 없으면 시간자료 집계(DERIVED)를 보여 줍니다. 둘은 다를 수 있습니다.</p>
             <div class="row">
               <div><label>지점</label><select id="dStation"></select></div>
-              <div><label>시작</label><input id="dFrom" /></div>
-              <div><label>종료</label><input id="dTo" /></div>
+              <div><label>시작</label><input id="dFrom" type="date" /></div>
+              <div><label>종료</label><input id="dTo" type="date" /></div>
               <button id="dQuery">조회</button>
               <button class="sec" id="dCollect">공식 일자료 수집</button>
             </div>
@@ -102,8 +104,8 @@
             <div class="row">
               <div><label>종류</label><select id="xKind"><option value="hourly">시간자료</option><option value="daily">일자료</option></select></div>
               <div><label>지점</label><select id="xStation"></select></div>
-              <div><label>시작</label><input id="xFrom" /></div>
-              <div><label>종료</label><input id="xTo" /></div>
+              <div><label>시작</label><input id="xFrom" type="datetime-local" step="3600" /></div>
+              <div><label>종료</label><input id="xTo" type="datetime-local" step="3600" /></div>
               <button id="xGo">CSV 받기</button>
             </div>
           </div>
@@ -137,6 +139,10 @@
   </div>
   <script>
     const $ = (id) => document.getElementById(id);
+    // 달력 입력칸 값("2026-09-25T23:00")과 서버 형식("2026-09-25 23:00:00") 사이 변환
+    const toPicker = (s) => (s || "").slice(0, 16).replace(" ", "T");
+    const fromPicker = (v) => (v ? v.replace("T", " ") + (v.length === 16 ? ":00" : "") : "");
+    const dtVal = (id) => fromPicker($(id).value);
     const fmt = (v) => (v === null || v === undefined ? "—" : v);
     let dashCache = null;
     function fillStations(sel) {
@@ -163,8 +169,8 @@
         $("chart").innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline fill="none" stroke="#1f4e5f" stroke-width="2" points="${pts}"/></svg>`;
       }
       fillStations($("hStation")); fillStations($("dStation")); fillStations($("xStation"));
-      $("hFrom").value = d.latestOfficialHour.slice(0,10) + " 00:00:00";
-      $("hTo").value = d.latestOfficialHour;
+      $("hFrom").value = toPicker(d.latestOfficialHour.slice(0,10) + " 00:00:00");
+      $("hTo").value = toPicker(d.latestOfficialHour);
       $("dFrom").value = d.latestOfficialHour.slice(0,10);
       $("dTo").value = d.latestOfficialHour.slice(0,10);
       $("xFrom").value = $("hFrom").value;
@@ -173,7 +179,7 @@
     }
     let hPage = 1;
     async function queryHourly() {
-      const q = new URLSearchParams({ stationId: $("hStation").value, from: $("hFrom").value, to: $("hTo").value, page: String(hPage), pageSize: "500" });
+      const q = new URLSearchParams({ stationId: $("hStation").value, from: dtVal("hFrom"), to: dtVal("hTo"), page: String(hPage), pageSize: "500" });
       const r = await (await fetch("/api/hourly?" + q)).json();
       $("hMsg").textContent = `${r.from} ~ ${r.to} · 전체 ${r.total}건 · ${r.page}/${r.pages}페이지`;
       $("hPager").style.display = r.pages > 1 ? "flex" : "none";
@@ -219,7 +225,7 @@
     $("dQuery").onclick = queryDaily;
     $("hCollect").onclick = async () => {
       $("hMsg").textContent = "수집 중…";
-      const res = await fetch("/api/collect", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ stationId: $("hStation").value, from: $("hFrom").value, to: $("hTo").value }) });
+      const res = await fetch("/api/collect", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ stationId: $("hStation").value, from: dtVal("hFrom"), to: dtVal("hTo") }) });
       const d = await res.json();
       $("hMsg").innerHTML = `<span class="${d.status==="COMPLETED"?"ok":"bad"}">${d.status}</span> ${d.message||""}`;
       await loadDash(); await queryHourly();
@@ -232,7 +238,7 @@
       await queryDaily();
     };
     $("xGo").onclick = () => {
-      const q = new URLSearchParams({ kind: $("xKind").value, stationId: $("xStation").value, from: $("xFrom").value, to: $("xTo").value });
+      const q = new URLSearchParams({ kind: $("xKind").value, stationId: $("xStation").value, from: dtVal("xFrom"), to: dtVal("xTo") });
       location.href = "/api/export?" + q;
     };
     $("saveKey").onclick = async () => {
@@ -242,6 +248,10 @@
       $("apiKey").value = "";
       await loadDash();
     };
+    // 입력칸 아무 곳이나 눌러도 달력이 열리게 함
+    document.querySelectorAll('input[type="date"], input[type="datetime-local"]').forEach((el) => {
+      el.addEventListener("click", () => { try { el.showPicker && el.showPicker(); } catch (e) {} });
+    });
     window.toggleSt = toggleSt;
     window.addEventListener("hashchange", route);
     loadDash().then(route);
