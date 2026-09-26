@@ -91,6 +91,14 @@
     .kakao-btn svg { width:18px; height:18px; flex:none; }
     .kakao-btn.lg { height:48px; padding:0 22px; border-radius:12px; font-size:15px; box-shadow:none; }
     .kakao-btn.lg svg { width:20px; height:20px; }
+    /* 누니 ID 로그인 버튼 (AUTH_PROVIDER=nuni-id) */
+    .nuni-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; height:36px; padding:0 14px; border-radius:10px; background:#fff; color:#026ef8; border:1px solid #cfe0ff;
+      font-size:14px; font-weight:700; text-decoration:none; white-space:nowrap; box-shadow:0 2px 8px rgba(0,30,110,.18); }
+    .nuni-btn:hover { color:#0158c8; background:#f4f8ff; }
+    .nuni-btn img { width:20px; height:20px; flex:none; }
+    .nuni-btn.lg { height:48px; padding:0 22px; border-radius:12px; font-size:15px; box-shadow:none; background:#026ef8; color:#fff; border-color:#026ef8; }
+    .nuni-btn.lg:hover { background:#0158c8; color:#fff; }
+    .nuni-btn.lg img { width:22px; height:22px; background:#fff; border-radius:6px; padding:2px; }
     .me { display:inline-flex; align-items:center; gap:7px; font-size:13px; color:#fff; min-width:0; }
     .me b { font-weight:700; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .me img, .me .av { width:26px; height:26px; border-radius:50%; flex:none; object-fit:cover; background:rgba(255,255,255,.25); display:inline-grid; place-items:center; font-size:12px; font-weight:700; }
@@ -508,9 +516,9 @@
         </section>
         <section class="page" id="users">
           <div class="card">
-            <p class="muted">카카오로 로그인한 사용자 목록입니다. 처음 로그인하면 <b>승인 대기</b>로 등록되고, 승인한 사용자만 관리 메뉴(자료수집·미적재 현황·수집이력·관측지점·공급원)를 쓸 수 있습니다. 차단하면 로그인 세션도 바로 끊깁니다.</p>
+            <p class="muted" id="uHelp">카카오로 로그인한 사용자 목록입니다. 처음 로그인하면 <b>승인 대기</b>로 등록되고, 승인한 사용자만 관리 메뉴(자료수집·미적재 현황·수집이력·관측지점·공급원)를 쓸 수 있습니다. 차단하면 로그인 세션도 바로 끊깁니다.</p>
             <p class="muted" id="uMsg"></p>
-            <div style="overflow:auto"><table><thead><tr><th>사용자</th><th>카카오 회원번호</th><th>상태</th><th>처음 로그인</th><th>최근 로그인</th><th>관리</th></tr></thead><tbody id="uBody"></tbody></table></div>
+            <div style="overflow:auto" id="uTable"><table><thead><tr><th>사용자</th><th>카카오 회원번호</th><th>상태</th><th>처음 로그인</th><th>최근 로그인</th><th>관리</th></tr></thead><tbody id="uBody"></tbody></table></div>
           </div>
         </section>
         <section class="page" id="provider">
@@ -1586,7 +1594,8 @@
       users: ["관리", "사용자", "카카오 로그인 사용자 승인과 차단"],
     };
     function setPageHead(name) {
-      const [g, t, d] = PAGE_HEAD[name] || PAGE_HEAD.dash;
+      let [g, t, d] = PAGE_HEAD[name] || PAGE_HEAD.dash;
+      if (name === "users" && isNuni()) d = "누니 ID 관리 콘솔에서 권한 관리";
       $("phGroup").textContent = g; $("phTitle").textContent = t; $("phDesc").textContent = d;
       document.title = `${t} · 누니날씨`;
     }
@@ -1612,11 +1621,15 @@
     let me = { authEnabled: false, loggedIn: false, role: "none" };
     const ADMIN_PAGES = new Set(["collect", "gaps", "jobs", "stations", "provider", "users"]);
     const canAdmin = () => !me.authEnabled || me.role === "admin";
+    const isNuni = () => me.provider === "nuni-id";
     const isLockedPage = (name) => ADMIN_PAGES.has(name) && !canAdmin();
     const KAKAO_SYMBOL = `<svg viewBox="0 0 18 18" aria-hidden="true" focusable="false"><path fill="#000" d="M9 1.6C4.58 1.6 1 4.42 1 7.9c0 2.24 1.49 4.2 3.73 5.32-.16.58-.6 2.18-.68 2.52-.11.42.15.41.32.3.13-.09 2.09-1.42 2.94-2 .55.08 1.12.12 1.69.12 4.42 0 8-2.82 8-6.3S13.42 1.6 9 1.6z"/></svg>`;
     const LOCK_SVG = `<svg class="nav-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>`;
-    const loginHref = () => "/auth/kakao/login?next=" + encodeURIComponent(location.hash && location.hash.startsWith("#/") ? location.hash : "#/");
-    const kakaoBtn = (cls = "") => `<a class="kakao-btn ${cls}" href="${esc(loginHref())}">${KAKAO_SYMBOL}<span>카카오 로그인</span></a>`;
+    const loginHref = () => (isNuni() ? "/auth/nuni/login" : "/auth/kakao/login") + "?next=" + encodeURIComponent(location.hash && location.hash.startsWith("#/") ? location.hash : "#/");
+    const kakaoBtn = (cls = "") => isNuni()
+      ? `<a class="nuni-btn ${cls}" href="${esc(loginHref())}"><img src="/brand/icon.svg" alt="" width="20" height="20" /><span>누니 ID로 로그인</span></a>`
+      : `<a class="kakao-btn ${cls}" href="${esc(loginHref())}">${KAKAO_SYMBOL}<span>카카오 로그인</span></a>`;
+    const shortId = (id) => String(id || "").slice(0, 8);
     const avatarHtml = (img, nick) => img ? `<img src="${esc(img)}" alt="" referrerpolicy="no-referrer" />` : `<span class="av" aria-hidden="true">${esc(String(nick || "?").slice(0, 1))}</span>`;
     const _fetch = window.fetch.bind(window);
     let authLostBusy = false;
@@ -1659,13 +1672,24 @@
       if (!on) { box.hidden = true; box.innerHTML = ""; return; }
       box.hidden = false;
       if (!me.loggedIn) { box.innerHTML = kakaoBtn(); return; }
+      if (isNuni()) {
+        const ntag = me.role === "admin" ? "" : me.role === "blocked" ? `<em class="blk">차단됨</em>` : `<em>조회 전용</em>`;
+        box.innerHTML = `<span class="me" title="누니 회원 ID ${esc(me.nuniUserId || "")}"><span class="av" aria-hidden="true">누</span><b>누니 회원 ${esc(shortId(me.nuniUserId))}</b>${ntag}</span><button type="button" class="logout" id="btnLogout">로그아웃</button>`;
+        $("btnLogout").onclick = logout;
+        return;
+      }
       const tag = me.role === "admin" ? "" : me.role === "blocked" ? `<em class="blk">차단됨</em>` : `<em>승인 대기</em>`;
       box.innerHTML = `<span class="me" title="카카오 회원번호 ${esc(me.kakaoId || "")}">${avatarHtml(me.profileImage, me.nickname)}<b>${esc(me.nickname || "카카오 사용자")}</b>${tag}</span><button type="button" class="logout" id="btnLogout">로그아웃</button>`;
       $("btnLogout").onclick = logout;
     }
     async function logout() {
       $("btnLogout").disabled = true;
-      try { await _fetch("/auth/logout", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); } catch (e) {}
+      try {
+        const r = await _fetch("/auth/logout", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+        const d = await r.json().catch(() => ({}));
+        // 누니 ID 모드 + NUNI_ID_LOGOUT_SSO=1: 누니 ID 에서도 로그아웃(확인 화면) 후 돌아옴
+        if (d && d.endSessionUrl) { location.href = d.endSessionUrl; return; }
+      } catch (e) {}
       await loadMe();
       await loadDash().catch(() => {});
       route();
@@ -1674,7 +1698,20 @@
       const t = (PAGE_HEAD[name] || PAGE_HEAD.dash)[1];
       const ico = `<div class="lock-ico">${LOCK_SVG.replace('class="nav-lock"', "")}</div>`;
       let html;
-      if (!me.loggedIn) {
+      if (isNuni() && me.misconfigured) {
+        html = `${ico}<h2>로그인 설정이 완료되지 않았습니다</h2><p class="muted">누니 ID 연동 설정이 빠져 있어 ${esc(t)} 화면을 잠갔습니다. 서버 관리자에게 알려 주세요.</p>
+          <div class="lock-actions"><a class="lock-alt" href="#/">대시보드로 가기</a></div>`;
+      } else if (isNuni() && !me.loggedIn) {
+        html = `${ico}<h2>관리자 로그인이 필요합니다</h2>
+          <p class="muted">${esc(t)} 화면은 누니날씨 관리 권한(스태프·브랜드 관리자)이 있는 누니 ID로 로그인해야 쓸 수 있습니다.</p>
+          <p class="muted">대시보드·시간자료·일자료·다운로드는 로그인하지 않아도 이용할 수 있습니다.</p>
+          <div class="lock-actions">${kakaoBtn("lg")}<a class="lock-alt" href="#/">대시보드로 가기</a></div>`;
+      } else if (isNuni() && me.role !== "blocked") {
+        html = `${ico}<h2>관리 권한이 없습니다</h2>
+          <p class="muted">누니 ID 로그인은 완료되었지만, 이 계정에는 누니날씨 관리 권한이 없어 ${esc(t)} 화면은 쓸 수 없습니다. 조회 화면은 그대로 이용할 수 있습니다.</p>
+          <p class="muted">누니 ID 관리자에게 누니날씨 <b>스태프</b> 또는 <b>브랜드 관리자</b> 권한을 요청하세요. 요청할 때 아래 누니 회원 ID를 알려 주세요.</p><span class="lock-id">누니 회원 ID <b>${esc(me.nuniUserId || "")}</b></span>
+          <div class="lock-actions"><button type="button" class="sec" id="lockRelogin">권한 다시 확인</button><a class="lock-alt" href="${esc(me.accountUrl || "#/")}" target="_blank" rel="noopener">누니 ID 내 계정</a><a class="lock-alt" href="#/">대시보드로 가기</a></div>`;
+      } else if (!me.loggedIn) {
         html = `${ico}<h2>관리자 로그인이 필요합니다</h2>
           <p class="muted">${esc(t)} 화면은 승인된 카카오 계정으로 로그인한 관리자만 쓸 수 있습니다.</p>
           <p class="muted">대시보드·시간자료·일자료·다운로드는 로그인하지 않아도 이용할 수 있습니다.</p>
@@ -1689,13 +1726,16 @@
           <div class="lock-actions"><button type="button" class="sec" id="lockRecheck">승인 여부 다시 확인</button><a class="lock-alt" href="#/">대시보드로 가기</a></div>`;
       }
       $("lockCard").innerHTML = html;
+      // 누니 ID 권한은 로그인할 때 받아오므로 다시 로그인(누니 ID 세션이 있으면 바로 돌아옴)
+      if ($("lockRelogin")) $("lockRelogin").onclick = () => { location.href = loginHref(); };
       if ($("lockRecheck")) $("lockRecheck").onclick = async () => { await loadMe(); if (canAdmin()) await loadDash().catch(() => {}); route(); };
     }
     function showLoginNote() {
       const q = new URLSearchParams(location.search);
       const k = q.get("login");
       if (!k) return;
-      const msg = { cancelled: "카카오 로그인을 취소했습니다.", failed: "카카오 로그인에 실패했습니다. 잠시 후 다시 시도해 주세요.", blocked: "사용이 차단된 계정이라 로그인할 수 없습니다." }[k];
+      const who = isNuni() ? "누니 ID" : "카카오";
+      const msg = { cancelled: `${who} 로그인을 취소했습니다.`, failed: `${who} 로그인에 실패했습니다. 잠시 후 다시 시도해 주세요.`, blocked: isNuni() ? "누니날씨 이용이 제한된 누니 ID라 로그인할 수 없습니다." : "사용이 차단된 계정이라 로그인할 수 없습니다." }[k];
       history.replaceState(null, "", location.pathname + location.hash);
       if (!msg) return;
       $("loginNoteText").textContent = msg;
@@ -1704,6 +1744,14 @@
     $("loginNoteClose").onclick = () => { $("loginNote").hidden = true; };
     const isoKst = (v) => { const n = Date.parse(v || ""); return Number.isFinite(n) ? fmtWall(n + 9 * HOUR).slice(0, 16) : "—"; };
     async function loadUsers() {
+      if (isNuni()) {
+        // 누니 ID 모드: 사용자 승인·권한은 누니 ID 관리 콘솔에서
+        $("uHelp").innerHTML = `누니날씨는 <b>누니 ID</b>로 로그인합니다. 관리 권한은 누니 ID 관리 콘솔에서 회원의 누니날씨 멤버십 역할(<b>스태프</b>·<b>브랜드 관리자</b>)로 정합니다. 권한을 바꾸면 그 사람이 다음에 로그인할 때 반영됩니다.`;
+        $("uMsg").innerHTML = `<a class="nuni-btn lg" href="${esc(me.adminConsoleUrl || "#/")}" target="_blank" rel="noopener"><img src="/brand/icon.svg" alt="" width="22" height="22" /><span>누니 ID 관리 콘솔 열기</span></a>`;
+        $("uTable").hidden = true;
+        return;
+      }
+      $("uTable").hidden = false;
       $("uMsg").textContent = "불러오는 중…";
       const r = await fetch("/api/admin/users");
       if (!r.ok) { $("uMsg").textContent = "사용자 목록을 불러오지 못했습니다."; $("uBody").innerHTML = ""; return; }

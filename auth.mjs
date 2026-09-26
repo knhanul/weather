@@ -1,7 +1,18 @@
-// 카카오 로그인 + 관리 기능 접근 제어.
-// KAKAO_REST_API_KEY와 KAKAO_CLIENT_SECRET이 모두 설정된 경우에만 켜진다. 꺼져 있으면 guard/handle은 아무것도 막지 않는다(기존과 동일).
-// 토큰·인가 코드·시크릿·세션 id는 로그에 남기지 않는다.
+// 로그인 + 관리 기능 접근 제어. 두 가지 방식(AUTH_PROVIDER):
+//  - kakao (기본): 카카오 로그인 + 누니날씨 자체 승인. KAKAO_REST_API_KEY·KAKAO_CLIENT_SECRET 이 있을 때만 켜진다.
+//  - nuni-id: 누니 ID(OIDC) 로그인. 권한은 누니 ID 의 brand_role(brand_admin/staff) 또는 platform_admin 으로 결정.
+//    NUNI_ID_ISSUER·NUNI_ID_CLIENT_ID·NUNI_ID_CLIENT_SECRET 이 있을 때만 켜진다.
+// 꺼져 있으면 guard/handle은 아무것도 막지 않는다(기존과 동일). 토큰·인가 코드·시크릿·세션 id는 로그에 남기지 않는다.
 import crypto from "node:crypto";
+import { nuniConfig, nuniConfigured, createNuniClient, nuniRoleIsAdmin } from "./auth-nuni.mjs";
+
+export const authProvider = (env = process.env) => (String(env.AUTH_PROVIDER || "").trim().toLowerCase() === "nuni-id" ? "nuni-id" : "kakao");
+// 이 서버에서 로그인 기능이 켜지는지 (저장소를 만들지 판단)
+export function authConfigured(env = process.env) {
+  if (authProvider(env) === "nuni-id") return nuniConfigured(env);
+  return Boolean(env.KAKAO_REST_API_KEY?.trim() && env.KAKAO_CLIENT_SECRET?.trim());
+}
+const NUNI_PREFIX = "nuni:"; // nuni-id 모드 사용자는 app_users.kakao_id 에 'nuni:<누니 회원 ID>' 로 저장(개인정보 없음)
 
 const SESSION_DAYS = 30;
 const STATE_MAX_AGE = 600; // 10분
@@ -36,11 +47,15 @@ export function safeNext(v) {
 }
 const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-export function createAuth({ env = process.env, store, log = console.log } = {}) {
+export function createAuth({ env = process.env, store, log = console.log, fetchImpl = fetch } = {}) {
+  const provider = authProvider(env);
+  const nuni = provider === "nuni-id" ? createNuniClient(nuniConfig(env), { fetchImpl, log }) : null;
   const restKey = (env.KAKAO_REST_API_KEY || "").trim();
   const clientSecret = (env.KAKAO_CLIENT_SECRET || "").trim();
-  const enabled = Boolean(restKey && clientSecret && store);
-  const redirectUri = (env.KAKAO_REDIRECT_URI || "https://weather.nuni.co.kr/auth/kakao/callback").trim();
+  const enabled = Boolean(store && (nuni ? nuniConfigured(env) : restKey && clientSecret));
+  // nuni-id 를 골랐는데 설정이 빠졌으면 관리 기능을 열지 않고 잠근다(fail closed)
+  const locked = Boolean(nuni) && !enabled;
+  const redirectUri = nuni ? nuni.cfg.redirectUri : (env.KAKAO_REDIRECT_URI || "https://weather.nuni.co.kr/auth/kakao/callback").trim();
   const authBase = (env.KAKAO_AUTH_BASE || "https://kauth.kakao.com").replace(/\/+$/, "");
   const apiBase = (env.KAKAO_API_BASE || "https://kapi.kakao.com").replace(/\/+$/, "");
   const adminIds = new Set(String(env.ADMIN_KAKAO_IDS || "").split(",").map((s) => s.trim()).filter(Boolean));
@@ -66,6 +81,7 @@ export function createAuth({ env = process.env, store, log = console.log } = {})
 
   function roleOf(user) {
     if (!user) return "none";
+    if (nuni) return user.status === "approved" ? "admin" : user.status === "blocked" ? "blocked" : "viewer";
     if (adminIds.has(String(user.kakao_id)) || user.status === "approved") return "admin";
     if (user.status === "blocked") return "blocked";
     return "pending";
@@ -79,12 +95,14 @@ export function createAuth({ env = process.env, store, log = console.log } = {})
     const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
     if (token && token.length >= 20 && token.length <= 200) {
       const s = await store.getSession(hashSession(token));
-      if (s?.user) req._authUser = s.user;
+      // 모드가 다른 세션(전환 전 카카오 세션 등)은 무시
+      if (s?.user && String(s.user.kakao_id).startsWith(NUNI_PREFIX) === Boolean(nuni)) req._authUser = s.user;
     }
     return req._authUser;
   }
   // 인증이 꺼져 있으면 모두 관리자처럼(기존 동작) 취급
   async function isAdmin(req) {
+    if (locked) return false;
     if (!enabled) return true;
     return roleOf(await sessionUser(req)) === "admin";
   }
@@ -114,6 +132,7 @@ export function createAuth({ env = process.env, store, log = console.log } = {})
     if (!user) return { status: 401, body: { ok: false, auth: "login", message: "로그인이 필요합니다." } };
     const role = roleOf(user);
     if (role === "admin") return null;
+    if (role === "viewer") return { status: 403, body: { ok: false, auth: "viewer", message: "관리 권한이 없습니다 (누니 ID 관리자에게 요청)" } };
     return {
       status: 403,
       body: { ok: false, auth: role, message: role === "blocked" ? "사용이 차단된 계정입니다." : "관리자 승인 대기 중입니다." },
@@ -122,6 +141,11 @@ export function createAuth({ env = process.env, store, log = console.log } = {})
 
   // 요청 차단 여부. null이면 통과.
   async function guard(req, url) {
+    if (locked) {
+      const write = !["GET", "HEAD", "OPTIONS"].includes(req.method);
+      if (write || ADMIN_GET.has(url.pathname) || url.pathname.startsWith("/api/admin/")) return { status: 503, body: { ok: false, auth: "login", message: "로그인 설정이 완료되지 않아 관리 기능을 잠갔습니다." } };
+      return null;
+    }
     if (!enabled) return null;
     const write = !["GET", "HEAD", "OPTIONS"].includes(req.method);
     if (write) {
@@ -244,6 +268,69 @@ export function createAuth({ env = process.env, store, log = console.log } = {})
     }
   }
 
+  // ---- 누니 ID(OIDC) ----
+  const OIDC_COOKIE = "nw_oidc";
+  async function nuniLogin(req, res, url) {
+    const next = safeNext(url.searchParams.get("next"));
+    const state = b64u(crypto.randomBytes(24));
+    const nonce = b64u(crypto.randomBytes(24));
+    const verifier = b64u(crypto.randomBytes(48));
+    let location;
+    try {
+      location = await nuni.authorizeUrl({ state, nonce, verifier });
+    } catch (err) {
+      log(`nuni-id login unavailable: ${err?.message || "error"} ${err?.detail || ""}`);
+      return page(res, 503, "누니 ID에 연결하지 못했습니다", "잠시 후 다시 시도해 주세요. 계속되면 관리자에게 알려 주세요.");
+    }
+    const payload = `${state}.${nonce}.${verifier}.${b64u(next)}`;
+    redirect(res, location, [cookie(OIDC_COOKIE, `${payload}.${hmac(`oidc:${payload}`)}`, { maxAge: STATE_MAX_AGE, path: "/auth/nuni" })]);
+  }
+
+  async function nuniCallback(req, res, url) {
+    const clear = clearCookie(OIDC_COOKIE, "/auth/nuni");
+    const raw = parseCookies(req.headers.cookie)[OIDC_COOKIE] || "";
+    const [cState, cNonce, cVerifier, cNext, sig] = raw.split(".");
+    const qState = url.searchParams.get("state") || "";
+    const validCookie = cState && cNonce && cVerifier && cNext && sig && safeEqual(sig, hmac(`oidc:${cState}.${cNonce}.${cVerifier}.${cNext}`));
+    if (!validCookie || !qState || !safeEqual(cState, qState)) {
+      log("nuni-id login rejected: state mismatch or expired");
+      return page(res, 400, "로그인을 완료하지 못했습니다", "로그인 요청이 만료되었거나 올바르지 않습니다. 누니날씨에서 다시 로그인해 주세요.", [clear]);
+    }
+    const next = safeNext(Buffer.from(cNext, "base64url").toString("utf8"));
+    const qIss = url.searchParams.get("iss");
+    if (qIss && qIss !== nuni.cfg.issuer) {
+      log("nuni-id login rejected: iss mismatch");
+      return redirect(res, `/?login=failed${next}`, [clear]);
+    }
+    const error = url.searchParams.get("error");
+    if (error) {
+      log(`nuni-id login error=${String(error).slice(0, 40)}`);
+      return redirect(res, `/?login=${error === "access_denied" ? (String(url.searchParams.get("error_description") || "").includes("banned") ? "blocked" : "cancelled") : "failed"}${next}`, [clear]);
+    }
+    const code = url.searchParams.get("code");
+    if (!code || code.length > 2000) return redirect(res, `/?login=failed${next}`, [clear]);
+    let claims;
+    try {
+      claims = await nuni.exchange({ code, verifier: cVerifier, nonce: cNonce });
+    } catch (err) {
+      log(`nuni-id login failed: ${err?.name === "TimeoutError" ? "timeout" : `${err?.message || "error"} ${err?.detail || ""}`}`);
+      return redirect(res, `/?login=failed${next}`, [clear]);
+    }
+    const id = `${NUNI_PREFIX}${claims.sub}`;
+    const admin = nuniRoleIsAdmin(claims);
+    // 역할 스냅샷: approved(관리) / pending(조회 전용). 누니 ID 에서 권한이 바뀌면 다음 로그인 때 반영
+    let user = await store.upsertLogin({ kakaoId: id, nickname: null, profileImage: null });
+    const want = admin ? "approved" : "pending";
+    if (user.status !== want) user = await store.setStatus(id, want, "nuni-id");
+    const old = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+    if (old) await store.deleteSession(hashSession(old));
+    const token = b64u(crypto.randomBytes(32));
+    const hours = nuni.cfg.sessionHours;
+    await store.createSession({ idHash: hashSession(token), kakaoId: id, expiresAt: new Date(Date.now() + hours * 3600000), userAgent: null });
+    log(`nuni-id login ok user=${claims.sub} role=${roleOf(user)} brand_role=${claims.brandRole || "-"}${claims.platformAdmin ? " platform_admin" : ""}`);
+    return redirect(res, `/${next}`, [clear, cookie(SESSION_COOKIE, token, { maxAge: hours * 3600 })]);
+  }
+
   const userJson = (u, adminList = false) => ({
     kakaoId: u.kakao_id,
     nickname: u.nickname,
@@ -259,16 +346,39 @@ export function createAuth({ env = process.env, store, log = console.log } = {})
   async function handle(req, res, url) {
     const p = url.pathname;
     if (p === "/api/me" && req.method === "GET") {
+      if (locked) return json(res, { authEnabled: true, provider: "nuni-id", loggedIn: false, role: "none", misconfigured: true, loginUrl: "/auth/nuni/login" }), true;
       if (!enabled) return json(res, { authEnabled: false, loggedIn: false, role: "none" }), true;
       const u = await sessionUser(req);
+      if (nuni) {
+        const links = { provider: "nuni-id", loginUrl: "/auth/nuni/login", accountUrl: `${nuni.cfg.issuer}/me`, adminConsoleUrl: `${nuni.cfg.issuer}/admin/users` };
+        return json(res, u ? { authEnabled: true, loggedIn: true, ...links, nuniUserId: String(u.kakao_id).slice(NUNI_PREFIX.length), role: roleOf(u) } : { authEnabled: true, loggedIn: false, role: "none", ...links }), true;
+      }
       return json(res, u ? { authEnabled: true, loggedIn: true, ...userJson(u) } : { authEnabled: true, loggedIn: false, role: "none" }), true;
     }
+    if (locked && p.startsWith("/auth/")) return page(res, 503, "로그인 설정이 완료되지 않았습니다", "누니 ID 연동 설정(NUNI_ID_ISSUER/CLIENT_ID/CLIENT_SECRET)이 빠져 있어 관리 기능을 잠갔습니다."), true;
     if (!enabled) {
       if (p.startsWith("/auth/") || p.startsWith("/api/admin/")) {
         if (p.startsWith("/api/")) json(res, { ok: false, message: "로그인 기능이 꺼져 있습니다." }, 404);
         else page(res, 404, "로그인 기능이 꺼져 있습니다", "이 누니날씨 서버에는 카카오 로그인이 아직 설정되지 않았습니다.");
         return true;
       }
+      return false;
+    }
+    if (nuni) {
+      if (p === "/auth/nuni/login" && req.method === "GET") return await nuniLogin(req, res, url), true;
+      if (p === "/auth/nuni/callback" && req.method === "GET") return await nuniCallback(req, res, url), true;
+      if (p === "/auth/kakao/login" && req.method === "GET") return redirect(res, `/auth/nuni/login${url.search}`), true; // 예전 링크
+      if (p === "/auth/logout" && req.method === "POST") {
+        const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+        if (token) await store.deleteSession(hashSession(token));
+        let endSessionUrl = null;
+        if (nuni.cfg.logoutSso) endSessionUrl = await nuni.endSessionUrl().catch(() => null);
+        return json(res, { ok: true, endSessionUrl }, 200, [clearCookie(SESSION_COOKIE)]), true;
+      }
+      // 사용자 승인/차단은 누니 ID 관리 콘솔에서 한다
+      if (p === "/api/admin/users" && req.method === "GET") return json(res, { managedBy: "nuni-id", adminConsoleUrl: `${nuni.cfg.issuer}/admin/users`, users: [] }), true;
+      if (p === "/api/admin/users/status" && req.method === "POST") return json(res, { ok: false, message: "사용자 권한은 누니 ID 관리 콘솔에서 바꿉니다." }, 410), true;
+      if (p.startsWith("/auth/") || p.startsWith("/api/admin/")) return json(res, { ok: false, message: "not found" }, 404), true;
       return false;
     }
     if (p === "/auth/kakao/login" && req.method === "GET") return await login(req, res, url), true;
@@ -280,7 +390,7 @@ export function createAuth({ env = process.env, store, log = console.log } = {})
     }
     if (p === "/api/admin/users" && req.method === "GET") {
       const me = await sessionUser(req);
-      const users = await store.listUsers();
+      const users = (await store.listUsers()).filter((u) => !String(u.kakao_id).startsWith(NUNI_PREFIX));
       return json(res, { me: me?.kakao_id || null, users: users.map((u) => userJson(u, true)) }), true;
     }
     if (p === "/api/admin/users/status" && req.method === "POST") {
@@ -308,7 +418,11 @@ export function createAuth({ env = process.env, store, log = console.log } = {})
   }
 
   const startupLine = enabled
-    ? `auth enabled · kakao login · store=${store.kind} · cookie=${SESSION_COOKIE}${secure ? " (Secure)" : ""} · admin ids=${adminIds.size}${secretNote}`
-    : "auth disabled (KAKAO_REST_API_KEY/KAKAO_CLIENT_SECRET not set) · 관리 기능 공개 상태";
-  return { enabled, guard, handle, isAdmin, sessionUser, cleanup, startupLine, roleOf };
+    ? nuni
+      ? `auth enabled · nuni-id login (issuer=${nuni.cfg.issuer} client=${nuni.cfg.clientId} brand=${nuni.cfg.brand} session=${nuni.cfg.sessionHours}h${nuni.cfg.logoutSso ? " sso-logout" : ""}) · store=${store.kind} · cookie=${SESSION_COOKIE}${secure ? " (Secure)" : ""}${secretNote}`
+      : `auth enabled · kakao login · store=${store.kind} · cookie=${SESSION_COOKIE}${secure ? " (Secure)" : ""} · admin ids=${adminIds.size}${secretNote}`
+    : locked
+      ? "auth LOCKED (AUTH_PROVIDER=nuni-id 이지만 NUNI_ID_ISSUER/NUNI_ID_CLIENT_ID/NUNI_ID_CLIENT_SECRET 없음) · 관리 기능 잠김"
+      : "auth disabled (KAKAO_REST_API_KEY/KAKAO_CLIENT_SECRET not set) · 관리 기능 공개 상태";
+  return { enabled, provider, guard, handle, isAdmin, sessionUser, cleanup, startupLine, roleOf };
 }

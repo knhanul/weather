@@ -296,3 +296,61 @@ node scripts/approve-user.mjs --pending <회원번호>  # 승인 대기로 되�
 - 관리자 전용 GET: `/api/gaps`, `/api/jobs`, `/api/admin/*`
 - 공개 `/api/dashboard`, `/api/status`: 관리자가 아니면 인증키 일부(keyHint)와 수집 작업의 상세 메시지를 숨기고, 등록 여부만 보여 줍니다.
 - 세션 쿠키 `__Host-nw_session`: HttpOnly, Secure, SameSite=Lax, 30일 유지. 로그인할 때마다 새로 발급하고, DB에는 토큰 원문이 아닌 HMAC 해시만 저장합니다. 만료된 세션은 매시간 지웁니다.
+
+---
+
+## 8) 누니 ID 로그인 (`AUTH_PROVIDER=nuni-id`)
+
+누니날씨 로그인을 카카오 직접 연동 대신 **누니 ID**(https://id.nuni.co.kr, OIDC)로 할 수 있습니다. `AUTH_PROVIDER` 가 없거나 `kakao` 면 7장의 카카오 로그인이 그대로 동작합니다(기본값, 코드도 그대로 남아 있음).
+
+### 8-1. 동작
+
+- 로그인 버튼 "누니 ID로 로그인" → `https://id.nuni.co.kr/oauth/authorize` (PKCE S256 + state + nonce) → `/auth/nuni/callback` 에서 서버가 code 를 교환하고 id_token 을 JWKS(10분 캐시, 모르는 kid 면 다시 받음)로 검증합니다(서명 RS256, iss, aud/azp, exp, nonce, at_hash, `brand_id=nuni-weather`).
+- 권한: 누니 ID 의 누니날씨 멤버십 역할이 `brand_admin` 또는 `staff`, 또는 `platform_admin` 이면 **관리**. `customer` 는 **조회 전용**이고 관리 화면에 "관리 권한이 없습니다 (누니 ID 관리자에게 요청)" 와 누니 회원 ID 가 나옵니다. 역할은 로그인할 때 받아오므로 바꾼 권한은 **다음 로그인**부터 반영됩니다(세션 12시간).
+- 세션은 7장과 같은 쿠키(`__Host-nw_session`)·`app_sessions` 를 씁니다. 사용자 행은 `app_users.kakao_id = 'nuni:<누니 회원 ID>'` 로만 저장합니다(닉네임·사진 없음). 카카오 모드 세션과 서로 섞이지 않습니다.
+- 관리 > 사용자 화면은 누니 ID 관리 콘솔 안내로 바뀌고, `/api/admin/users/status` 는 410 입니다(승인·차단은 누니 ID 에서).
+- 로그아웃: 누니날씨 세션만 지웁니다. `NUNI_ID_LOGOUT_SSO=1` 이면 누니 ID 로그아웃 확인 화면까지 거칩니다.
+- `AUTH_PROVIDER=nuni-id` 인데 아래 필수 값이 빠지면 관리 기능을 **잠급니다**(503, 공개로 열리지 않음). 로그: `auth LOCKED (...)`.
+- CSRF(같은 출처 검사)와 관리자 전용 GET/쓰기 API 보호는 7-7 과 같습니다. 쓰기에서 조회 전용 사용자는 403 `{"auth":"viewer"}`.
+
+### 8-2. 환경변수
+
+| 변수 | 필수 | 설명 |
+|---|---|---|
+| `AUTH_PROVIDER` | — | `nuni-id` 면 누니 ID 로그인. 없거나 `kakao` 면 카카오 직접 로그인 |
+| `NUNI_ID_ISSUER` | 필수 | `https://id.nuni.co.kr` |
+| `NUNI_ID_CLIENT_ID` | 필수 | `nuni-weather-web` (누니 ID 에 등록된 클라이언트) |
+| `NUNI_ID_CLIENT_SECRET` | 필수 | 클라이언트 비밀값 (누니 ID CLI 가 파일로만 발급, 화면에 출력하지 않음) |
+| `SESSION_SECRET` | 권장 | 7-2 와 같음 |
+| `NUNI_ID_REDIRECT_URI` | 선택 | 기본 `https://weather.nuni.co.kr/auth/nuni/callback` (누니 ID 에 등록된 값과 정확히 같아야 함) |
+| `NUNI_ID_POST_LOGOUT_URI` | 선택 | 기본 `https://weather.nuni.co.kr/` |
+| `NUNI_ID_BRAND` | 선택 | 기본 `nuni-weather` |
+| `NUNI_ID_SESSION_HOURS` | 선택 | 기본 12 |
+| `NUNI_ID_LOGOUT_SSO` | 선택 | `1` 이면 로그아웃 때 누니 ID 에서도 로그아웃(확인 화면) |
+
+현재(2026-09-27) 서버 `/etc/weather-hub.env` 에는 `NUNI_ID_ISSUER`·`NUNI_ID_CLIENT_ID`·`NUNI_ID_CLIENT_SECRET` 가 이미 들어 있고 `AUTH_PROVIDER` 는 없습니다(카카오 로그인 사용 중). 승희님(카카오 5107991059)은 누니 ID 에 미리 만들어져 누니날씨 `brand_admin` + `platform_admin` 입니다.
+
+### 8-3. 전환 절차 (id.nuni.co.kr 에 HTTPS 가 생긴 뒤)
+
+사전: `id` DNS A 레코드 → 74.208.148.96, 카카오 콘솔 Redirect URI 에 `https://id.nuni.co.kr/auth/kakao/callback` 추가, 서버에서 `certbot --nginx -d id.nuni.co.kr --redirect`, `curl -s https://id.nuni.co.kr/.well-known/openid-configuration` 이 JSON 을 돌려주는지 확인. https://id.nuni.co.kr 에 카카오로 로그인해 관리 콘솔이 열리는지 먼저 확인합니다.
+
+```bash
+cp -a /etc/weather-hub.env /root/weather-hub.env.bak-$(date +%Y%m%d%H%M%S)
+grep -q '^AUTH_PROVIDER=' /etc/weather-hub.env && sed -i 's/^AUTH_PROVIDER=.*/AUTH_PROVIDER=nuni-id/' /etc/weather-hub.env || echo 'AUTH_PROVIDER=nuni-id' >> /etc/weather-hub.env
+systemctl restart weather-hub
+journalctl -u weather-hub -n 5 --no-pager      # → "auth enabled · nuni-id login (issuer=https://id.nuni.co.kr client=nuni-weather-web brand=nuni-weather session=12h) ..."
+curl -s https://weather.nuni.co.kr/api/me       # → "provider":"nuni-id","loggedIn":false
+curl -s -o /dev/null -w '%{http_code}\n' https://weather.nuni.co.kr/api/gaps   # → 401
+```
+
+브라우저: weather.nuni.co.kr → **누니 ID로 로그인** → 카카오 → 관리 메뉴가 열리면 완료. 다른 사람의 관리 권한은 누니 ID 관리 콘솔 → 회원 → 누니날씨 멤버십 역할(`staff`/`brand_admin`)로 줍니다.
+
+**롤백**(즉시, 카카오 직접 로그인으로 복귀 — 기존 카카오 승인 목록·세션 그대로):
+
+```bash
+sed -i '/^AUTH_PROVIDER=/d' /etc/weather-hub.env && systemctl restart weather-hub
+# 선택: 누니 모드 사용자/세션 정리 (weatherhub DB, 세션은 cascade)
+# runuser -u postgres -- psql -d weatherhub -c "DELETE FROM app_users WHERE kakao_id LIKE 'nuni:%'"
+```
+
+전환이 안정되면 카카오 콘솔의 옛 Redirect URI(`https://weather.nuni.co.kr/auth/kakao/callback`)는 지워도 됩니다(롤백 가능성을 남기려면 유지).

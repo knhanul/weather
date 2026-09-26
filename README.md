@@ -70,3 +70,18 @@ GET /api/hourly?stationId=108&from=2026-09-16 00:00:00&to=2026-09-16 23:00:00
 2. 서울 108, 전날 00–23시 조회 건수 확인
 3. 키 등록 후 공식수집 `COMPLETED`인지 확인
 4. 출처가 `OFFICIAL`인지 확인
+
+## 6) 로그인 (관리 메뉴 보호)
+
+- 기본: 카카오 직접 로그인 (`DEPLOY.md` 7장)
+- `AUTH_PROVIDER=nuni-id`: **누니 ID로 로그인** (OIDC, `DEPLOY.md` 8장). 관리 권한 = 누니 ID 의 누니날씨 멤버십 `brand_admin`/`staff` 또는 `platform_admin`, 나머지는 조회 전용
+
+누니 ID 전환 (id.nuni.co.kr HTTPS 준비 후, 서버에서):
+
+```bash
+cp -a /etc/weather-hub.env /root/weather-hub.env.bak-$(date +%Y%m%d%H%M%S)
+echo 'AUTH_PROVIDER=nuni-id' >> /etc/weather-hub.env && systemctl restart weather-hub
+curl -s https://weather.nuni.co.kr/api/me        # "provider":"nuni-id"
+# 롤백: sed -i '/^AUTH_PROVIDER=/d' /etc/weather-hub.env && systemctl restart weather-hub
+```
+

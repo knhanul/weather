@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as db from "./db.mjs";
-import { createAuth } from "./auth.mjs";
+import { createAuth, authConfigured } from "./auth.mjs";
 import { createPgStore, createJsonStore } from "./auth-store.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1163,7 +1163,8 @@ const ready = (async () => {
   } catch (err) {
     console.error("postgresql init failed, json fallback", err);
   }
-  const authKeys = Boolean(process.env.KAKAO_REST_API_KEY?.trim() && process.env.KAKAO_CLIENT_SECRET?.trim());
+  // AUTH_PROVIDER=kakao(기본): 카카오 키가 있을 때 / nuni-id: 누니 ID 클라이언트 설정이 있을 때만 저장소를 만든다
+  const authKeys = authConfigured(process.env);
   const store = authKeys ? (db.usingPg() ? createPgStore(db.getPool()) : createJsonStore(AUTH_FILE)) : null;
   if (store) {
     // 로그인 기능이 켜질 때만 app_users/app_sessions 생성(IF NOT EXISTS). 실패해도 관리 기능은 잠긴 채로 둔다(fail closed).
