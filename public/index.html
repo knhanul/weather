@@ -691,7 +691,8 @@
         const rStep = niceStep(rMax / 3);
         const rHi = (Math.floor(rMax / rStep + 1e-9) + 1) * rStep; // 막대 위 여유
         const Y2 = (v) => mt + ih - (v / rHi) * ih;
-        for (let v = 0; v <= rHi + 1e-9; v += rStep) g += `<text class="ax ax-rain" x="${ml + iw + 6}" y="${f1(Y2(v)) + 4}">${f1(v)}mm</text>`;
+        const rLab = (v) => (rStep < 0.1 ? Math.round(v * 100) / 100 : f1(v)); // 0.05 간격이면 소수 둘째 자리까지(0.1mm가 두 번 찍히지 않게)
+        for (let v = 0; v <= rHi + 1e-9; v += rStep) g += `<text class="ax ax-rain" x="${ml + iw + 6}" y="${f1(Y2(v)) + 4}">${rLab(v)}mm</text>`;
         const bw = Math.max(1, (iw / (span / unit + 1)) * 0.8);
         for (let i = 0; i < pts.length; i++) {
           const v = pts[i].precipitation;
