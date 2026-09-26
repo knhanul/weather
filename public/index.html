@@ -14,6 +14,18 @@
     .brand span { display:block; font-size:12px; color:var(--muted); font-weight:400; }
     nav a { display:block; padding:10px 12px; border-radius:8px; color:var(--fg); text-decoration:none; margin-bottom:2px; }
     nav a.active { background:var(--pri); color:var(--pri-fg); }
+    .nav-group + .nav-group { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
+    .nav-label { margin:0 0 4px; padding:0 12px; font-size:11px; font-weight:600; letter-spacing:.08em; color:var(--muted); }
+    .result { border-radius:8px; padding:10px 12px; margin-top:10px; font-size:14px; }
+    .result.ok { background:#e2eee5; } .result.bad { background:#f3d9d3; } .result.run { background:#efe8d8; }
+    .result b { font-variant-numeric:tabular-nums; }
+    .card-head { display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:6px; }
+    .card-head a { font-size:13px; color:var(--pri); }
+    .st-link { font-size:12px; color:var(--pri); font-weight:600; }
+    main > .page, .page > * { min-width:0; } /* 표가 넓어도 페이지 전체가 가로로 밀리지 않게(표 칸만 스크롤) */
+    #collect .row > div > select { width:100%; }
+    #collect th, #cJobs td.nw { white-space:nowrap; }
+    #cJobs td.msg { min-width:220px; }
     .wrap { flex:1; min-width:0; }
     header { background:var(--pri); color:var(--pri-fg); padding:16px 24px; }
     header p { margin:4px 0 0; opacity:.85; font-size:13px; }
@@ -86,7 +98,17 @@
     .tip { position:absolute; top:0; left:0; display:none; pointer-events:none; background:#1c1915; color:#f7f4ec; border-radius:8px; padding:8px 10px; font-size:12px; line-height:1.55; white-space:nowrap; box-shadow:0 4px 14px rgba(0,0,0,.18); font-variant-numeric:tabular-nums; z-index:2; }
     .tip b { font-weight:600; }
     .tip .k { display:inline-block; min-width:30px; opacity:.7; }
-    @media (max-width:800px) { .layout { display:block; } aside { width:auto; display:flex; gap:8px; overflow:auto; align-items:center; } .brand, nav a { white-space:nowrap; flex-shrink:0; } nav { display:flex; gap:4px; } main { padding:16px 14px 32px; } }
+    @media (max-width:800px) {
+      .layout { display:block; }
+      aside { width:auto; padding:10px 12px 8px; border-right:0; border-bottom:1px solid var(--line); }
+      .brand { font-size:17px; padding:0 4px 6px; } .brand span { display:inline; margin-left:6px; }
+      nav { display:grid; gap:4px; }
+      .nav-group { display:flex; align-items:center; gap:2px; overflow-x:auto; scrollbar-width:none; }
+      .nav-group + .nav-group { margin-top:0; padding-top:4px; border-top:1px solid var(--line); }
+      .nav-label { flex-shrink:0; width:34px; margin:0; padding:0 4px; }
+      nav a { white-space:nowrap; flex-shrink:0; padding:6px 10px; margin:0; font-size:14px; }
+      main { padding:16px 14px 32px; }
+    }
   </style>
 </head>
 <body>
@@ -94,13 +116,20 @@
     <aside>
       <div class="brand">기상허브<span>Weather Data Hub</span></div>
       <nav>
-        <a href="#/" data-page="dash">대시보드</a>
-        <a href="#/hourly" data-page="hourly">시간자료</a>
-        <a href="#/daily" data-page="daily">일자료</a>
-        <a href="#/download" data-page="download">다운로드</a>
-        <a href="#/jobs" data-page="jobs">수집이력</a>
-        <a href="#/stations" data-page="stations">관측지점</a>
-        <a href="#/provider" data-page="provider">공급원</a>
+        <div class="nav-group" role="group" aria-labelledby="navLookup">
+          <p class="nav-label" id="navLookup">조회</p>
+          <a href="#/" data-page="dash">대시보드</a>
+          <a href="#/hourly" data-page="hourly">시간자료</a>
+          <a href="#/daily" data-page="daily">일자료</a>
+          <a href="#/download" data-page="download">다운로드</a>
+        </div>
+        <div class="nav-group" role="group" aria-labelledby="navAdmin">
+          <p class="nav-label" id="navAdmin">관리</p>
+          <a href="#/collect" data-page="collect">자료수집</a>
+          <a href="#/jobs" data-page="jobs">수집이력</a>
+          <a href="#/stations" data-page="stations">관측지점</a>
+          <a href="#/provider" data-page="provider">공급원</a>
+        </div>
       </nav>
     </aside>
     <div class="wrap">
@@ -142,7 +171,6 @@
               <div><label>시작</label><input id="hFrom" type="datetime-local" step="3600" /></div>
               <div><label>종료</label><input id="hTo" type="datetime-local" step="3600" /></div>
               <button id="hQuery">조회</button>
-              <button class="sec" id="hCollect">공식수집</button>
             </div>
             <p class="muted" id="hMsg"></p>
             <div class="row" id="hPager" style="display:none">
@@ -155,13 +183,12 @@
         <section class="page" id="daily">
           <div class="card">
             <h2>일자료</h2>
-            <p class="muted">공식 일자료가 없으면 시간자료 집계(DERIVED)를 보여 줍니다. 둘은 다를 수 있습니다.</p>
+            <p class="muted">공식 일자료가 없으면 시간자료 집계(DERIVED)를 보여 줍니다. 둘은 다를 수 있습니다. 공식 일자료는 관리 › 자료수집에서 받습니다.</p>
             <div class="row">
               <div><label>지점</label><select id="dStation"></select></div>
               <div><label>시작</label><input id="dFrom" type="date" /></div>
               <div><label>종료</label><input id="dTo" type="date" /></div>
               <button id="dQuery">조회</button>
-              <button class="sec" id="dCollect">공식 일자료 수집</button>
             </div>
             <p class="muted" id="dMsg"></p>
             <div style="overflow:auto"><table><thead><tr><th>일자</th><th>평균</th><th>최저</th><th>최고</th><th>강수</th><th>습도</th><th>출처</th></tr></thead><tbody id="dBody"></tbody></table></div>
@@ -177,6 +204,27 @@
               <div><label>종료</label><input id="xTo" type="datetime-local" step="3600" /></div>
               <button id="xGo">CSV 받기</button>
             </div>
+          </div>
+        </section>
+        <section class="page" id="collect">
+          <div class="card">
+            <h2>자료수집</h2>
+            <p class="muted">기상청(KMA) 공공데이터포털 ASOS API를 <a href="#/provider">공급원</a>에 등록된 인증키로 호출해 받은 자료를 DB에 저장(UPSERT)합니다. 같은 시각 자료는 새 값으로 갱신되고, 빈 값은 NULL 그대로 둡니다. 조회 화면에서는 수집이 일어나지 않습니다.</p>
+            <p class="muted" id="cKey"></p>
+            <div class="row">
+              <div><label>종류</label><select id="cKind"><option value="hourly">시간자료 (ASOS 시간)</option><option value="daily">일자료 (ASOS 일)</option></select></div>
+              <div><label>지점</label><select id="cStation"></select></div>
+              <div><label>시작</label><input id="cFrom" type="datetime-local" step="3600" /></div>
+              <div><label>종료</label><input id="cTo" type="datetime-local" step="3600" /></div>
+              <button id="cGo">수집 시작</button>
+              <button class="sec" id="cReset" title="마지막 관측 다음부터 공식 최신 시각까지">빈 구간으로</button>
+            </div>
+            <p class="muted" id="cHint"></p>
+            <div id="cResult"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>최근 수집 이력</h2><a href="#/jobs">전체 보기</a></div>
+            <div style="overflow:auto"><table><thead><tr><th>시각</th><th>자료·지점</th><th>기간</th><th>상태</th><th>수신/신규/갱신</th><th>메시지</th></tr></thead><tbody id="cJobs"></tbody></table></div>
           </div>
         </section>
         <section class="page" id="jobs">
@@ -231,6 +279,7 @@
       $("xFrom").value = $("hFrom").value;
       $("xTo").value = $("hTo").value;
       $("pStatus").textContent = `저장 ${d.storage||"json"} · 키 ${d.keyRegistered ? "등록됨 " + (d.keyHint||"") : "미등록"} · 공식 최신 ${d.latestOfficialHour}`;
+      refreshCollectForm();
     }
     // ---------- 대시보드 ----------
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -303,7 +352,7 @@
           : m.stale ? `<span class="badge bad" title="공식 최신 시각보다 ${m.lag_hours}시간 늦음">⚠ 수집 중단 · ${lagText(m.lag_hours)} 지연</span>`
           : `<span class="badge ok">정상</span>`;
         const body = m ? `
-            <p class="muted">마지막 관측 ${esc(m.last_observation)}</p>
+            <p class="muted">마지막 관측 ${esc(m.last_observation)}${m.stale ? ` · <a class="st-link" href="#/collect?station=${encodeURIComponent(s.id)}&kind=hourly">빈 구간 수집 ›</a>` : ""}</p>
             <div class="st-vals"><span>기온 <b>${nf(m.temperature, "°C")}</b></span><span>습도 <b>${nf(m.humidity, "%")}</b></span><span>강수 <b>${nf(m.precipitation, "mm")}</b></span></div>
             <p class="muted" title="관측 시각 ${nf(m.hours)}개 · ${esc(m.first_observation)}부터">${nf(m.rows)}건${m.duplicates ? ` · <span title="같은 시각이 'HH:MM'과 'HH:MM:SS' 두 형식으로 중복 저장됨">중복 ${nf(m.duplicates)}</span>` : ""}${s.enabled === false ? ` · <span class="badge off">사용 중지</span>` : ""}</p>`
           : `<p class="muted">이 지점의 시간자료가 아직 없습니다.</p>`;
@@ -526,10 +575,152 @@
     }
     $("stSel").addEventListener("click", (e) => { const b = e.target.closest("button[data-st]"); if (b && !b.disabled) selectStation(b.dataset.st); });
     $("periodSel").addEventListener("click", (e) => { const b = e.target.closest("button[data-h]"); if (b) selectPeriod(Number(b.dataset.h)); });
-    $("stCards").addEventListener("click", (e) => { const c = e.target.closest(".st-card[data-st]"); if (c) selectStation(c.dataset.st); });
+    $("stCards").addEventListener("click", (e) => { if (e.target.closest("a")) return; const c = e.target.closest(".st-card[data-st]"); if (c) selectStation(c.dataset.st); });
     $("stCards").addEventListener("keydown", (e) => { if (e.key !== "Enter" && e.key !== " ") return; const c = e.target.closest(".st-card[data-st]"); if (c) { e.preventDefault(); selectStation(c.dataset.st); } });
     if (window.ResizeObserver) new ResizeObserver(() => requestAnimationFrame(() => drawChart(false))).observe($("chart"));
     else window.addEventListener("resize", () => drawChart(false));
+    // ---------- 자료수집 ----------
+    const fmtWall = (ms) => { const d = new Date(ms); return `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())} ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}:00`; };
+    const jobTime = (id) => { const n = Number(id); return n > 1e12 ? fmtWall(n + 9 * HOUR).slice(0, 16) : String(id ?? ""); }; // id = 수집 시작 시각(ms) → KST
+    let collectInit = false;
+    let collectBusy = false;
+    function collectSummary(id) {
+      return (dashCache?.stationSummaries || []).find((s) => String(s.station_id) === String(id)) || null;
+    }
+    function fillCollectStations() {
+      const sel = $("cStation");
+      const prev = sel.value;
+      const all = dashCache?.stations || [];
+      const opt = (s) => `<option value="${esc(s.station_id)}">${esc(s.station_id)} ${esc(s.station_name)}</option>`;
+      const on = all.filter((s) => s.enabled), off = all.filter((s) => !s.enabled);
+      sel.innerHTML = on.map(opt).join("") + (off.length ? `<optgroup label="사용 중지 지점">${off.map(opt).join("")}</optgroup>` : "");
+      if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
+    }
+    // 종류를 바꿀 때 입력칸 형식 전환: 시간자료 = datetime-local(1시간 단위), 일자료 = date
+    function setCollectKind(kind) {
+      $("cKind").value = kind;
+      const f = $("cFrom"), t = $("cTo");
+      const fv = f.value, tv = t.value;
+      if (kind === "daily" && f.type !== "date") {
+        const nf2 = fromPicker(fv).slice(0, 10), nt = fromPicker(tv).slice(0, 10); // 형식 바꾸기 전에 값을 옮겨 둠
+        f.type = "date"; t.type = "date"; f.removeAttribute("step"); t.removeAttribute("step");
+        f.value = nf2; t.value = nt;
+      } else if (kind === "hourly" && f.type !== "datetime-local") {
+        f.type = "datetime-local"; t.type = "datetime-local"; f.step = "3600"; t.step = "3600";
+        f.value = fv ? toPicker(`${fv} 00:00:00`) : ""; t.value = tv ? toPicker(`${tv} 23:00:00`) : "";
+      }
+    }
+    // 기본 구간: 선택 지점의 마지막 관측 다음 시각 ~ 공식 최신 시각(이미 최신이면 최근 하루)
+    function collectDefaults(kind, stationId) {
+      const latest = dashCache?.latestOfficialHour || "";
+      const m = collectSummary(stationId);
+      const lMs = wallMs(latest);
+      let fromMs = m ? wallMs(m.last_observation) + HOUR : NaN;
+      if (!Number.isFinite(fromMs) || fromMs > lMs) fromMs = lMs - 23 * HOUR;
+      const from = fmtWall(fromMs);
+      if (kind === "daily") {
+        let fd = from.slice(0, 10);
+        const td = latest.slice(0, 10);
+        if (fd >= td) fd = fmtWall(lMs - 6 * 24 * HOUR).slice(0, 10); // 최신이면 최근 7일
+        return { from: fd, to: td };
+      }
+      return { from: toPicker(from), to: toPicker(latest) };
+    }
+    function applyCollectDefaults() {
+      const d = collectDefaults($("cKind").value, $("cStation").value);
+      $("cFrom").value = d.from; $("cTo").value = d.to;
+      renderCollectHint();
+    }
+    function collectPayload() {
+      const kind = $("cKind").value;
+      const stationId = $("cStation").value;
+      // 시간자료는 기존 공식수집 버튼과 같게 fromPicker 형식("YYYY-MM-DD HH:MM:SS"), 일자료는 날짜 그대로
+      const from = kind === "hourly" ? fromPicker($("cFrom").value) : $("cFrom").value;
+      const to = kind === "hourly" ? fromPicker($("cTo").value) : $("cTo").value;
+      return { kind, url: kind === "hourly" ? "/api/collect" : "/api/collect-daily", body: { stationId, from, to } };
+    }
+    function renderCollectHint() {
+      const d = dashCache || {};
+      const { kind, body } = collectPayload();
+      const st = (d.stations || []).find((s) => String(s.station_id) === body.stationId);
+      const m = collectSummary(body.stationId);
+      const latest = (d.latestOfficialHour || "").slice(0, 16);
+      $("cKey").innerHTML = d.keyRegistered ? `인증키 <span class="ok">등록됨</span> ${esc(d.keyHint || "")} · 공식 최신 ${esc(latest)}`
+        : `<span class="bad">인증키가 등록되지 않았습니다.</span> <a href="#/provider">공급원</a>에서 먼저 등록하세요.`;
+      const parts = [];
+      if (st) parts.push(`${esc(st.station_id)} ${esc(st.station_name)}${st.enabled ? "" : " (사용 중지 지점)"}`);
+      if (m) parts.push(`마지막 관측 ${esc(m.last_observation)}${m.lag_hours > 0 ? ` · 공식 최신보다 ${lagText(m.lag_hours)} 늦음` : " · 최신 상태"}`);
+      else if (st) parts.push("저장된 시간자료 없음");
+      if (body.from && body.to) {
+        if (body.from > body.to) parts.push(`<span class="bad">시작이 종료보다 늦습니다</span>`);
+        else if (kind === "hourly") {
+          const h = Math.round((wallMs(body.to) - wallMs(body.from)) / HOUR) + 1;
+          parts.push(`수집 범위 ${nf(h)}시간 · API 요청 약 ${nf(Math.ceil(h / 168))}회`);
+        } else {
+          const days = Math.round((wallMs(body.to + " 00:00") - wallMs(body.from + " 00:00")) / (24 * HOUR)) + 1;
+          parts.push(`수집 범위 ${nf(days)}일${days > 999 ? ` · <span class="bad">한 번에 999일까지만 받습니다</span>` : ""} · 공식 일자료 저장 ${nf(d.dailyRecords || 0)}건`);
+        }
+        if ((kind === "hourly" ? body.to.slice(0, 16) : body.to) > (kind === "hourly" ? latest : latest.slice(0, 10))) parts.push("공식 자료는 보통 공식 최신 시각까지만 제공됩니다");
+      }
+      $("cHint").innerHTML = parts.join(" · ");
+    }
+    function refreshCollectForm() {
+      fillCollectStations();
+      if (!collectInit) {
+        collectInit = true;
+        // 처음엔 '사용' 지점 중 자료가 있고 가장 오래 멈춘 지점(없으면 첫 '사용' 지점)을 고름
+        const on = (dashCache?.stations || []).filter((s) => s.enabled).map((s) => String(s.station_id));
+        const withData = on.filter((id) => collectSummary(id)).sort((a, b) => collectSummary(b).lag_hours - collectSummary(a).lag_hours);
+        const pick = withData[0] || on[0];
+        if (pick) $("cStation").value = pick;
+        applyCollectDefaults();
+      } else renderCollectHint();
+    }
+    function jobRows(jobs) {
+      const kindLabel = (ds) => (ds === "ASOS_HOURLY" ? "시간" : ds === "ASOS_DAILY" ? "일" : ds || "");
+      return jobs.map((j) => `<tr><td class="nw">${esc(jobTime(j.id))}</td><td class="nw" title="${esc(j.dataset)}">${esc(kindLabel(j.dataset))} ${esc(j.station_id || "")}</td><td class="nw">${esc(String(j.from || "").slice(0, 16))}<br>~ ${esc(String(j.to || "").slice(0, 16))}</td><td class="nw ${j.status === "COMPLETED" ? "ok" : "bad"}">${esc(j.status)}</td><td class="nw">${nf(j.received || 0)}/${nf(j.inserted || 0)}/${nf(j.updated || 0)}</td><td class="msg">${esc(j.message || "")}</td></tr>`).join("");
+    }
+    async function loadCollectJobs() {
+      try {
+        const jobs = await (await fetch("/api/jobs")).json();
+        $("cJobs").innerHTML = jobRows((jobs || []).slice(0, 10)) || `<tr><td colspan="6">수집 이력이 없습니다.</td></tr>`;
+      } catch (e) {
+        $("cJobs").innerHTML = `<tr><td colspan="6" class="bad">이력을 불러오지 못했습니다.</td></tr>`;
+      }
+    }
+    async function runCollect() {
+      if (collectBusy) return;
+      const { kind, url, body } = collectPayload();
+      const out = $("cResult");
+      if (!body.stationId || !body.from || !body.to) { out.innerHTML = `<div class="result bad">지점과 시작·종료를 모두 고르세요.</div>`; return; }
+      if (body.from > body.to) { out.innerHTML = `<div class="result bad">시작이 종료보다 늦습니다.</div>`; return; }
+      collectBusy = true;
+      const btn = $("cGo");
+      btn.disabled = true; btn.textContent = "수집 중…";
+      ["cKind", "cStation", "cFrom", "cTo", "cReset"].forEach((id) => { $(id).disabled = true; });
+      out.innerHTML = `<div class="result run">수집 중… ${esc(body.stationId)} · ${esc(body.from)} ~ ${esc(body.to)} · 기상청 API 응답을 기다리는 중입니다(구간이 길면 수십 초 걸릴 수 있습니다).</div>`;
+      try {
+        const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+        let d = {};
+        try { d = await res.json(); } catch (e) { d = { status: "FAILED", message: `HTTP ${res.status}` }; }
+        const ok = d.status === "COMPLETED";
+        out.innerHTML = `<div class="result ${ok ? "ok" : "bad"}"><strong class="${ok ? "ok" : "bad"}">${esc(d.status || "FAILED")}</strong> · ${kind === "hourly" ? "시간자료" : "일자료"} ${esc(body.stationId)} · ${esc(body.from)} ~ ${esc(body.to)}<br>
+          수신 <b>${nf(d.received || 0)}</b> · 신규 <b>${nf(d.inserted || 0)}</b> · 갱신 <b>${nf(d.updated || 0)}</b>${d.chunks ? ` · 구간 ${nf(d.chunks)}` : ""}<br>${esc(d.message || "")}</div>`;
+      } catch (e) {
+        out.innerHTML = `<div class="result bad"><strong>요청 실패</strong> · ${esc(e.message)}</div>`;
+      } finally {
+        collectBusy = false;
+        btn.disabled = false; btn.textContent = "수집 시작";
+        ["cKind", "cStation", "cFrom", "cTo", "cReset"].forEach((id) => { $(id).disabled = false; });
+      }
+      try { await Promise.all([loadDash(), loadCollectJobs()]); } catch (e) { /* 새로고침 실패는 무시 */ }
+    }
+    $("cKind").addEventListener("change", () => { setCollectKind($("cKind").value); renderCollectHint(); });
+    $("cStation").addEventListener("change", applyCollectDefaults);
+    $("cFrom").addEventListener("change", renderCollectHint);
+    $("cTo").addEventListener("change", renderCollectHint);
+    $("cReset").onclick = applyCollectDefaults;
+    $("cGo").onclick = runCollect;
     let hPage = 1;
     async function queryHourly() {
       const q = new URLSearchParams({ stationId: $("hStation").value, from: dtVal("hFrom"), to: dtVal("hTo"), page: String(hPage), pageSize: "500" });
@@ -565,13 +756,24 @@
       if (name === "hourly") queryHourly();
       if (name === "daily") queryDaily();
       if (name === "jobs") loadJobs();
+      if (name === "collect") loadCollectJobs();
       if (name === "stations") loadStations();
     }
     function route() {
       const h = location.hash.replace("#", "").split("?")[0] || "/";
-      const map = { "/": "dash", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/jobs": "jobs", "/stations": "stations", "/provider": "provider" };
+      const map = { "/": "dash", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/collect": "collect", "/jobs": "jobs", "/stations": "stations", "/provider": "provider" };
       const name = map[h] || "dash";
       show(name);
+      if (name === "collect" && dashCache) {
+        // #/collect?station=156&kind=hourly 로 지점·종류를 미리 고를 수 있음
+        const hp = hashParams();
+        const st = hp.get("station"), kind = hp.get("kind");
+        let changed = false;
+        if (kind === "hourly" || kind === "daily") { if ($("cKind").value !== kind) { setCollectKind(kind); changed = true; } }
+        if (st && [...$("cStation").options].some((o) => o.value === st) && $("cStation").value !== st) { $("cStation").value = st; changed = true; }
+        if (changed) applyCollectDefaults();
+        renderCollectHint();
+      }
       if (name === "dash" && dashCache) {
         // 주소의 ?station=&hours= 를 반영(직접 입력·뒤로가기)
         const before = `${dashState.station}|${dashState.hours}`;
@@ -584,20 +786,6 @@
     $("hPrev").onclick = () => { hPage = Math.max(1, hPage - 1); queryHourly(); };
     $("hNext").onclick = () => { hPage = Math.min(window.__hPages || 1, hPage + 1); queryHourly(); };
     $("dQuery").onclick = queryDaily;
-    $("hCollect").onclick = async () => {
-      $("hMsg").textContent = "수집 중…";
-      const res = await fetch("/api/collect", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ stationId: $("hStation").value, from: dtVal("hFrom"), to: dtVal("hTo") }) });
-      const d = await res.json();
-      $("hMsg").innerHTML = `<span class="${d.status==="COMPLETED"?"ok":"bad"}">${d.status}</span> ${d.message||""}`;
-      await loadDash(); await queryHourly();
-    };
-    $("dCollect").onclick = async () => {
-      $("dMsg").textContent = "수집 중…";
-      const res = await fetch("/api/collect-daily", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ stationId: $("dStation").value, from: $("dFrom").value, to: $("dTo").value }) });
-      const d = await res.json();
-      $("dMsg").innerHTML = `<span class="${d.status==="COMPLETED"?"ok":"bad"}">${d.status}</span> ${d.message||""}`;
-      await queryDaily();
-    };
     $("xGo").onclick = () => {
       const q = new URLSearchParams({ kind: $("xKind").value, stationId: $("xStation").value, from: dtVal("xFrom"), to: dtVal("xTo") });
       location.href = "/api/export?" + q;
