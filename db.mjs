@@ -325,3 +325,76 @@ export async function importJsonIfEmpty(dataDir) {
   const u = await upsertHourly(rows);
   return { imported: u.inserted + u.updated };
 }
+
+// ---- 미적재 현황(gaps) ----
+// 시각은 left(observation_datetime,13) = 'YYYY-MM-DD HH' 로 정규화해 'HH:MM'/'HH:MM:SS' 중복 행이 한 시각으로 접히게 한다.
+// ranges: [{ station_id, a: 'YYYY-MM-DD HH', b: 'YYYY-MM-DD HH' }] (양 끝 포함)
+function rangeArrays(ranges) {
+  return [ranges.map((r) => r.station_id), ranges.map((r) => r.a), ranges.map((r) => r.b)];
+}
+
+export async function gapBoundsPg(stationIds) {
+  const [h, d] = await Promise.all([
+    pool.query(
+      `SELECT station_id, left(min(observation_datetime),16) AS first, left(max(observation_datetime),16) AS last
+       FROM observations_hourly WHERE station_id = ANY($1::text[]) GROUP BY 1`,
+      [stationIds],
+    ),
+    pool.query(
+      `SELECT station_id, min(observation_date) AS first, max(observation_date) AS last
+       FROM observations_daily WHERE station_id = ANY($1::text[]) GROUP BY 1`,
+      [stationIds],
+    ),
+  ]);
+  return { hourly: h.rows, daily: d.rows };
+}
+
+// 지점·일자별 적재된 시각 수(중복 제외)와 행 수
+export async function gapDayCountsPg(ranges) {
+  if (!ranges.length) return [];
+  const r = await pool.query(
+    `WITH r AS (SELECT * FROM unnest($1::text[], $2::text[], $3::text[]) AS r(station_id, a, b))
+     SELECT o.station_id, left(o.observation_datetime,10) AS d,
+            count(DISTINCT left(o.observation_datetime,13))::int AS n, count(*)::int AS rows
+     FROM observations_hourly o
+     JOIN r ON o.station_id = r.station_id AND left(o.observation_datetime,13) BETWEEN r.a AND r.b
+     GROUP BY 1, 2`,
+    rangeArrays(ranges),
+  );
+  return r.rows;
+}
+
+// 비어 있는 시각을 generate_series와 비교해 찾고, 연속된 시각을 한 구간으로 묶는다(gaps-and-islands).
+export async function gapHourIntervalsPg(ranges) {
+  if (!ranges.length) return [];
+  const r = await pool.query(
+    `WITH r AS (
+       SELECT station_id, a, b, to_timestamp(a, 'YYYY-MM-DD HH24')::timestamp AS ta, to_timestamp(b, 'YYYY-MM-DD HH24')::timestamp AS tb
+       FROM unnest($1::text[], $2::text[], $3::text[]) AS r(station_id, a, b)
+     ), have AS (
+       SELECT DISTINCT o.station_id, left(o.observation_datetime,13) AS h
+       FROM observations_hourly o
+       JOIN r ON o.station_id = r.station_id AND left(o.observation_datetime,13) BETWEEN r.a AND r.b
+     ), miss AS (
+       SELECT r.station_id, g
+       FROM r CROSS JOIN LATERAL generate_series(r.ta, r.tb, interval '1 hour') AS g
+       WHERE NOT EXISTS (SELECT 1 FROM have WHERE have.station_id = r.station_id AND have.h = to_char(g, 'YYYY-MM-DD HH24'))
+     ), grp AS (
+       SELECT station_id, g, g - (row_number() OVER (PARTITION BY station_id ORDER BY g)) * interval '1 hour' AS k
+       FROM miss
+     )
+     SELECT station_id, to_char(min(g), 'YYYY-MM-DD HH24') AS s, to_char(max(g), 'YYYY-MM-DD HH24') AS e, count(*)::int AS n
+     FROM grp GROUP BY station_id, k ORDER BY station_id, min(g)`,
+    rangeArrays(ranges),
+  );
+  return r.rows;
+}
+
+export async function gapOfficialDaysPg(stationIds, fromDate, toDate) {
+  const r = await pool.query(
+    `SELECT station_id, observation_date AS d FROM observations_daily
+     WHERE station_id = ANY($1::text[]) AND observation_date BETWEEN $2 AND $3`,
+    [stationIds, fromDate, toDate],
+  );
+  return r.rows;
+}

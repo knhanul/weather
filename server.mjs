@@ -543,6 +543,293 @@ async function series(stationIdRaw, hoursRaw) {
   };
 }
 
+// ---- 미적재 현황: 지점별로 비어 있는 시각(시간자료)·일자(일자료) 구간 ----
+// 시간자료: 기간 안의 모든 정시 중 적재된 행이 없는 시각(HH:MM / HH:MM:SS 중복은 한 시각으로 셈).
+// 일자료: /api/daily 와 같은 기준 — 공식 일자료 행도 없고 그날 시간자료도 한 시각도 없으면 미적재.
+//         시간자료가 일부(1~23시각)만 있는 날은 집계값이 부정확할 수 있어 '불완전'으로 따로 센다.
+const GAP_PERIODS = { 30: 30, 90: 90, 365: 365 };
+const GAP_MAX_DAYS = 1100;
+const GAP_MAX_INTERVALS = 300;
+const DAY_MS = 24 * 3600000;
+function msToYmd(ms) {
+  const d = new Date(ms);
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+function msToH13(ms) {
+  return `${msToYmd(ms)} ${pad(new Date(ms).getUTCHours())}`;
+}
+function h13Ms(h13) {
+  return wallMs(`${h13}:00`);
+}
+// 'YYYY-MM-DD' | 'YYYY-MM-DD HH[:MM[:SS]]' | 'YYYY-MM-DDTHH:MM' → 정시 ms (날짜만이면 시작 00시 / 종료 23시)
+function parseGapTime(v, isEnd) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2})(?::\d{2}(?::\d{2})?)?)?$/.exec(String(v ?? "").trim());
+  if (!m) return NaN;
+  const h = m[4] != null ? Number(m[4]) : isEnd ? 23 : 0;
+  const ms = Date.UTC(+m[1], +m[2] - 1, +m[3], h);
+  const d = new Date(ms);
+  if (d.getUTCMonth() !== +m[2] - 1 || d.getUTCDate() !== +m[3] || h > 23) return NaN;
+  return ms;
+}
+function dayFloor(ms) {
+  return Math.floor(ms / DAY_MS) * DAY_MS;
+}
+
+async function gaps(params) {
+  const kind = params.kind === "daily" ? "daily" : "hourly";
+  const list = await stations();
+  const wantId = String(params.stationId ?? "").trim();
+  let targets = list;
+  if (wantId) {
+    targets = list.filter((s) => String(s.station_id) === wantId);
+    if (!targets.length) return { status: 400, body: { ok: false, message: `알 수 없는 지점입니다: ${wantId.slice(0, 20)}` } };
+  }
+  const official = latestOfficialHour();
+  const latestMs = wallMs(official);
+  // 기간: from/to 직접 지정 > period(30|90|365|all). 끝은 공식 최신 시각을 넘지 않는다.
+  let period = String(params.period ?? "90");
+  if (params.from) period = "custom";
+  else if (!(period in GAP_PERIODS) && period !== "all") period = "90";
+  let endMs = params.to ? parseGapTime(params.to, true) : latestMs;
+  if (!Number.isFinite(endMs)) return { status: 400, body: { ok: false, message: "종료 시각 형식이 올바르지 않습니다 (YYYY-MM-DD 또는 YYYY-MM-DD HH:MM)" } };
+  if (endMs > latestMs) endMs = latestMs;
+  let startMs = null;
+  if (period === "custom") {
+    startMs = parseGapTime(params.from, false);
+    if (!Number.isFinite(startMs)) return { status: 400, body: { ok: false, message: "시작 시각 형식이 올바르지 않습니다 (YYYY-MM-DD 또는 YYYY-MM-DD HH:MM)" } };
+  } else if (period !== "all") {
+    startMs = dayFloor(endMs) - (GAP_PERIODS[period] - 1) * DAY_MS;
+  }
+  if (kind === "daily") {
+    endMs = dayFloor(endMs);
+    if (startMs != null) startMs = dayFloor(startMs);
+  }
+  const minStart = dayFloor(endMs) - (GAP_MAX_DAYS - 1) * DAY_MS;
+  const ids = targets.map((s) => String(s.station_id));
+
+  // 1) 지점별 첫·마지막 관측
+  const bounds = new Map(ids.map((id) => [id, { first: null, last: null, dFirst: null, dLast: null, rows: 0 }]));
+  let allHourly = null;
+  let allDaily = null;
+  if (db.usingPg()) {
+    const b = await db.gapBoundsPg(ids);
+    for (const r of b.hourly) Object.assign(bounds.get(String(r.station_id)), { first: r.first, last: r.last });
+    for (const r of b.daily) Object.assign(bounds.get(String(r.station_id)), { dFirst: r.first, dLast: r.last });
+  } else {
+    allHourly = loadJson(OBS_FILE, []).filter((r) => bounds.has(String(r.station_id)));
+    allDaily = loadJson(DAILY_FILE, []).filter((r) => bounds.has(String(r.station_id)));
+    for (const r of allHourly) {
+      const x = bounds.get(String(r.station_id));
+      const t = t16(r.observation_datetime);
+      if (!x.first || t < x.first) x.first = t;
+      if (!x.last || t > x.last) x.last = t;
+    }
+    for (const r of allDaily) {
+      const x = bounds.get(String(r.station_id));
+      const d = String(r.observation_date).slice(0, 10);
+      if (!x.dFirst || d < x.dFirst) x.dFirst = d;
+      if (!x.dLast || d > x.dLast) x.dLast = d;
+    }
+  }
+
+  // 2) 지점별 점검 구간
+  const ranges = [];
+  const info = new Map();
+  for (const id of ids) {
+    const x = bounds.get(id);
+    let s = startMs;
+    let clamped = false;
+    if (s == null) {
+      // 전체: 그 지점의 첫 관측부터
+      const firsts = [x.first ? wallMs(x.first) : NaN, kind === "daily" && x.dFirst ? wallMs(`${x.dFirst} 00:00`) : NaN].filter(Number.isFinite);
+      if (!firsts.length) {
+        info.set(id, { range: null });
+        continue;
+      }
+      s = Math.min(...firsts);
+      s = kind === "daily" ? dayFloor(s) : Math.floor(s / 3600000) * 3600000;
+    }
+    if (s < minStart) {
+      s = minStart;
+      clamped = true;
+    }
+    if (s > endMs) {
+      info.set(id, { range: null });
+      continue;
+    }
+    const a = kind === "daily" ? `${msToYmd(s)} 00` : msToH13(s);
+    const b = kind === "daily" ? `${msToYmd(endMs)} 23` : msToH13(endMs);
+    ranges.push({ station_id: id, a, b });
+    info.set(id, { range: { s, e: endMs, a, b }, clamped });
+  }
+
+  // 3) 일자별 적재 시각 수 · 공식 일자료 · (시간자료) 미적재 구간
+  const dayCounts = new Map(ids.map((id) => [id, new Map()]));
+  const officialDays = new Map(ids.map((id) => [id, new Set()]));
+  const hourIntervals = new Map(ids.map((id) => [id, []]));
+  const rowsInRange = new Map(ids.map((id) => [id, 0]));
+  const rangeOf = new Map(ranges.map((r) => [r.station_id, r]));
+  if (db.usingPg()) {
+    const minDate = ranges.length ? ranges.reduce((m, r) => (r.a < m ? r.a : m), ranges[0].a).slice(0, 10) : null;
+    const [counts, ivs, offs] = await Promise.all([
+      db.gapDayCountsPg(ranges),
+      kind === "hourly" ? db.gapHourIntervalsPg(ranges) : Promise.resolve([]),
+      kind === "daily" && ranges.length ? db.gapOfficialDaysPg(ranges.map((r) => r.station_id), minDate, msToYmd(endMs)) : Promise.resolve([]),
+    ]);
+    for (const r of counts) {
+      dayCounts.get(String(r.station_id)).set(r.d, r.n);
+      rowsInRange.set(String(r.station_id), rowsInRange.get(String(r.station_id)) + r.rows);
+    }
+    for (const r of ivs) hourIntervals.get(String(r.station_id)).push({ s: r.s, e: r.e, n: r.n });
+    for (const r of offs) {
+      const rg = rangeOf.get(String(r.station_id));
+      if (rg && r.d >= rg.a.slice(0, 10) && r.d <= rg.b.slice(0, 10)) officialDays.get(String(r.station_id)).add(r.d);
+    }
+  } else {
+    const hours = new Map(ids.map((id) => [id, new Set()]));
+    for (const r of allHourly) {
+      const id = String(r.station_id);
+      const rg = rangeOf.get(id);
+      const h = String(r.observation_datetime).slice(0, 13);
+      if (!rg || h < rg.a || h > rg.b) continue;
+      rowsInRange.set(id, rowsInRange.get(id) + 1);
+      hours.get(id).add(h);
+    }
+    for (const [id, set] of hours) {
+      const dc = dayCounts.get(id);
+      for (const h of set) dc.set(h.slice(0, 10), (dc.get(h.slice(0, 10)) || 0) + 1);
+      const rg = rangeOf.get(id);
+      if (kind !== "hourly" || !rg) continue;
+      let cur = null;
+      for (let t = h13Ms(rg.a), e = h13Ms(rg.b); t <= e; t += 3600000) {
+        const h = msToH13(t);
+        if (set.has(h)) {
+          cur = null;
+          continue;
+        }
+        if (cur) {
+          cur.e = h;
+          cur.n += 1;
+        } else {
+          cur = { s: h, e: h, n: 1 };
+          hourIntervals.get(id).push(cur);
+        }
+      }
+    }
+    for (const r of allDaily) {
+      const id = String(r.station_id);
+      const rg = rangeOf.get(id);
+      const d = String(r.observation_date).slice(0, 10);
+      if (rg && d >= rg.a.slice(0, 10) && d <= rg.b.slice(0, 10)) officialDays.get(id).add(d);
+    }
+  }
+
+  // 4) 지점별 결과 조립
+  const out = targets.map((st) => {
+    const id = String(st.station_id);
+    const x = bounds.get(id);
+    const inf = info.get(id);
+    const lastObs = x.last;
+    const lag = lastObs ? lagHours(lastObs, official) : null;
+    const base = {
+      station_id: id,
+      station_name: st.station_name,
+      enabled: Boolean(st.enabled),
+      favorite: Boolean(st.favorite),
+      first_observation: x.first,
+      last_observation: lastObs,
+      first_official_day: x.dFirst,
+      last_official_day: x.dLast,
+      lag_hours: lag,
+      stale: lag != null && lag > 24,
+      has_data: Boolean(x.first || x.dFirst),
+    };
+    if (!inf.range) {
+      return { ...base, from: null, to: null, expected: 0, present: 0, missing: 0, coverage: null, interval_count: 0, intervals: [], intervals_truncated: false, strip: null };
+    }
+    const { s, e, a, b } = inf.range;
+    const dc = dayCounts.get(id);
+    const days = [];
+    for (let t = dayFloor(s); t <= dayFloor(e); t += DAY_MS) days.push(msToYmd(t));
+    let expected;
+    let present;
+    let intervals;
+    let strip;
+    let extra = {};
+    if (kind === "hourly") {
+      expected = Math.round((e - s) / 3600000) + 1;
+      present = [...dc.values()].reduce((acc, n) => acc + n, 0);
+      intervals = hourIntervals.get(id).map((iv) => ({ start: `${iv.s}:00`, end: `${iv.e}:00`, length: iv.n }));
+      const firstH = new Date(s).getUTCHours();
+      const lastH = new Date(e).getUTCHours();
+      strip = {
+        start: days[0],
+        present: days.map((d) => dc.get(d) || 0),
+        expected: days.map((d, i) => (days.length === 1 ? lastH - firstH + 1 : i === 0 ? 24 - firstH : i === days.length - 1 ? lastH + 1 : 24)),
+      };
+      extra = { duplicates: Math.max(0, rowsInRange.get(id) - present) };
+    } else {
+      const offs = officialDays.get(id);
+      const status = days.map((d) => (offs.has(d) ? 3 : (dc.get(d) || 0) >= 24 ? 2 : (dc.get(d) || 0) > 0 ? 1 : 0));
+      expected = days.length;
+      present = status.filter((v) => v > 0).length;
+      intervals = [];
+      let cur = null;
+      status.forEach((v, i) => {
+        if (v > 0) {
+          cur = null;
+          return;
+        }
+        if (cur) {
+          cur.end = days[i];
+          cur.length += 1;
+        } else {
+          cur = { start: days[i], end: days[i], length: 1 };
+          intervals.push(cur);
+        }
+      });
+      strip = { start: days[0], status };
+      extra = {
+        official_days: status.filter((v) => v === 3).length,
+        derived_days: status.filter((v) => v === 2 || v === 1).length,
+        partial_days: status.filter((v) => v === 1).length,
+      };
+    }
+    const missing = Math.max(0, expected - present);
+    return {
+      ...base,
+      from: kind === "hourly" ? `${a}:00` : a.slice(0, 10),
+      to: kind === "hourly" ? `${b}:00` : b.slice(0, 10),
+      range_clamped: inf.clamped,
+      expected,
+      present,
+      missing,
+      coverage: expected ? Math.floor((present / expected) * 1000) / 10 : null,
+      ...extra,
+      interval_count: intervals.length,
+      intervals: intervals.slice(0, GAP_MAX_INTERVALS),
+      intervals_truncated: intervals.length > GAP_MAX_INTERVALS,
+      strip,
+    };
+  });
+  return {
+    status: 200,
+    body: {
+      timezone: "Asia/Seoul",
+      kind,
+      unit: kind === "daily" ? "day" : "hour",
+      period,
+      latestOfficialHour: official,
+      from: startMs == null ? null : kind === "daily" ? msToYmd(startMs) : `${msToH13(Math.max(startMs, minStart))}:00`,
+      to: kind === "daily" ? msToYmd(endMs) : `${msToH13(endMs)}:00`,
+      storage: db.usingPg() ? "postgresql" : "json",
+      max_days: GAP_MAX_DAYS,
+      max_intervals: GAP_MAX_INTERVALS,
+      stations: out,
+    },
+  };
+}
+
 async function dashboard() {
   const key = await getKey();
   if (db.usingPg()) {
@@ -640,6 +927,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "GET" && url.pathname === "/api/series") {
       const r = await series(url.searchParams.get("stationId"), url.searchParams.get("hours"));
+      return json(res, r.body, r.status);
+    }
+    if (req.method === "GET" && url.pathname === "/api/gaps") {
+      const r = await gaps(Object.fromEntries(url.searchParams));
       return json(res, r.body, r.status);
     }
     if (req.method === "GET" && url.pathname === "/api/daily") {
