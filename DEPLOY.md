@@ -309,7 +309,9 @@ node scripts/approve-user.mjs --pending <회원번호>  # 승인 대기로 되�
 - 권한: 누니 ID 의 누니날씨 멤버십 역할이 `brand_admin` 또는 `staff`, 또는 `platform_admin` 이면 **관리**. `customer` 는 **조회 전용**이고 관리 화면에 "관리 권한이 없습니다. 관리자에게 요청하세요" 와 회원 ID 가 나옵니다(API 403 message 도 같은 문구). 역할은 로그인할 때 받아오므로 바꾼 권한은 **다음 로그인**부터 반영됩니다(세션 12시간).
 - 세션은 7장과 같은 쿠키(`__Host-nw_session`)·`app_sessions` 를 씁니다. 사용자 행은 `app_users.kakao_id = 'nuni:<누니 회원 ID>'` 로만 저장합니다(닉네임·사진 없음). 카카오 모드 세션과 서로 섞이지 않습니다.
 - 관리 > 사용자 화면은 누니 ID 관리 콘솔 안내로 바뀌고, `/api/admin/users/status` 는 410 입니다(승인·차단은 누니 ID 에서).
-- 로그아웃: 누니날씨 세션만 지웁니다. `NUNI_ID_LOGOUT_SSO=1` 이면 누니 ID 로그아웃 확인 화면까지 거칩니다.
+- 로그인된 동안은 누니 ID 세션으로 다시 묻지 않고 바로 로그인됩니다.
+- 로그아웃: 누니날씨 세션을 지우고 누니 ID 세션도 끝냅니다(`end_session` + `id_token_hint`, 확인 화면 없이 누니날씨 `/` 로 복귀). id_token 은 HttpOnly 쿠키 `nw_idt`(Path=/auth/logout, 개인정보 없음)에 로그아웃 힌트로만 보관합니다.
+- 로그아웃하면 표시 쿠키 `nw_relogin=1`(HttpOnly, Path=/auth/nuni, 30일)을 남깁니다. 다음 로그인 **한 번만** `prompt=login` 을 보내 카카오가 계정을 다시 묻습니다(다른 카카오 아이디로 로그인 가능). 로그인에 성공하면 지워지고, 취소하면 남아 다음 시도도 계정을 묻습니다. 일반 로그인에는 `prompt` 를 붙이지 않습니다. 카카오계정 자체(kakao.com)는 로그아웃하지 않습니다. 카카오톡 인앱 브라우저에서는 카카오가 `prompt=login` 을 지원하지 않습니다.
 - `AUTH_PROVIDER=nuni-id` 인데 아래 필수 값이 빠지면 관리 기능을 **잠급니다**(503, 공개로 열리지 않음). 로그: `auth LOCKED (...)`.
 - CSRF(같은 출처 검사)와 관리자 전용 GET/쓰기 API 보호는 7-7 과 같습니다. 쓰기에서 조회 전용 사용자는 403 `{"auth":"viewer"}`.
 
@@ -326,7 +328,7 @@ node scripts/approve-user.mjs --pending <회원번호>  # 승인 대기로 되�
 | `NUNI_ID_POST_LOGOUT_URI` | 선택 | 기본 `https://weather.nuni.co.kr/` |
 | `NUNI_ID_BRAND` | 선택 | 기본 `nuni-weather` |
 | `NUNI_ID_SESSION_HOURS` | 선택 | 기본 12 |
-| `NUNI_ID_LOGOUT_SSO` | 선택 | `1` 이면 로그아웃 때 누니 ID 에서도 로그아웃(확인 화면) |
+| `NUNI_ID_LOGOUT_SSO` | 선택 | 기본(빈 값/`1`): 로그아웃 때 누니 ID 세션도 끝냄(id_token_hint, 확인 화면 없음). `0` 이면 누니날씨 세션만 지움(다음 로그인 `prompt=login` 은 그대로) |
 | `NUNI_ID_IDP_HINT` | 선택 | 기본 `kakao`: 누니 ID 로그인 화면을 건너뛰고 바로 카카오. 빈 값(`NUNI_ID_IDP_HINT=`)이면 누니 ID 화면을 보여 줌 |
 
 현재(2026-09-27) 서버 `/etc/weather-hub.env` 에는 `NUNI_ID_ISSUER`·`NUNI_ID_CLIENT_ID`·`NUNI_ID_CLIENT_SECRET` 가 이미 들어 있고 `AUTH_PROVIDER` 는 없습니다(카카오 로그인 사용 중). 승희님(카카오 5107991059)은 누니 ID 에 미리 만들어져 누니날씨 `brand_admin` + `platform_admin` 입니다.

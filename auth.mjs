@@ -270,6 +270,11 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
 
   // ---- 누니 ID(OIDC) ----
   const OIDC_COOKIE = "nw_oidc";
+  // 로그아웃용 id_token_hint (POST /auth/logout 에만 전송, HttpOnly). 서명은 누니 ID 가 검증한다.
+  const IDT_COOKIE = "nw_idt";
+  // 명시적 로그아웃 표시(값 '1', 개인정보 없음). 다음 로그인 1회만 prompt=login 으로 카카오 계정을 다시 묻고, 로그인 성공 시 지운다.
+  const RELOGIN_COOKIE = "nw_relogin";
+  const RELOGIN_MAX_AGE = 30 * 24 * 3600;
   async function nuniLogin(req, res, url) {
     const next = safeNext(url.searchParams.get("next"));
     const state = b64u(crypto.randomBytes(24));
@@ -277,7 +282,8 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
     const verifier = b64u(crypto.randomBytes(48));
     let location;
     try {
-      location = await nuni.authorizeUrl({ state, nonce, verifier });
+      const forceLogin = parseCookies(req.headers.cookie)[RELOGIN_COOKIE] === "1";
+      location = await nuni.authorizeUrl({ state, nonce, verifier, forceLogin });
     } catch (err) {
       log(`nuni-id login unavailable: ${err?.message || "error"} ${err?.detail || ""}`);
       return page(res, 503, "로그인 서버에 연결하지 못했습니다", "잠시 후 다시 시도해 주세요. 계속되면 관리자에게 알려 주세요.");
@@ -328,7 +334,8 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
     const hours = nuni.cfg.sessionHours;
     await store.createSession({ idHash: hashSession(token), kakaoId: id, expiresAt: new Date(Date.now() + hours * 3600000), userAgent: null });
     log(`nuni-id login ok user=${claims.sub} role=${roleOf(user)} brand_role=${claims.brandRole || "-"}${claims.platformAdmin ? " platform_admin" : ""}`);
-    return redirect(res, `/${next}`, [clear, cookie(SESSION_COOKIE, token, { maxAge: hours * 3600 })]);
+    const idt = claims.idToken && claims.idToken.length < 3500 ? [cookie(IDT_COOKIE, claims.idToken, { maxAge: hours * 3600, path: "/auth/logout" })] : [clearCookie(IDT_COOKIE, "/auth/logout")];
+    return redirect(res, `/${next}`, [clear, cookie(SESSION_COOKIE, token, { maxAge: hours * 3600 }), ...idt, clearCookie(RELOGIN_COOKIE, "/auth/nuni")]);
   }
 
   const userJson = (u, adminList = false) => ({
@@ -369,11 +376,15 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
       if (p === "/auth/nuni/callback" && req.method === "GET") return await nuniCallback(req, res, url), true;
       if (p === "/auth/kakao/login" && req.method === "GET") return redirect(res, `/auth/nuni/login${url.search}`), true; // 예전 링크
       if (p === "/auth/logout" && req.method === "POST") {
-        const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+        const ck = parseCookies(req.headers.cookie);
+        const token = ck[SESSION_COOKIE];
         if (token) await store.deleteSession(hashSession(token));
+        // 누니 ID 세션도 끝냄(id_token_hint → 확인 화면 없이 로그아웃 후 누니날씨 / 로 복귀). 힌트가 없으면 SSO 로그아웃은 생략하고
+        // 다음 로그인의 prompt=login 으로 계정을 다시 묻는다. 카카오계정 자체는 로그아웃하지 않는다.
         let endSessionUrl = null;
-        if (nuni.cfg.logoutSso) endSessionUrl = await nuni.endSessionUrl().catch(() => null);
-        return json(res, { ok: true, endSessionUrl }, 200, [clearCookie(SESSION_COOKIE)]), true;
+        const hint = ck[IDT_COOKIE];
+        if (nuni.cfg.logoutSso && hint) endSessionUrl = await nuni.endSessionUrl(hint).catch(() => null);
+        return json(res, { ok: true, endSessionUrl }, 200, [clearCookie(SESSION_COOKIE), clearCookie(IDT_COOKIE, "/auth/logout"), cookie(RELOGIN_COOKIE, "1", { maxAge: RELOGIN_MAX_AGE, path: "/auth/nuni" })]), true;
       }
       // 사용자 승인/차단은 누니 ID 관리 콘솔에서 한다
       if (p === "/api/admin/users" && req.method === "GET") return json(res, { managedBy: "nuni-id", adminConsoleUrl: `${nuni.cfg.issuer}/admin/users`, users: [] }), true;

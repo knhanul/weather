@@ -16,7 +16,8 @@ export function nuniConfig(env) {
     redirectUri: String(env.NUNI_ID_REDIRECT_URI || "https://weather.nuni.co.kr/auth/nuni/callback").trim(),
     postLogoutUri: String(env.NUNI_ID_POST_LOGOUT_URI || "https://weather.nuni.co.kr/").trim(),
     brand: String(env.NUNI_ID_BRAND || "nuni-weather").trim(),
-    logoutSso: env.NUNI_ID_LOGOUT_SSO === "1",
+    // 로그아웃하면 누니 ID 세션도 끝낸다(기본). NUNI_ID_LOGOUT_SSO=0 이면 누니날씨 세션만 끝냄
+    logoutSso: env.NUNI_ID_LOGOUT_SSO !== "0",
     sessionHours: Math.max(1, Math.min(Number(env.NUNI_ID_SESSION_HOURS || 12), 24 * 30)),
     // 누니 ID 로그인 화면을 건너뛰고 바로 카카오로 (사용자에게는 카카오 로그인만 보임). 빈 값이면 누니 ID 화면 표시
     idpHint: String(env.NUNI_ID_IDP_HINT ?? "kakao").trim(),
@@ -99,7 +100,8 @@ export function createNuniClient(cfg, { fetchImpl = fetch } = {}) {
     return { sub: p.sub, brandRole: p.brand_role ?? null, platformAdmin: p.platform_admin === true, authTime: p.auth_time ?? null };
   }
 
-  async function authorizeUrl({ state, nonce, verifier }) {
+  // forceLogin: 명시적 로그아웃 직후 첫 로그인 — prompt=login 으로 카카오 계정을 다시 묻는다(일반 로그인에는 붙이지 않음)
+  async function authorizeUrl({ state, nonce, verifier, forceLogin = false }) {
     const d = await discovery();
     const q = new URLSearchParams({
       response_type: "code",
@@ -112,6 +114,7 @@ export function createNuniClient(cfg, { fetchImpl = fetch } = {}) {
       code_challenge_method: "S256",
     });
     if (cfg.idpHint) q.set("idp_hint", cfg.idpHint);
+    if (forceLogin) q.set("prompt", "login");
     return `${d.authorization_endpoint}?${q}`;
   }
 
@@ -133,13 +136,16 @@ export function createNuniClient(cfg, { fetchImpl = fetch } = {}) {
         body: new URLSearchParams({ token: r.body.refresh_token, token_type_hint: "refresh_token" }),
       }).catch(() => {});
     }
-    return claims;
+    // idToken: 로그아웃 때 id_token_hint 로만 쓴다(개인정보 없음: sub·brand_role 등)
+    return { ...claims, idToken: r.body.id_token };
   }
 
-  async function endSessionUrl() {
+  // id_token_hint 가 있으면 누니 ID 가 확인 화면 없이 바로 로그아웃하고 post_logout_redirect_uri 로 돌려보낸다
+  async function endSessionUrl(idTokenHint) {
     const d = await discovery();
     if (!d.end_session_endpoint) return null;
     const q = new URLSearchParams({ client_id: cfg.clientId, post_logout_redirect_uri: cfg.postLogoutUri });
+    if (idTokenHint) q.set("id_token_hint", idTokenHint);
     return `${d.end_session_endpoint}?${q}`;
   }
 

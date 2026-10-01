@@ -256,19 +256,61 @@ test("NUNI_ID_IDP_HINT='' turns the hint off (NUNI ID page shown)", async () => 
   }
 });
 
-test("logout deletes local session; NUNI_ID_LOGOUT_SSO=1 returns end_session URL; pre-switch kakao sessions are ignored", async () => {
-  const { cj } = await login(app, { sub: SUB.admin, brand_role: "brand_admin" });
+test("logout (default SSO): end_session URL with id_token_hint; marker → next login only gets prompt=login; NUNI_ID_LOGOUT_SSO=0 local only", async () => {
+  const { cj, r1, r3 } = await login(app, { sub: SUB.admin, brand_role: "brand_admin" });
+  assert.equal(new URL(r1.loc).searchParams.get("prompt"), null, "normal login: no prompt");
+  const idtSet = r3.res.headers.getSetCookie().find((c) => c.startsWith("nw_idt="));
+  assert.match(idtSet, /Path=\/auth\/logout/);
+  assert.match(idtSet, /HttpOnly/);
   const out = await req(app, cj, "/auth/logout", { method: "POST", origin: app.base });
   assert.equal(out.data.ok, true);
-  assert.equal(out.data.endSessionUrl, null);
+  const u = new URL(out.data.endSessionUrl);
+  assert.equal(u.origin + u.pathname, `${op.base}/oauth/end_session`);
+  assert.equal(u.searchParams.get("client_id"), CLIENT.id);
+  assert.equal(u.searchParams.get("post_logout_redirect_uri"), "https://weather.nuni.co.kr/");
+  const hint = JSON.parse(Buffer.from(u.searchParams.get("id_token_hint").split(".")[1], "base64url"));
+  assert.equal(hint.sub, SUB.admin);
+  const mk = out.res.headers.getSetCookie().find((c) => c.startsWith("nw_relogin="));
+  assert.match(mk, /^nw_relogin=1; Path=\/auth\/nuni; HttpOnly; SameSite=Lax/);
+  assert.ok(!cj.j.has("nw_idt"), "hint cookie cleared");
   assert.equal((await req(app, cj, "/api/me")).data.loggedIn, false);
-  const sso = await startApp({ NUNI_ID_LOGOUT_SSO: "1", NUNI_ID_POST_LOGOUT_URI: "http://127.0.0.1/after" });
+  // 로그아웃 후 첫 로그인: prompt=login → 다른 계정(조회 전용)으로 로그인
+  op.claims = { sub: SUB.viewer, brand_role: "customer" };
+  const f1 = await req(app, cj, "/auth/nuni/login");
+  assert.equal(new URL(f1.loc).searchParams.get("prompt"), "login");
+  const f2 = await fetch(f1.loc, { redirect: "manual" });
+  const f3 = await req(app, cj, f2.headers.get("location"));
+  assert.equal(f3.status, 302);
+  assert.ok(!cj.j.has("nw_relogin"), "marker consumed by successful login");
+  assert.equal((await req(app, cj, "/api/me")).data.role, "viewer");
+  // 그다음 로그인은 다시 일반(prompt 없음)
+  assert.equal(new URL((await req(app, cj, "/auth/nuni/login")).loc).searchParams.get("prompt"), null);
+  // 세션 없이 로그아웃해도(힌트 없음) 표시는 남고 SSO URL 은 없음
+  const anon = jar();
+  const o2 = await req(app, anon, "/auth/logout", { method: "POST", origin: app.base });
+  assert.equal(o2.data.endSessionUrl, null);
+  assert.equal(anon.j.get("nw_relogin"), "1");
+  // 취소하면 표시는 유지 → 다음 시도도 계정 입력
+  const c1 = await req(app, anon, "/auth/nuni/login");
+  const st = new URL(c1.loc).searchParams.get("state");
+  await req(app, anon, `/auth/nuni/callback?error=access_denied&state=${st}`);
+  assert.equal(anon.j.get("nw_relogin"), "1");
+  assert.equal(new URL((await req(app, anon, "/auth/nuni/login")).loc).searchParams.get("prompt"), "login");
+  const local = await startApp({ NUNI_ID_LOGOUT_SSO: "0" });
+  try {
+    const l = await login(local, { sub: SUB.admin, brand_role: "brand_admin" });
+    assert.equal((await req(local, l.cj, "/auth/logout", { method: "POST", origin: local.base })).data.endSessionUrl, null);
+  } finally {
+    await local.close();
+  }
+});
+
+test("NUNI_ID_POST_LOGOUT_URI is used; pre-switch kakao sessions are ignored", async () => {
+  const sso = await startApp({ NUNI_ID_POST_LOGOUT_URI: "http://127.0.0.1/after" });
   try {
     const l = await login(sso, { sub: SUB.admin, brand_role: "brand_admin" });
     const o = await req(sso, l.cj, "/auth/logout", { method: "POST", origin: sso.base });
     const u = new URL(o.data.endSessionUrl);
-    assert.equal(u.origin + u.pathname, `${op.base}/oauth/end_session`);
-    assert.equal(u.searchParams.get("client_id"), CLIENT.id);
     assert.equal(u.searchParams.get("post_logout_redirect_uri"), "http://127.0.0.1/after");
     // 카카오 모드에서 만든 (승인된) 세션은 nuni-id 모드에서 통하지 않음
     await sso.store.upsertLogin({ kakaoId: "5107991059", nickname: "k", profileImage: null });
