@@ -305,8 +305,8 @@ node scripts/approve-user.mjs --pending <회원번호>  # 승인 대기로 되�
 
 ### 8-1. 동작
 
-- 로그인 버튼 "누니 ID로 로그인" → `https://id.nuni.co.kr/oauth/authorize` (PKCE S256 + state + nonce) → `/auth/nuni/callback` 에서 서버가 code 를 교환하고 id_token 을 JWKS(10분 캐시, 모르는 kid 면 다시 받음)로 검증합니다(서명 RS256, iss, aud/azp, exp, nonce, at_hash, `brand_id=nuni-weather`).
-- 권한: 누니 ID 의 누니날씨 멤버십 역할이 `brand_admin` 또는 `staff`, 또는 `platform_admin` 이면 **관리**. `customer` 는 **조회 전용**이고 관리 화면에 "관리 권한이 없습니다 (누니 ID 관리자에게 요청)" 와 누니 회원 ID 가 나옵니다. 역할은 로그인할 때 받아오므로 바꾼 권한은 **다음 로그인**부터 반영됩니다(세션 12시간).
+- 화면에는 **카카오 로그인 버튼만** 보입니다(문구·노란 버튼 모두 카카오 모드와 같음, 2026-10-02 결정). 버튼 → `https://id.nuni.co.kr/oauth/authorize` (PKCE S256 + state + nonce + `idp_hint=kakao`) → 누니 ID 화면 없이 바로 카카오 → 누니 ID 가 첫 이용자를 자동 가입(누니날씨 클라이언트는 1st-party) → → `/auth/nuni/callback` 에서 서버가 code 를 교환하고 id_token 을 JWKS(10분 캐시, 모르는 kid 면 다시 받음)로 검증합니다(서명 RS256, iss, aud/azp, exp, nonce, at_hash, `brand_id=nuni-weather`).
+- 권한: 누니 ID 의 누니날씨 멤버십 역할이 `brand_admin` 또는 `staff`, 또는 `platform_admin` 이면 **관리**. `customer` 는 **조회 전용**이고 관리 화면에 "관리 권한이 없습니다. 관리자에게 요청하세요" 와 회원 ID 가 나옵니다(API 403 message 도 같은 문구). 역할은 로그인할 때 받아오므로 바꾼 권한은 **다음 로그인**부터 반영됩니다(세션 12시간).
 - 세션은 7장과 같은 쿠키(`__Host-nw_session`)·`app_sessions` 를 씁니다. 사용자 행은 `app_users.kakao_id = 'nuni:<누니 회원 ID>'` 로만 저장합니다(닉네임·사진 없음). 카카오 모드 세션과 서로 섞이지 않습니다.
 - 관리 > 사용자 화면은 누니 ID 관리 콘솔 안내로 바뀌고, `/api/admin/users/status` 는 410 입니다(승인·차단은 누니 ID 에서).
 - 로그아웃: 누니날씨 세션만 지웁니다. `NUNI_ID_LOGOUT_SSO=1` 이면 누니 ID 로그아웃 확인 화면까지 거칩니다.
@@ -327,6 +327,7 @@ node scripts/approve-user.mjs --pending <회원번호>  # 승인 대기로 되�
 | `NUNI_ID_BRAND` | 선택 | 기본 `nuni-weather` |
 | `NUNI_ID_SESSION_HOURS` | 선택 | 기본 12 |
 | `NUNI_ID_LOGOUT_SSO` | 선택 | `1` 이면 로그아웃 때 누니 ID 에서도 로그아웃(확인 화면) |
+| `NUNI_ID_IDP_HINT` | 선택 | 기본 `kakao`: 누니 ID 로그인 화면을 건너뛰고 바로 카카오. 빈 값(`NUNI_ID_IDP_HINT=`)이면 누니 ID 화면을 보여 줌 |
 
 현재(2026-09-27) 서버 `/etc/weather-hub.env` 에는 `NUNI_ID_ISSUER`·`NUNI_ID_CLIENT_ID`·`NUNI_ID_CLIENT_SECRET` 가 이미 들어 있고 `AUTH_PROVIDER` 는 없습니다(카카오 로그인 사용 중). 승희님(카카오 5107991059)은 누니 ID 에 미리 만들어져 누니날씨 `brand_admin` + `platform_admin` 입니다.
 
@@ -345,7 +346,9 @@ curl -s -o /dev/null -w '%{http_code}\n' https://weather.nuni.co.kr/api/gaps   #
 
 브라우저: weather.nuni.co.kr → **누니 ID로 로그인** → 카카오 → 관리 메뉴가 열리면 완료. 다른 사람의 관리 권한은 누니 ID 관리 콘솔 → 회원 → 누니날씨 멤버십 역할(`staff`/`brand_admin`)로 줍니다.
 
-**롤백**(즉시, 카카오 직접 로그인으로 복귀 — 기존 카카오 승인 목록·세션 그대로):
+**전환 완료: 2026-10-02 07:03 KST** (백업 `/root/weather-hub.env.bak-20261002070320`). 그 뒤 카카오 콘솔에는 `https://id.nuni.co.kr/auth/kakao/callback` **만** 남아 있습니다.
+
+**롤백**(카카오 직접 로그인으로 복귀 — 기존 카카오 승인 목록·세션 그대로). ⚠️ 먼저 카카오 콘솔 Redirect URI 에 `https://weather.nuni.co.kr/auth/kakao/callback` 을 다시 추가해야 합니다(없으면 카카오 로그인이 KOE006 오류):
 
 ```bash
 sed -i '/^AUTH_PROVIDER=/d' /etc/weather-hub.env && systemctl restart weather-hub

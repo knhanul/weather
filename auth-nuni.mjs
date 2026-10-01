@@ -18,6 +18,8 @@ export function nuniConfig(env) {
     brand: String(env.NUNI_ID_BRAND || "nuni-weather").trim(),
     logoutSso: env.NUNI_ID_LOGOUT_SSO === "1",
     sessionHours: Math.max(1, Math.min(Number(env.NUNI_ID_SESSION_HOURS || 12), 24 * 30)),
+    // 누니 ID 로그인 화면을 건너뛰고 바로 카카오로 (사용자에게는 카카오 로그인만 보임). 빈 값이면 누니 ID 화면 표시
+    idpHint: String(env.NUNI_ID_IDP_HINT ?? "kakao").trim(),
   };
 }
 export const nuniConfigured = (env) => {
@@ -109,6 +111,7 @@ export function createNuniClient(cfg, { fetchImpl = fetch } = {}) {
       code_challenge: b64u(crypto.createHash("sha256").update(verifier).digest()),
       code_challenge_method: "S256",
     });
+    if (cfg.idpHint) q.set("idp_hint", cfg.idpHint);
     return `${d.authorization_endpoint}?${q}`;
   }
 

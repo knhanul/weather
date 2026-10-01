@@ -164,6 +164,7 @@ test("login start: redirect to NUNI ID authorize with PKCE S256 + state + nonce;
   assert.equal(u.searchParams.get("code_challenge_method"), "S256");
   assert.equal(u.searchParams.get("client_id"), CLIENT.id);
   assert.equal(u.searchParams.get("scope"), "openid");
+  assert.equal(u.searchParams.get("idp_hint"), "kakao", "누니 ID 화면 없이 바로 카카오로");
   const sc = r.res.headers.getSetCookie().find((c) => c.startsWith("nw_oidc="));
   assert.match(sc, /Path=\/auth\/nuni/);
   assert.match(sc, /HttpOnly/);
@@ -206,7 +207,8 @@ test("staff → admin; platform_admin → admin; customer → 조회 only with c
   const g = await req(app, v.cj, "/api/gaps");
   assert.equal(g.status, 403);
   assert.equal(g.data.auth, "viewer");
-  assert.equal(g.data.message, "관리 권한이 없습니다 (누니 ID 관리자에게 요청)");
+  assert.equal(g.data.message, "관리 권한이 없습니다. 관리자에게 요청하세요");
+  assert.ok(!g.data.message.includes("누니 ID"));
   assert.equal((await req(app, v.cj, "/api/stations/toggle", { method: "POST", origin: app.base })).status, 403);
   assert.equal((await req(app, v.cj, "/api/hourly")).status, 200, "조회 API 는 열려 있음");
   // 권한이 올라가면 다음 로그인 때 반영
@@ -237,6 +239,21 @@ test("id_token checks: bad signature / wrong nonce / wrong brand / wrong aud / s
   assert.ok(st);
   const r4 = await req(app, cj2, `/auth/nuni/callback?error=access_denied&state=${encodeURIComponent(new URL((await req(app, cj2, "/auth/nuni/login")).loc).searchParams.get("state"))}`);
   assert.match(r4.loc, /login=cancelled/);
+  // 정지·탈퇴 회원(누니 ID 가 access_denied "account not available" 로 돌려보냄) → 차단 안내
+  const cj3 = jar();
+  const st3 = new URL((await req(app, cj3, "/auth/nuni/login")).loc).searchParams.get("state");
+  const r5 = await req(app, cj3, `/auth/nuni/callback?error=access_denied&error_description=account+not+available&state=${encodeURIComponent(st3)}`);
+  assert.match(r5.loc, /login=blocked/);
+});
+
+test("NUNI_ID_IDP_HINT='' turns the hint off (NUNI ID page shown)", async () => {
+  const a = await startApp({ NUNI_ID_IDP_HINT: "" });
+  try {
+    const r = await req(a, jar(), "/auth/nuni/login");
+    assert.equal(new URL(r.loc).searchParams.get("idp_hint"), null);
+  } finally {
+    await a.close();
+  }
 });
 
 test("logout deletes local session; NUNI_ID_LOGOUT_SSO=1 returns end_session URL; pre-switch kakao sessions are ignored", async () => {

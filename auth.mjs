@@ -132,7 +132,7 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
     if (!user) return { status: 401, body: { ok: false, auth: "login", message: "로그인이 필요합니다." } };
     const role = roleOf(user);
     if (role === "admin") return null;
-    if (role === "viewer") return { status: 403, body: { ok: false, auth: "viewer", message: "관리 권한이 없습니다 (누니 ID 관리자에게 요청)" } };
+    if (role === "viewer") return { status: 403, body: { ok: false, auth: "viewer", message: "관리 권한이 없습니다. 관리자에게 요청하세요" } };
     return {
       status: 403,
       body: { ok: false, auth: role, message: role === "blocked" ? "사용이 차단된 계정입니다." : "관리자 승인 대기 중입니다." },
@@ -280,7 +280,7 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
       location = await nuni.authorizeUrl({ state, nonce, verifier });
     } catch (err) {
       log(`nuni-id login unavailable: ${err?.message || "error"} ${err?.detail || ""}`);
-      return page(res, 503, "누니 ID에 연결하지 못했습니다", "잠시 후 다시 시도해 주세요. 계속되면 관리자에게 알려 주세요.");
+      return page(res, 503, "로그인 서버에 연결하지 못했습니다", "잠시 후 다시 시도해 주세요. 계속되면 관리자에게 알려 주세요.");
     }
     const payload = `${state}.${nonce}.${verifier}.${b64u(next)}`;
     redirect(res, location, [cookie(OIDC_COOKIE, `${payload}.${hmac(`oidc:${payload}`)}`, { maxAge: STATE_MAX_AGE, path: "/auth/nuni" })]);
@@ -305,7 +305,7 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
     const error = url.searchParams.get("error");
     if (error) {
       log(`nuni-id login error=${String(error).slice(0, 40)}`);
-      return redirect(res, `/?login=${error === "access_denied" ? (String(url.searchParams.get("error_description") || "").includes("banned") ? "blocked" : "cancelled") : "failed"}${next}`, [clear]);
+      return redirect(res, `/?login=${error === "access_denied" ? (/banned|not available/.test(String(url.searchParams.get("error_description") || "")) ? "blocked" : "cancelled") : "failed"}${next}`, [clear]);
     }
     const code = url.searchParams.get("code");
     if (!code || code.length > 2000) return redirect(res, `/?login=failed${next}`, [clear]);
@@ -377,7 +377,7 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
       }
       // 사용자 승인/차단은 누니 ID 관리 콘솔에서 한다
       if (p === "/api/admin/users" && req.method === "GET") return json(res, { managedBy: "nuni-id", adminConsoleUrl: `${nuni.cfg.issuer}/admin/users`, users: [] }), true;
-      if (p === "/api/admin/users/status" && req.method === "POST") return json(res, { ok: false, message: "사용자 권한은 누니 ID 관리 콘솔에서 바꿉니다." }, 410), true;
+      if (p === "/api/admin/users/status" && req.method === "POST") return json(res, { ok: false, message: "사용자 권한은 통합 관리 콘솔에서 바꿉니다." }, 410), true;
       if (p.startsWith("/auth/") || p.startsWith("/api/admin/")) return json(res, { ok: false, message: "not found" }, 404), true;
       return false;
     }
