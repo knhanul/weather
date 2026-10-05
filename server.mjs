@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as db from "./db.mjs";
+import { mapHourlyItem, mapDailyItem, withoutExtras } from "./kma-fields.mjs";
 import { createAuth, authConfigured } from "./auth.mjs";
 import { createPgStore, createJsonStore } from "./auth-store.mjs";
 
@@ -105,6 +106,7 @@ function seedIfEmpty() {
 
 async function upsert(rows) {
   if (db.usingPg()) return db.upsertHourly(rows);
+  rows = rows.map(withoutExtras);
   const all = loadJson(OBS_FILE, []);
   const idx = new Map(all.map((r, i) => [`${r.station_id}|${r.observation_datetime}`, i]));
   let inserted = 0;
@@ -184,27 +186,7 @@ async function listJobs() {
   return loadJson(JOB_FILE, []);
 }
 
-function mapHourlyItem(it, stationId) {
-  let tm = String(it.tm || "");
-  if (tm.length === 13) tm = `${tm}:00`;
-  if (tm.length === 16) tm = `${tm}:00`;
-  return {
-    provider: "KMA",
-    dataset: "ASOS_HOURLY",
-    station_id: String(it.stnId ?? stationId),
-    station_name: it.stnNm || stationId,
-    observation_datetime: tm,
-    timezone: "Asia/Seoul",
-    temperature: it.ta === "" || it.ta == null ? null : Number(it.ta),
-    precipitation: it.rn === "" || it.rn == null ? null : Number(it.rn),
-    humidity: it.hm === "" || it.hm == null ? null : Number(it.hm),
-    wind_speed: it.ws === "" || it.ws == null ? null : Number(it.ws),
-    wind_direction: it.wd === "" || it.wd == null ? null : Number(it.wd),
-    pressure: it.pa === "" || it.pa == null ? null : Number(it.pa),
-    quality_temperature: !it.taQcflg || it.taQcflg === "0" ? "NORMAL" : it.taQcflg === "1" ? "INVALID" : it.taQcflg === "9" ? "MISSING" : "SUSPECT",
-    source_kind: "OFFICIAL",
-  };
-}
+// mapHourlyItem / mapDailyItem: kma-fields.mjs (기상청 전체 항목 + raw 포함)
 
 function splitRange(from, to, hours = 24 * 7) {
   const chunks = [];
@@ -300,6 +282,7 @@ async function collectOfficial({ stationId = "108", from, to }) {
 
 async function upsertDaily(rows) {
   if (db.usingPg()) return db.upsertDaily(rows);
+  rows = rows.map(withoutExtras);
   const all = loadJson(DAILY_FILE, []);
   const idx = new Map(all.map((r, i) => [`${r.station_id}|${r.observation_date}`, i]));
   let inserted = 0;
@@ -399,17 +382,7 @@ async function collectDaily({ stationId = "108", from, to }) {
     } else {
       const items = parsed?.response?.body?.items?.item;
       const list = !items ? [] : Array.isArray(items) ? items : [items];
-      const mapped = list.map((it) => ({
-        station_id: String(it.stnId ?? stationId),
-        station_name: it.stnNm || stationId,
-        observation_date: String(it.tm || "").slice(0, 10),
-        avg_temperature: it.avgTa === "" || it.avgTa == null ? null : Number(it.avgTa),
-        min_temperature: it.minTa === "" || it.minTa == null ? null : Number(it.minTa),
-        max_temperature: it.maxTa === "" || it.maxTa == null ? null : Number(it.maxTa),
-        precipitation: it.sumRn === "" || it.sumRn == null ? null : Number(it.sumRn),
-        avg_humidity: it.avgRhm === "" || it.avgRhm == null ? null : Number(it.avgRhm),
-        source_kind: "OFFICIAL",
-      }));
+      const mapped = list.map((it) => mapDailyItem(it, stationId));
       const u = await upsertDaily(mapped);
       job.status = "COMPLETED";
       job.received = mapped.length;
