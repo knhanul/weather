@@ -333,6 +333,55 @@
       .ch-range { flex:1 1 100%; flex-wrap:nowrap; }
       .ch-range input { flex:1 1 0; width:0; max-width:none; padding:0 6px; }
     }
+    /* 다운로드 화면 스타일 */
+    .dl-quick-ranges { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+    .dl-quick-ranges span { font-size:12px; color:var(--muted); font-weight:600; }
+    .dl-chip-btn { height:28px; padding:0 10px; border-radius:999px; font-size:12px; font-weight:500; background:var(--soft); color:var(--pri-dark); border:1px solid var(--line); cursor:pointer; transition:background .15s; }
+    .dl-chip-btn:hover:not(:disabled) { background:var(--soft-2); }
+    .dl-layout-row { display:flex; flex-wrap:wrap; gap:10px 14px; align-items:flex-end; }
+    .dl-layout-row select { height:38px; min-width:200px; }
+    .dl-layout-row input[type="text"] { height:38px; min-width:180px; flex:1; max-width:280px; }
+    .dl-layout-row button { height:38px; padding:0 14px; font-size:13px; }
+    .dl-groups-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:12px; margin-top:12px; }
+    .dl-group-card { background:#fcfdff; border:1px solid var(--line); border-radius:10px; padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
+    .dl-group-title { font-size:13.5px; font-weight:700; color:var(--fg); display:flex; align-items:center; gap:6px; border-bottom:1px solid var(--line); padding-bottom:6px; margin:0; }
+    .dl-group-items { display:grid; gap:6px; }
+    .dl-field-label { display:flex; align-items:flex-start; gap:8px; font-size:13px; cursor:pointer; padding:5px 7px; border-radius:6px; transition:background .1s; }
+    .dl-field-label:hover { background:var(--soft); }
+    .dl-field-label.is-req { cursor:default; background:#f4f8fe; }
+    .dl-field-label input[type="checkbox"] { width:17px; height:17px; margin-top:2px; flex:none; accent-color:var(--pri); cursor:pointer; }
+    .dl-field-label input[type="checkbox"]:disabled { cursor:default; opacity:.85; }
+    .dl-field-info { flex:1; min-width:0; }
+    .dl-field-top { display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; }
+    .dl-field-name { font-weight:600; color:var(--fg); }
+    .dl-field-unit { font-size:11px; color:var(--muted); font-weight:500; }
+    .dl-field-col { font-size:11px; color:#7888a2; font-family:monospace; }
+    .dl-field-desc { font-size:11.5px; color:var(--muted); line-height:1.4; margin-top:2px; }
+    .badge.req { background:#e8f3ff; color:var(--pri-dark); font-weight:700; font-size:10.5px; padding:1px 6px; border-radius:4px; }
+    .badge.off { background:#f1f5f9; color:#94a3b8; font-size:10.5px; padding:1px 6px; border-radius:4px; }
+    .dl-order-wrap { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; min-height:44px; padding:8px; border:1px dashed var(--line); border-radius:10px; background:#fbfdff; align-items:center; }
+    .dl-order-chip { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; background:#fff; border:1px solid #d3deee; border-radius:8px; font-size:12.5px; font-weight:600; cursor:grab; user-select:none; transition:box-shadow .15s, border-color .15s, transform .1s; }
+    .dl-order-chip:hover { border-color:var(--pri); box-shadow:var(--shadow-sm); }
+    .dl-order-chip.dragging { opacity:.35; }
+    .dl-order-chip.drag-over { border:2px dashed var(--pri); background:var(--soft); }
+    .dl-order-idx { font-size:11px; font-weight:700; background:var(--soft); color:var(--pri-dark); border-radius:4px; padding:1px 6px; }
+    .dl-order-btns { display:inline-flex; gap:2px; margin-left:3px; }
+    .dl-order-btn { width:22px; height:22px; padding:0; display:inline-grid; place-items:center; border:1px solid #d8e2ef; background:var(--surface); border-radius:4px; color:var(--fg); font-size:10px; cursor:pointer; }
+    .dl-order-btn:hover:not(:disabled) { background:var(--soft); color:var(--pri-dark); border-color:var(--pri); }
+    .dl-order-btn:disabled { opacity:.3; cursor:not-allowed; }
+    .dl-order-del { width:20px; height:20px; padding:0; display:inline-grid; place-items:center; border:none; background:transparent; color:#94a3b8; font-size:13px; font-weight:700; cursor:pointer; border-radius:4px; }
+    .dl-order-del:hover { background:var(--bad-bg); color:var(--bad); }
+    .dl-actions-bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-top:8px; }
+    .dl-download-btn { height:44px; padding:0 22px; font-size:15px; font-weight:700; display:inline-flex; align-items:center; gap:8px; border-radius:10px; background:var(--pri); color:#fff; box-shadow:0 4px 12px rgba(2,110,248,.35); cursor:pointer; }
+    .dl-download-btn:hover:not(:disabled) { background:var(--pri-dark); box-shadow:0 6px 16px rgba(2,110,248,.45); }
+    .dl-download-btn:disabled { opacity:.5; cursor:not-allowed; box-shadow:none; }
+    .dl-preview-table-wrap { overflow-x:auto; margin-top:12px; border:1px solid var(--line); border-radius:10px; background:#fff; max-height:480px; }
+    .dl-preview-table th { white-space:nowrap; font-size:12px; padding:8px 12px; background:#f4f8fe; border-bottom:1px solid var(--line); text-align:left; position:sticky; top:0; z-index:1; }
+    .dl-preview-table th .th-col { font-family:monospace; font-size:10.5px; color:var(--muted); font-weight:400; display:block; }
+    .dl-preview-table td { white-space:nowrap; font-size:12.5px; padding:7px 12px; border-bottom:1px solid #edf2f9; font-variant-numeric:tabular-nums; }
+    .null-val { color:#94a3b8; font-family:monospace; font-weight:500; font-size:12px; }
+    .col-count-badge { display:inline-flex; align-items:center; height:26px; padding:0 10px; background:var(--soft); color:var(--pri-dark); font-size:12px; font-weight:700; border-radius:999px; }
+    .sm-btn { height:30px; padding:0 10px; font-size:12px; }
   </style>
 </head>
 <body>
@@ -435,13 +484,136 @@
           </div>
         </section>
         <section class="page" id="download">
+          <!-- 1. 조회 범위 설정 카드 -->
           <div class="card">
-            <div class="row">
-              <div><label>종류</label><select id="xKind"><option value="hourly">시간자료</option><option value="daily">일자료</option></select></div>
-              <div><label>지점</label><select id="xStation"></select></div>
-              <div><label>시작</label><input id="xFrom" type="datetime-local" step="3600" /></div>
-              <div><label>종료</label><input id="xTo" type="datetime-local" step="3600" /></div>
-              <button id="xGo">CSV 받기</button>
+            <div class="card-head">
+              <h2>조회 범위 설정</h2>
+              <span class="badge" id="dlStorageBadge" style="background:var(--soft);color:var(--pri-dark);font-size:12px;font-weight:600;">DB 확인 중…</span>
+            </div>
+            <p class="muted" style="margin-top:2px;">기상청 공식 ASOS 관측 DB(시간별 또는 일별)를 직접 조회해 원하는 컬럼 구성으로 CSV를 내려받습니다. 결측값(미관측)은 0이 아닌 NULL 그대로 보존됩니다.</p>
+            <div class="row" style="align-items:flex-end;">
+              <div style="min-width:160px;">
+                <label for="xKind">자료 종류</label>
+                <select id="xKind">
+                  <option value="hourly">시간별 관측 (ASOS 시간)</option>
+                  <option value="daily">일별 관측 (ASOS 일)</option>
+                </select>
+              </div>
+              <div style="min-width:180px;">
+                <label for="xStation">관측지점</label>
+                <select id="xStation"></select>
+              </div>
+              <!-- 시간별 날짜/시각 (datetime-local, 1시간 단위) -->
+              <div id="xHourlyDates" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+                <div>
+                  <label for="xFrom">시작 일시 (시간)</label>
+                  <input id="xFrom" type="datetime-local" step="3600" />
+                </div>
+                <div>
+                  <label for="xTo">종료 일시 (시간)</label>
+                  <input id="xTo" type="datetime-local" step="3600" />
+                </div>
+              </div>
+              <!-- 일별 날짜 (date, 임의 시각 없는 순수 일자 기준) -->
+              <div id="xDailyDates" style="display:none; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+                <div>
+                  <label for="xFromDaily">시작 일자</label>
+                  <input id="xFromDaily" type="date" />
+                </div>
+                <div>
+                  <label for="xToDaily">종료 일자</label>
+                  <input id="xToDaily" type="date" />
+                </div>
+              </div>
+            </div>
+            <!-- 빠른 기간 선택 버튼 바 -->
+            <div class="dl-quick-ranges" style="margin-top:12px;">
+              <span>빠른 기간:</span>
+              <button type="button" class="dl-chip-btn" data-hours="24">24시간</button>
+              <button type="button" class="dl-chip-btn" data-hours="72">3일</button>
+              <button type="button" class="dl-chip-btn" data-hours="168">7일</button>
+              <button type="button" class="dl-chip-btn" data-hours="720">30일</button>
+              <button type="button" class="dl-chip-btn" data-days="today">오늘</button>
+              <button type="button" class="dl-chip-btn" data-days="thismonth">이번 달</button>
+              <button type="button" class="dl-chip-btn" data-days="365">1년</button>
+            </div>
+          </div>
+
+          <!-- 2. 레이아웃 저장·불러오기 카드 -->
+          <div class="card">
+            <div class="card-head">
+              <h2>레이아웃 구성 관리</h2>
+              <span class="muted" style="font-size:12px;">선택한 자료 종류와 컬럼·순서를 브라우저에 저장</span>
+            </div>
+            <p class="muted" style="margin-top:2px;">자주 쓰는 컬럼 조합과 순서를 이름 붙여 저장하고 다시 불러올 수 있습니다. 날짜와 지점 같은 매번 바뀌는 조회 조건은 레이아웃과 분리되어 유지됩니다.</p>
+            <div class="dl-layout-row" style="margin-top:8px;">
+              <div>
+                <label for="xLayoutSelect" style="display:block; font-size:12px; margin-bottom:4px; font-weight:600;">저장된 레이아웃 / 프리셋</label>
+                <select id="xLayoutSelect"></select>
+              </div>
+              <div>
+                <label for="xLayoutName" style="display:block; font-size:12px; margin-bottom:4px; font-weight:600;">레이아웃 이름</label>
+                <input id="xLayoutName" type="text" placeholder="예: 기온·강수 분석용" maxlength="30" />
+              </div>
+              <button type="button" class="sec" id="xLayoutSave">새 구성으로 저장</button>
+              <button type="button" class="sec" id="xLayoutDelete" disabled title="기본 프리셋은 삭제할 수 없습니다">삭제</button>
+              <button type="button" class="sec" id="xLayoutReset">기본값 복원</button>
+            </div>
+            <p id="xLayoutMsg" class="muted" style="font-size:12px; margin-top:6px; margin-bottom:0;"></p>
+          </div>
+
+          <!-- 3. 컬럼 선택 카드 -->
+          <div class="card">
+            <div class="card-head" style="flex-wrap:wrap; gap:10px;">
+              <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <h2 style="margin:0;">다운로드 컬럼 선택</h2>
+                <span id="xColCounter" class="col-count-badge">선택됨 0개 / 전체 0개</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <button type="button" class="sec sm-btn" id="xBtnDefault">기본 구성</button>
+                <button type="button" class="sec sm-btn" id="xBtnAll">전체 선택</button>
+                <button type="button" class="sec sm-btn" id="xBtnClear">선택 초기화</button>
+                <input id="xColFilter" type="text" placeholder="컬럼명·한글 검색…" style="height:30px; font-size:12px; width:150px; padding:0 8px; border:1px solid var(--line); border-radius:6px;" />
+              </div>
+            </div>
+            <p class="muted" style="margin-top:4px;">
+              DB에 실제 존재하는 필드만 선택할 수 있습니다. <b>관측일시/일자</b>와 <b>지점번호</b>는 관측값 식별을 위한 필수 컬럼입니다.
+              <br>• <b>신적설</b>: 새로 쌓인 눈(일정 시간 동안 새로 내린 눈) / <b>적설</b>: 관측 지표면에 이미 쌓여 있는 눈의 깊이
+            </p>
+            <div id="xColGroups" class="dl-groups-grid"></div>
+          </div>
+
+          <!-- 4. 결과 CSV 컬럼 순서 카드 -->
+          <div class="card">
+            <div class="card-head">
+              <h2>CSV 출력 순서 조정</h2>
+              <span class="muted" style="font-size:12px;">마우스 드래그 또는 [▲][▼] 버튼으로 순서 이동</span>
+            </div>
+            <p class="muted" style="margin-top:2px;">다운로드되는 CSV 파일의 헤더 및 데이터 열 순서입니다. 키보드로도 [▲]/[▼]를 눌러 좌우 순서를 자유롭게 조정할 수 있습니다.</p>
+            <div id="xOrderWrap" class="dl-order-wrap" role="list" aria-label="선택된 컬럼 순서 목록"></div>
+          </div>
+
+          <!-- 5. 미리보기 및 다운로드 카드 -->
+          <div class="card">
+            <div class="card-head" style="flex-wrap:wrap; gap:10px;">
+              <div>
+                <h2 style="margin:0;">데이터 미리보기 및 다운로드</h2>
+                <p class="muted" id="xPreviewMeta" style="margin:2px 0 0; font-size:13px;">조회 중…</p>
+              </div>
+              <div class="dl-actions-bar">
+                <button type="button" id="xDownloadBtn" class="dl-download-btn">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  선택한 컬럼으로 CSV 다운로드
+                </button>
+                <button id="xGo" style="display:none;" aria-hidden="true"></button>
+              </div>
+            </div>
+            <div id="xAlertBox" role="alert" hidden style="margin-top:8px;"></div>
+            <div class="dl-preview-table-wrap">
+              <table class="dl-preview-table">
+                <thead id="xPreviewThead"></thead>
+                <tbody id="xPreviewTbody"></tbody>
+              </table>
             </div>
           </div>
         </section>
@@ -563,6 +735,8 @@
       $("dTo").value = d.latestOfficialHour.slice(0,10);
       $("xFrom").value = $("hFrom").value;
       $("xTo").value = $("hTo").value;
+      if ($("xFromDaily")) $("xFromDaily").value = $("dFrom").value;
+      if ($("xToDaily")) $("xToDaily").value = $("dTo").value;
       $("pStatus").textContent = `저장 ${d.storage||"json"} · 키 ${d.keyRegistered ? "등록됨 " + (d.keyHint||"") : "미등록"} · 공식 최신 ${d.latestOfficialHour}`;
       refreshCollectForm();
     }
@@ -1784,6 +1958,7 @@
       if (name === "users") loadUsers();
       if (name === "hourly") queryHourly();
       if (name === "daily") queryDaily();
+      if (name === "download") initDownload();
       if (name === "jobs") loadJobs();
       if (name === "collect") loadCollectJobs();
       if (name === "stations") loadStations();
@@ -1825,10 +2000,659 @@
     $("hPrev").onclick = () => { hPage = Math.max(1, hPage - 1); queryHourly(); };
     $("hNext").onclick = () => { hPage = Math.min(window.__hPages || 1, hPage + 1); queryHourly(); };
     $("dQuery").onclick = queryDaily;
-    $("xGo").onclick = () => {
-      const q = new URLSearchParams({ kind: $("xKind").value, stationId: $("xStation").value, from: dtVal("xFrom"), to: dtVal("xTo") });
-      location.href = "/api/export?" + q;
+    // ---------- 기상 자료 다운로드 (개선) ----------
+    const DL_STORAGE_KEY = "nuni_weather_export_layouts";
+    const dlState = {
+      initialized: false,
+      kind: "hourly",
+      catalogs: null,
+      selectedKeys: new Set(),
+      orderedKeys: [],
+      layouts: {},
+      currentLayoutId: "preset:default",
+      draggedIndex: null,
+      previewDebounce: null,
+      filterText: ""
     };
+
+    function loadCustomLayouts() {
+      try {
+        const raw = localStorage.getItem(DL_STORAGE_KEY);
+        if (raw) dlState.layouts = JSON.parse(raw) || {};
+      } catch (e) {
+        dlState.layouts = {};
+      }
+    }
+
+    function saveCustomLayouts() {
+      try {
+        localStorage.setItem(DL_STORAGE_KEY, JSON.stringify(dlState.layouts));
+      } catch (e) {
+        console.error("Failed to save layout to localStorage", e);
+      }
+    }
+
+    async function initDownload() {
+      if (!dlState.catalogs) {
+        try {
+          const res = await fetch("/api/export/fields");
+          if (res.ok) {
+            dlState.catalogs = await res.json();
+            const badge = $("dlStorageBadge");
+            if (badge) {
+              badge.textContent = dlState.catalogs.storage === "pg" ? "PostgreSQL 연결됨" : "로컬 JSON 파일 저장소";
+            }
+          }
+        } catch (e) {
+          console.error("Failed to load export fields", e);
+        }
+      }
+
+      loadCustomLayouts();
+
+      if ($("xStation") && $("xStation").options.length === 0 && dashCache) {
+        fillStations($("xStation"));
+      }
+
+      const latest = dashCache?.latestOfficialHour;
+      if (latest) {
+        if (!$("xFrom").value) $("xFrom").value = toPicker(latest.slice(0, 10) + " 00:00:00");
+        if (!$("xTo").value) $("xTo").value = toPicker(latest);
+        if ($("xFromDaily") && !$("xFromDaily").value) $("xFromDaily").value = latest.slice(0, 10);
+        if ($("xToDaily") && !$("xToDaily").value) $("xToDaily").value = latest.slice(0, 10);
+      }
+
+      if (!dlState.initialized) {
+        dlState.initialized = true;
+        setupDownloadEvents();
+      }
+
+      if (dlState.orderedKeys.length === 0) {
+        applyLayout("preset:default");
+      } else {
+        populateLayoutSelect();
+        renderColGroups();
+        renderOrderChips();
+        updateColCounter();
+        triggerPreview();
+      }
+    }
+
+    function getCatalogForCurrentKind() {
+      if (!dlState.catalogs) return { catalog: [], defaultColumns: [], presets: {} };
+      return dlState.catalogs[dlState.kind] || { catalog: [], defaultColumns: [], presets: {} };
+    }
+
+    function populateLayoutSelect() {
+      const sel = $("xLayoutSelect");
+      if (!sel) return;
+      const cat = getCatalogForCurrentKind();
+      const presets = cat.presets || {};
+      let html = `<optgroup label="기본 프리셋">`;
+      for (const [id, p] of Object.entries(presets)) {
+        html += `<option value="preset:${id}">${esc(p.name)}</option>`;
+      }
+      html += `</optgroup>`;
+
+      const customKeys = Object.keys(dlState.layouts).filter((k) => dlState.layouts[k]?.kind === dlState.kind);
+      if (customKeys.length > 0) {
+        html += `<optgroup label="내 저장 레이아웃">`;
+        for (const k of customKeys) {
+          html += `<option value="custom:${k}">${esc(dlState.layouts[k].name)}</option>`;
+        }
+        html += `</optgroup>`;
+      }
+      html += `<option value="custom_current">(사용자 지정 구성)</option>`;
+      sel.innerHTML = html;
+      sel.value = dlState.currentLayoutId;
+
+      const delBtn = $("xLayoutDelete");
+      if (delBtn) {
+        delBtn.disabled = !dlState.currentLayoutId.startsWith("custom:");
+      }
+    }
+
+    function applyLayout(layoutId) {
+      dlState.currentLayoutId = layoutId;
+      const cat = getCatalogForCurrentKind();
+      let cols = [];
+
+      if (layoutId.startsWith("preset:")) {
+        const pid = layoutId.slice(7);
+        cols = cat.presets?.[pid]?.columns || cat.defaultColumns;
+      } else if (layoutId.startsWith("custom:")) {
+        const cid = layoutId.slice(7);
+        cols = dlState.layouts[cid]?.columns || cat.defaultColumns;
+      } else if (layoutId === "default" || layoutId === "preset:default") {
+        cols = cat.defaultColumns;
+        dlState.currentLayoutId = "preset:default";
+      }
+
+      const validKeys = new Set(cat.catalog.map((f) => f.key));
+      const requiredKeys = cat.catalog.filter((f) => f.required).map((f) => f.key);
+      const filtered = (cols || []).filter((c) => validKeys.has(c));
+      for (const rk of requiredKeys) {
+        if (!filtered.includes(rk)) filtered.unshift(rk);
+      }
+
+      dlState.orderedKeys = [...filtered];
+      dlState.selectedKeys = new Set(filtered);
+
+      populateLayoutSelect();
+      renderColGroups();
+      renderOrderChips();
+      updateColCounter();
+      triggerPreview();
+    }
+
+    function renderColGroups() {
+      const container = $("xColGroups");
+      if (!container) return;
+      const cat = getCatalogForCurrentKind();
+      const fields = cat.catalog || [];
+
+      const groups = new Map();
+      const filterLower = (dlState.filterText || "").trim().toLowerCase();
+
+      fields.forEach((f) => {
+        if (filterLower) {
+          const match = f.key.toLowerCase().includes(filterLower) ||
+                        (f.name_ko && f.name_ko.toLowerCase().includes(filterLower)) ||
+                        (f.desc && f.desc.toLowerCase().includes(filterLower)) ||
+                        (f.category && f.category.toLowerCase().includes(filterLower));
+          if (!match) return;
+        }
+        const grp = f.category || "기타";
+        if (!groups.has(grp)) groups.set(grp, []);
+        groups.get(grp).push(f);
+      });
+
+      if (groups.size === 0) {
+        container.innerHTML = `<p class="muted" style="grid-column:1/-1;padding:12px;text-align:center;">검색 조건에 맞는 컬럼이 없습니다.</p>`;
+        return;
+      }
+
+      let html = "";
+      for (const [grpName, grpFields] of groups.entries()) {
+        const selInGrp = grpFields.filter((f) => dlState.selectedKeys.has(f.key)).length;
+        html += `<div class="dl-group-card">`;
+        html += `  <div class="dl-group-title">`;
+        html += `    <span>${esc(grpName)}</span>`;
+        html += `    <span class="muted" style="font-size:11.5px;font-weight:400;margin-left:auto;">${selInGrp} / ${grpFields.length}</span>`;
+        html += `  </div>`;
+        html += `  <div class="dl-group-items">`;
+        for (const f of grpFields) {
+          const isChecked = dlState.selectedKeys.has(f.key);
+          const isReq = Boolean(f.required);
+          const avail = f.avail !== false;
+          html += `    <label class="dl-field-label${isReq ? " is-req" : ""}" title="${esc(f.desc || "")}">`;
+          html += `      <input type="checkbox" data-col="${esc(f.key)}"${isChecked ? " checked" : ""}${isReq ? " disabled" : ""} />`;
+          html += `      <div class="dl-field-info">`;
+          html += `        <div class="dl-field-top">`;
+          html += `          <span class="dl-field-name">${esc(f.name_ko)}</span>`;
+          if (f.unit) html += `  <span class="dl-field-unit">(${esc(f.unit)})</span>`;
+          html += `          <span class="dl-field-col">${esc(f.key)}</span>`;
+          if (isReq) html += `   <span class="badge req" title="레코드 식별을 위한 필수 컬럼">필수</span>`;
+          if (!avail) html += `  <span class="badge off" title="현재 DB 테이블에 컬럼이 미존재하여 NULL 처리됩니다">미보유</span>`;
+          html += `        </div>`;
+          if (f.desc) html += `    <div class="dl-field-desc">${esc(f.desc)}</div>`;
+          html += `      </div>`;
+          html += `    </label>`;
+        }
+        html += `  </div>`;
+        html += `</div>`;
+      }
+      container.innerHTML = html;
+    }
+
+    function renderOrderChips() {
+      const wrap = $("xOrderWrap");
+      if (!wrap) return;
+      const cat = getCatalogForCurrentKind();
+      const fieldMap = new Map((cat.catalog || []).map((f) => [f.key, f]));
+
+      if (dlState.orderedKeys.length === 0) {
+        wrap.innerHTML = `<p class="muted" style="padding:6px;font-size:13px;">선택된 컬럼이 없습니다. 위에서 필요한 컬럼을 선택해 주세요.</p>`;
+        return;
+      }
+
+      let html = "";
+      dlState.orderedKeys.forEach((key, idx) => {
+        const f = fieldMap.get(key) || { key, name_ko: key };
+        const isReq = Boolean(f.required);
+        const isFirst = idx === 0;
+        const isLast = idx === dlState.orderedKeys.length - 1;
+
+        html += `<div class="dl-order-chip" draggable="true" data-index="${idx}" data-key="${esc(key)}" tabindex="0" role="listitem">`;
+        html += `  <span class="dl-order-idx">${idx + 1}</span>`;
+        html += `  <span>${esc(f.name_ko || key)}</span>`;
+        html += `  <span style="font-family:monospace;font-size:11px;color:var(--muted);">${esc(key)}</span>`;
+        html += `  <div class="dl-order-btns">`;
+        html += `    <button type="button" class="dl-order-btn" data-act="up" data-index="${idx}" title="앞으로 이동"${isFirst ? " disabled" : ""} aria-label="${esc(f.name_ko)} 앞으로 이동">▲</button>`;
+        html += `    <button type="button" class="dl-order-btn" data-act="down" data-index="${idx}" title="뒤로 이동"${isLast ? " disabled" : ""} aria-label="${esc(f.name_ko)} 뒤로 이동">▼</button>`;
+        if (!isReq) {
+          html += `    <button type="button" class="dl-order-del" data-act="del" data-key="${esc(key)}" title="선택 해제" aria-label="${esc(f.name_ko)} 선택 해제">×</button>`;
+        }
+        html += `  </div>`;
+        html += `</div>`;
+      });
+      wrap.innerHTML = html;
+    }
+
+    function updateColCounter() {
+      const counter = $("xColCounter");
+      if (!counter) return;
+      const cat = getCatalogForCurrentKind();
+      const total = cat.catalog?.length || 0;
+      const sel = dlState.selectedKeys.size;
+      counter.textContent = `선택된 컬럼 ${sel}개 / 전체 ${total}개`;
+    }
+
+    function triggerPreview() {
+      clearTimeout(dlState.previewDebounce);
+      dlState.previewDebounce = setTimeout(fetchPreview, 250);
+    }
+
+    async function fetchPreview() {
+      const meta = $("xPreviewMeta");
+      const thead = $("xPreviewThead");
+      const tbody = $("xPreviewTbody");
+      const alertBox = $("xAlertBox");
+      const dlBtn = $("xDownloadBtn");
+
+      if (!meta || !thead || !tbody) return;
+
+      if (dlState.orderedKeys.length === 0) {
+        meta.textContent = "선택된 컬럼이 없습니다.";
+        thead.innerHTML = "";
+        tbody.innerHTML = "";
+        if (alertBox) {
+          alertBox.hidden = false;
+          alertBox.className = "bad g-err";
+          alertBox.textContent = "다운로드할 컬럼을 최소 1개 이상 선택해 주세요.";
+        }
+        if (dlBtn) dlBtn.disabled = true;
+        return;
+      }
+
+      if (dlBtn) dlBtn.disabled = false;
+      if (alertBox) alertBox.hidden = true;
+      meta.textContent = "데이터 불러오는 중…";
+
+      const stationId = $("xStation")?.value || "";
+      const isHourly = dlState.kind === "hourly";
+      const from = isHourly ? dtVal("xFrom") : ($("xFromDaily")?.value || "");
+      const to = isHourly ? dtVal("xTo") : ($("xToDaily")?.value || "");
+
+      const q = new URLSearchParams({
+        kind: dlState.kind,
+        stationId,
+        from,
+        to,
+        columns: dlState.orderedKeys.join(",")
+      });
+
+      try {
+        const res = await fetch("/api/export/preview?" + q);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          meta.textContent = "조회 실패";
+          if (alertBox) {
+            alertBox.hidden = false;
+            alertBox.className = "bad g-err";
+            alertBox.textContent = err.message || "미리보기를 불러오지 못했습니다.";
+          }
+          thead.innerHTML = "";
+          tbody.innerHTML = "";
+          return;
+        }
+
+        const data = await res.json();
+
+        if (data.totalCount === 0) {
+          meta.textContent = "조회 결과 0건";
+          if (alertBox) {
+            alertBox.hidden = false;
+            alertBox.className = "muted";
+            alertBox.style.padding = "10px";
+            alertBox.style.background = "var(--soft)";
+            alertBox.style.borderRadius = "8px";
+            alertBox.textContent = "지정된 조건(기간·관측소)에 일치하는 관측 자료가 DB에 없습니다.";
+          }
+          thead.innerHTML = "";
+          tbody.innerHTML = "";
+          return;
+        }
+
+        meta.textContent = `DB 결과 총 ${Number(data.totalCount).toLocaleString()}건 중 상위 ${data.previewCount}건 미리보기 (선택 컬럼 ${data.columns.length}개)`;
+
+        if (data.missingColumns && data.missingColumns.length > 0) {
+          if (alertBox) {
+            alertBox.hidden = false;
+            alertBox.className = "warn";
+            alertBox.style.padding = "8px 12px";
+            alertBox.style.background = "var(--warn-bg)";
+            alertBox.style.borderRadius = "8px";
+            alertBox.style.fontSize = "12.5px";
+            alertBox.textContent = `※ 컬럼 [${data.missingColumns.join(", ")}]은(는) 현재 DB 테이블에 존재하지 않아 NULL로 채워집니다.`;
+          }
+        }
+
+        let thHtml = "<tr>";
+        for (const col of data.columns) {
+          thHtml += `<th>`;
+          thHtml += `  <span>${esc(col.name_ko || col.key)}</span>`;
+          thHtml += `  <span class="th-col">${esc(col.key)}${col.unit ? ` (${esc(col.unit)})` : ""}</span>`;
+          thHtml += `</th>`;
+        }
+        thHtml += "</tr>";
+        thead.innerHTML = thHtml;
+
+        let tbHtml = "";
+        for (const row of data.rows) {
+          tbHtml += "<tr>";
+          for (const col of data.columns) {
+            const val = row[col.key];
+            if (val === null || val === undefined || val === "") {
+              tbHtml += `<td><span class="null-val" title="미관측/결측값 (NULL)">—</span></td>`;
+            } else {
+              tbHtml += `<td>${esc(val)}</td>`;
+            }
+          }
+          tbHtml += "</tr>";
+        }
+        tbody.innerHTML = tbHtml;
+      } catch (e) {
+        meta.textContent = "통신 오류";
+        if (alertBox) {
+          alertBox.hidden = false;
+          alertBox.className = "bad g-err";
+          alertBox.textContent = "서버와 통신하는 중 오류가 발생했습니다: " + e.message;
+        }
+      }
+    }
+
+    function setupDownloadEvents() {
+      $("xKind").onchange = () => {
+        dlState.kind = $("xKind").value;
+        const isHourly = dlState.kind === "hourly";
+        $("xHourlyDates").style.display = isHourly ? "flex" : "none";
+        $("xDailyDates").style.display = isHourly ? "none" : "flex";
+
+        applyLayout("preset:default");
+      };
+
+      $("xStation").onchange = triggerPreview;
+      $("xFrom").onchange = triggerPreview;
+      $("xTo").onchange = triggerPreview;
+      if ($("xFromDaily")) $("xFromDaily").onchange = triggerPreview;
+      if ($("xToDaily")) $("xToDaily").onchange = triggerPreview;
+
+      document.querySelectorAll(".dl-quick-ranges button[data-hours], .dl-quick-ranges button[data-days]").forEach((btn) => {
+        btn.onclick = () => {
+          const hours = btn.dataset.hours ? Number(btn.dataset.hours) : null;
+          const days = btn.dataset.days;
+          const isHourly = dlState.kind === "hourly";
+          const refMs = dashCache?.latestOfficialHour ? wallMs(dashCache.latestOfficialHour) : (Date.now() - 9 * HOUR);
+
+          if (hours) {
+            const startMs = refMs - hours * HOUR;
+            if (isHourly) {
+              $("xFrom").value = toPicker(fmtWall(startMs));
+              $("xTo").value = toPicker(fmtWall(refMs));
+            } else {
+              $("xFromDaily").value = fmtWall(startMs).slice(0, 10);
+              $("xToDaily").value = fmtWall(refMs).slice(0, 10);
+            }
+          } else if (days === "today") {
+            const todayStr = fmtWall(refMs).slice(0, 10);
+            if (isHourly) {
+              $("xFrom").value = toPicker(`${todayStr} 00:00:00`);
+              $("xTo").value = toPicker(fmtWall(refMs));
+            } else {
+              $("xFromDaily").value = todayStr;
+              $("xToDaily").value = todayStr;
+            }
+          } else if (days === "thismonth") {
+            const d = new Date(refMs);
+            const y = d.getUTCFullYear();
+            const m = p2(d.getUTCMonth() + 1);
+            const mStart = `${y}-${m}-01`;
+            const todayStr = fmtWall(refMs).slice(0, 10);
+            if (isHourly) {
+              $("xFrom").value = toPicker(`${mStart} 00:00:00`);
+              $("xTo").value = toPicker(fmtWall(refMs));
+            } else {
+              $("xFromDaily").value = mStart;
+              $("xToDaily").value = todayStr;
+            }
+          } else if (days === "365") {
+            const startMs = refMs - 365 * 24 * HOUR;
+            const dStart = fmtWall(startMs).slice(0, 10);
+            const dEnd = fmtWall(refMs).slice(0, 10);
+            if (isHourly) {
+              $("xFrom").value = toPicker(`${dStart} 00:00:00`);
+              $("xTo").value = toPicker(fmtWall(refMs));
+            } else {
+              $("xFromDaily").value = dStart;
+              $("xToDaily").value = dEnd;
+            }
+          }
+          triggerPreview();
+        };
+      });
+
+      $("xLayoutSelect").onchange = () => {
+        const val = $("xLayoutSelect").value;
+        if (val === "custom_current") return;
+        applyLayout(val);
+      };
+
+      $("xLayoutSave").onclick = () => {
+        const nameInput = $("xLayoutName");
+        const name = (nameInput?.value || "").trim();
+        const msg = $("xLayoutMsg");
+        if (!name) {
+          if (msg) { msg.style.color = "var(--bad)"; msg.textContent = "레이아웃 이름을 입력해 주세요."; }
+          nameInput?.focus();
+          return;
+        }
+        const id = "layout_" + Date.now();
+        dlState.layouts[id] = {
+          id,
+          name,
+          kind: dlState.kind,
+          columns: [...dlState.orderedKeys],
+          updatedAt: Date.now()
+        };
+        saveCustomLayouts();
+        nameInput.value = "";
+        applyLayout("custom:" + id);
+        if (msg) { msg.style.color = "var(--ok)"; msg.textContent = `'${name}' 레이아웃이 브라우저에 저장되었습니다.`; }
+      };
+
+      $("xLayoutDelete").onclick = () => {
+        const selVal = $("xLayoutSelect").value;
+        if (!selVal.startsWith("custom:")) return;
+        const cid = selVal.slice(7);
+        const name = dlState.layouts[cid]?.name || "레이아웃";
+        if (!confirm(`'${name}' 설정을 브라우저 저장소에서 삭제할까요? (기상 원본 DB는 영향받지 않습니다)`)) return;
+        delete dlState.layouts[cid];
+        saveCustomLayouts();
+        applyLayout("preset:default");
+        const msg = $("xLayoutMsg");
+        if (msg) { msg.style.color = "var(--muted)"; msg.textContent = `'${name}' 레이아웃을 삭제했습니다.`; }
+      };
+
+      $("xLayoutReset").onclick = () => {
+        applyLayout("preset:default");
+        const msg = $("xLayoutMsg");
+        if (msg) { msg.style.color = "var(--muted)"; msg.textContent = "기본 컬럼 구성으로 복원했습니다."; }
+      };
+
+      $("xBtnDefault").onclick = () => {
+        applyLayout("preset:default");
+      };
+
+      $("xBtnAll").onclick = () => {
+        const cat = getCatalogForCurrentKind();
+        const allKeys = cat.catalog.map((f) => f.key);
+        dlState.selectedKeys = new Set(allKeys);
+        dlState.orderedKeys = [...allKeys];
+        markCustomLayout();
+        renderColGroups();
+        renderOrderChips();
+        updateColCounter();
+        triggerPreview();
+      };
+
+      $("xBtnClear").onclick = () => {
+        const cat = getCatalogForCurrentKind();
+        const reqKeys = cat.catalog.filter((f) => f.required).map((f) => f.key);
+        dlState.selectedKeys = new Set(reqKeys);
+        dlState.orderedKeys = [...reqKeys];
+        markCustomLayout();
+        renderColGroups();
+        renderOrderChips();
+        updateColCounter();
+        triggerPreview();
+      };
+
+      $("xColFilter").oninput = (e) => {
+        dlState.filterText = e.target.value;
+        renderColGroups();
+      };
+
+      $("xColGroups").onchange = (e) => {
+        const cb = e.target.closest('input[type="checkbox"][data-col]');
+        if (!cb) return;
+        const col = cb.dataset.col;
+        if (cb.checked) {
+          dlState.selectedKeys.add(col);
+          if (!dlState.orderedKeys.includes(col)) dlState.orderedKeys.push(col);
+        } else {
+          dlState.selectedKeys.delete(col);
+          dlState.orderedKeys = dlState.orderedKeys.filter((k) => k !== col);
+        }
+        markCustomLayout();
+        renderOrderChips();
+        updateColCounter();
+        triggerPreview();
+      };
+
+      $("xOrderWrap").onclick = (e) => {
+        const btn = e.target.closest("button[data-act]");
+        if (!btn) return;
+        const act = btn.dataset.act;
+        const idx = Number(btn.dataset.index);
+
+        if (act === "up" && idx > 0) {
+          const tmp = dlState.orderedKeys[idx];
+          dlState.orderedKeys[idx] = dlState.orderedKeys[idx - 1];
+          dlState.orderedKeys[idx - 1] = tmp;
+          markCustomLayout();
+          renderOrderChips();
+          triggerPreview();
+        } else if (act === "down" && idx < dlState.orderedKeys.length - 1) {
+          const tmp = dlState.orderedKeys[idx];
+          dlState.orderedKeys[idx] = dlState.orderedKeys[idx + 1];
+          dlState.orderedKeys[idx + 1] = tmp;
+          markCustomLayout();
+          renderOrderChips();
+          triggerPreview();
+        } else if (act === "del") {
+          const key = btn.dataset.key;
+          dlState.selectedKeys.delete(key);
+          dlState.orderedKeys = dlState.orderedKeys.filter((k) => k !== key);
+          markCustomLayout();
+          renderColGroups();
+          renderOrderChips();
+          updateColCounter();
+          triggerPreview();
+        }
+      };
+
+      const orderWrap = $("xOrderWrap");
+      orderWrap.addEventListener("dragstart", (e) => {
+        const chip = e.target.closest(".dl-order-chip");
+        if (!chip) return;
+        dlState.draggedIndex = Number(chip.dataset.index);
+        chip.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+      });
+
+      orderWrap.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        const chip = e.target.closest(".dl-order-chip");
+        document.querySelectorAll(".dl-order-chip.drag-over").forEach((c) => {
+          if (c !== chip) c.classList.remove("drag-over");
+        });
+        if (chip) chip.classList.add("drag-over");
+      });
+
+      orderWrap.addEventListener("dragleave", (e) => {
+        const chip = e.target.closest(".dl-order-chip");
+        if (chip) chip.classList.remove("drag-over");
+      });
+
+      orderWrap.addEventListener("drop", (e) => {
+        e.preventDefault();
+        document.querySelectorAll(".dl-order-chip.drag-over").forEach((c) => c.classList.remove("drag-over"));
+        const targetChip = e.target.closest(".dl-order-chip");
+        if (!targetChip || dlState.draggedIndex === null) return;
+        const targetIdx = Number(targetChip.dataset.index);
+        if (targetIdx === dlState.draggedIndex) return;
+
+        const item = dlState.orderedKeys.splice(dlState.draggedIndex, 1)[0];
+        dlState.orderedKeys.splice(targetIdx, 0, item);
+        dlState.draggedIndex = null;
+        markCustomLayout();
+        renderOrderChips();
+        triggerPreview();
+      });
+
+      orderWrap.addEventListener("dragend", () => {
+        document.querySelectorAll(".dl-order-chip.dragging, .dl-order-chip.drag-over").forEach((c) => {
+          c.classList.remove("dragging", "drag-over");
+        });
+        dlState.draggedIndex = null;
+      });
+
+      function markCustomLayout() {
+        dlState.currentLayoutId = "custom_current";
+        $("xLayoutSelect").value = "custom_current";
+        $("xLayoutDelete").disabled = true;
+      }
+
+      $("xDownloadBtn").onclick = executeDownload;
+      $("xGo").onclick = executeDownload;
+    }
+
+    function executeDownload() {
+      if (dlState.orderedKeys.length === 0) {
+        alert("다운로드할 컬럼을 최소 1개 이상 선택해 주세요.");
+        return;
+      }
+      const stationId = $("xStation")?.value || "";
+      const isHourly = dlState.kind === "hourly";
+      const from = isHourly ? dtVal("xFrom") : ($("xFromDaily")?.value || "");
+      const to = isHourly ? dtVal("xTo") : ($("xToDaily")?.value || "");
+
+      if (!from || !to) {
+        alert("시작일과 종료일을 모두 선택해 주세요.");
+        return;
+      }
+
+      const q = new URLSearchParams({
+        kind: dlState.kind,
+        stationId,
+        from,
+        to,
+        columns: dlState.orderedKeys.join(",")
+      });
+      location.href = "/api/export?" + q;
+    }
     $("saveKey").onclick = async () => {
       const res = await fetch("/api/key", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ apiKey: $("apiKey").value }) });
       const d = await res.json();

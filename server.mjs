@@ -3,7 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as db from "./db.mjs";
-import { mapHourlyItem, mapDailyItem, withoutExtras } from "./kma-fields.mjs";
+import {
+  mapHourlyItem, mapDailyItem, withoutExtras,
+  HOURLY_DEFAULT_EXPORT, DAILY_DEFAULT_EXPORT,
+  EXPORT_PRESETS, getExportCatalog, validateExportColumns,
+  formatCsvRow,
+} from "./kma-fields.mjs";
 import { createAuth, authConfigured } from "./auth.mjs";
 import { createPgStore, createJsonStore } from "./auth-store.mjs";
 
@@ -163,6 +168,57 @@ async function queryHourlyAll({ stationId = "108", from, to }) {
   return loadJson(OBS_FILE, [])
     .filter((r) => r.station_id === stationId && r.observation_datetime >= start && r.observation_datetime <= end)
     .sort((a, b) => a.observation_datetime.localeCompare(b.observation_datetime));
+}
+
+async function getExportData({ kind = "hourly", stationId = "108", from, to, columns, limit = null }) {
+  const isDaily = kind === "daily";
+  const defaultCols = isDaily ? DAILY_DEFAULT_EXPORT : HOURLY_DEFAULT_EXPORT;
+  const cols = validateExportColumns(kind, columns || defaultCols);
+  const latest = latestOfficialHour();
+  const start = from || (isDaily ? addHours(latest, -24 * 7).slice(0, 10) : addHours(latest, -24));
+  const end = to || (isDaily ? latest.slice(0, 10) : latest);
+
+  if (db.usingPg()) {
+    const rows = isDaily
+      ? await db.queryDailyExportPg({ stationId, from: start.slice(0, 10), to: end.slice(0, 10), columns: cols, limit })
+      : await db.queryHourlyExportPg({ stationId, from: start, to: end, columns: cols, limit });
+    return { kind, stationId, from: start, to: end, columns: cols, rows };
+  }
+
+  // JSON 대체 모드 (로컬 개발)
+  if (isDaily) {
+    const rawDaily = await deriveDaily(stationId, start.slice(0, 10), end.slice(0, 10));
+    const all = rawDaily.map((r) => {
+      const row = {};
+      for (const c of cols) {
+        row[c] = r[c] ?? (r.extra && r.extra[c] !== undefined ? r.extra[c] : null);
+      }
+      return row;
+    });
+    return {
+      kind,
+      stationId,
+      from: start.slice(0, 10),
+      to: end.slice(0, 10),
+      columns: cols,
+      rows: limit && limit > 0 ? all.slice(0, limit) : all,
+      total: all.length,
+    };
+  }
+
+  const allHourly = loadJson(OBS_FILE, [])
+    .filter((r) => r.station_id === stationId && r.observation_datetime >= start && r.observation_datetime <= end)
+    .sort((a, b) => a.observation_datetime.localeCompare(b.observation_datetime));
+
+  const rows = (limit && limit > 0 ? allHourly.slice(0, limit) : allHourly).map((r) => {
+    const row = {};
+    for (const c of cols) {
+      row[c] = r[c] ?? (r.extra && r.extra[c] !== undefined ? r.extra[c] : null);
+    }
+    return row;
+  });
+
+  return { kind, stationId, from: start, to: end, columns: cols, rows, total: allHourly.length };
 }
 
 async function getKey() {
@@ -1033,21 +1089,94 @@ const server = http.createServer(async (req, res) => {
       else saveJson(STATION_FILE, list);
       return json(res, { ok: true, station: row });
     }
+    if (req.method === "GET" && url.pathname === "/api/export/fields") {
+      const full = db.usingPg() ? db.fullFieldsReady() : false;
+      const hourlyList = getExportCatalog("hourly", { fullFields: full });
+      const dailyList = getExportCatalog("daily", { fullFields: full });
+      return json(res, {
+        ok: true,
+        storage: db.usingPg() ? "postgresql" : "json",
+        fullFields: full,
+        hourly: {
+          catalog: hourlyList,
+          defaultColumns: HOURLY_DEFAULT_EXPORT,
+          presets: Object.fromEntries(EXPORT_PRESETS.filter((p) => p.kind === "hourly").map((p) => [p.id, p])),
+        },
+        daily: {
+          catalog: dailyList,
+          defaultColumns: DAILY_DEFAULT_EXPORT,
+          presets: Object.fromEntries(EXPORT_PRESETS.filter((p) => p.kind === "daily").map((p) => [p.id, p])),
+        },
+        defaultLayouts: {
+          hourly: HOURLY_DEFAULT_EXPORT,
+          daily: DAILY_DEFAULT_EXPORT,
+        },
+        presets: EXPORT_PRESETS,
+      });
+    }
+    if (req.method === "GET" && url.pathname === "/api/export/preview") {
+      const kind = url.searchParams.get("kind") || "hourly";
+      const stationId = url.searchParams.get("stationId") || "108";
+      const from = url.searchParams.get("from");
+      const to = url.searchParams.get("to");
+      const colParam = url.searchParams.get("columns");
+      const columns = colParam ? colParam.split(",").map((s) => s.trim()).filter(Boolean) : null;
+      const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") || 10)));
+      const data = await getExportData({ kind, stationId, from, to, columns, limit });
+      const full = db.usingPg() ? db.fullFieldsReady() : false;
+      const catalog = getExportCatalog(kind, { fullFields: full });
+      const metaMap = new Map(catalog.map((c) => [c.col, c]));
+      const missing = data.columns.filter((c) => {
+        const m = metaMap.get(c);
+        return m && !m.available;
+      });
+      let total = data.total;
+      if (total === undefined) {
+        if (db.usingPg()) {
+          total = kind === "daily"
+            ? (await getExportData({ kind, stationId, from, to, columns })).rows.length
+            : await db.countHourlyExportPg({ stationId, from: data.from, to: data.to });
+        } else {
+          total = data.rows.length;
+        }
+      }
+      const colMetaList = data.columns.map((c) => metaMap.get(c) || { col: c, key: c, label: c, name_ko: c, unit: "", desc: "", group: "기타", category: "기타" });
+      return json(res, {
+        ok: true,
+        kind: data.kind,
+        stationId: data.stationId,
+        from: data.from,
+        to: data.to,
+        columns: colMetaList,
+        columnMeta: colMetaList,
+        rows: data.rows,
+        total: total ?? 0,
+        totalCount: total ?? 0,
+        previewCount: data.rows.length,
+        missingColumns: missing,
+      });
+    }
     if (req.method === "GET" && url.pathname === "/api/export") {
       const kind = url.searchParams.get("kind") || "hourly";
       const stationId = url.searchParams.get("stationId") || "108";
-      const from = url.searchParams.get("from") || addHours(latestOfficialHour(), -24);
-      const to = url.searchParams.get("to") || latestOfficialHour();
-      const rows =
-        kind === "daily"
-          ? await deriveDaily(stationId, from.slice(0, 10), to.slice(0, 10))
-          : await queryHourlyAll({ stationId, from, to });
-      const headers =
-        kind === "daily"
-          ? ["observation_date", "station_id", "avg_temperature", "min_temperature", "max_temperature", "precipitation", "avg_humidity", "source_kind"]
-          : ["observation_datetime", "station_id", "station_name", "temperature", "precipitation", "humidity", "wind_speed", "source_kind"];
-      const lines = [headers.join(",")].concat(rows.map((r) => headers.map((h) => (r[h] == null ? "" : String(r[h]))).join(",")));
-      const csv = `\uFEFF# source=KMA timezone=Asia/Seoul station=${stationId} from=${from} to=${to}\n${lines.join("\n")}`;
+      const from = url.searchParams.get("from");
+      const to = url.searchParams.get("to");
+      const colParam = url.searchParams.get("columns");
+      const columns = colParam ? colParam.split(",").map((s) => s.trim()).filter(Boolean) : null;
+      const data = await getExportData({ kind, stationId, from, to, columns, limit: null });
+      if (!data.rows || data.rows.length === 0) {
+        res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+        return res.end(JSON.stringify({
+          ok: false,
+          error: "EMPTY_DATA",
+          message: `선택한 조건(지점 ${stationId}, 기간 ${data.from} ~ ${data.to})에 해당하는 관측 자료가 DB에 없습니다 (0건).`,
+        }));
+      }
+      const headers = data.columns;
+      const lines = [headers.join(",")].concat(
+        data.rows.map((r) => formatCsvRow(r, headers))
+      );
+      const csv = `\uFEFF# source=KMA timezone=Asia/Seoul station=${stationId} from=${data.from} to=${data.to} kind=${kind}\n${lines.join("\n")}`;
       res.writeHead(200, {
         "content-type": "text/csv; charset=utf-8",
         "content-disposition": `attachment; filename="weather-${kind}-${stationId}.csv"`,

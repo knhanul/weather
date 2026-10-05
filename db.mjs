@@ -1,7 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { HOURLY_EXTRA, DAILY_EXTRA, HOURLY_LEGACY_COLUMNS, DAILY_LEGACY_COLUMNS } from "./kma-fields.mjs";
+import {
+  HOURLY_EXTRA, DAILY_EXTRA, HOURLY_LEGACY_COLUMNS, DAILY_LEGACY_COLUMNS,
+  validateExportColumns, HOURLY_DEFAULT_EXPORT, DAILY_DEFAULT_EXPORT,
+} from "./kma-fields.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -192,6 +195,36 @@ export async function queryHourlyAllPg({ stationId, from, to }) {
   return rows.rows;
 }
 
+export async function countHourlyExportPg({ stationId, from, to }) {
+  if (!pool) throw new Error("pg not ready");
+  const r = await pool.query(
+    `SELECT count(*)::int AS n FROM observations_hourly
+     WHERE station_id = $1 AND observation_datetime >= $2 AND observation_datetime <= $3`,
+    [stationId, from, to],
+  );
+  return r.rows[0]?.n || 0;
+}
+
+export function buildHourlyExportSql({ stationId, from, to, columns, limit = null, isFull = false }) {
+  const cols = validateExportColumns("hourly", columns);
+  const selectParts = cols.map((c) => {
+    const exists = isFull || HOURLY_LEGACY_COLUMNS.includes(c);
+    return exists ? `"${c}"` : `NULL AS "${c}"`;
+  });
+  const limitClause = Number.isInteger(limit) && limit > 0 ? ` LIMIT ${limit}` : "";
+  const sql = `SELECT ${selectParts.join(", ")} FROM observations_hourly
+             WHERE station_id = $1 AND observation_datetime >= $2 AND observation_datetime <= $3
+             ORDER BY observation_datetime ASC${limitClause}`;
+  return { sql, params: [stationId, from, to], columns: cols };
+}
+
+export async function queryHourlyExportPg({ stationId, from, to, columns, limit = null }) {
+  if (!pool) throw new Error("pg not ready");
+  const { sql, params } = buildHourlyExportSql({ stationId, from, to, columns, limit, isFull: fullFields });
+  const r = await pool.query(sql, params);
+  return r.rows;
+}
+
 export async function countHourly() {
   const r = await pool.query("SELECT count(*)::int AS n FROM observations_hourly");
   return r.rows[0].n;
@@ -310,6 +343,72 @@ export async function upsertDaily(rows) {
 export async function listDailyOfficial(stationId) {
   const r = await pool.query(`SELECT ${DAILY_SELECT} FROM observations_daily WHERE station_id = $1`, [stationId]);
   return r.rows;
+}
+
+export function buildDailyExportSql({ stationId, from, to, columns, limit = null, isFull = false }) {
+  const cols = validateExportColumns("daily", columns);
+  const selectParts = cols.map((c) => {
+    const exists = isFull || DAILY_LEGACY_COLUMNS.includes(c);
+    return exists ? `"${c}"` : `NULL AS "${c}"`;
+  });
+  const limitClause = Number.isInteger(limit) && limit > 0 ? ` LIMIT ${limit}` : "";
+  const sql = `SELECT ${selectParts.join(", ")} FROM observations_daily
+                WHERE station_id = $1 AND observation_date >= $2 AND observation_date <= $3
+                ORDER BY observation_date ASC${limitClause}`;
+  return { sql, params: [stationId, from, to], columns: cols };
+}
+
+export async function queryDailyExportPg({ stationId, from, to, columns, limit = null }) {
+  if (!pool) throw new Error("pg not ready");
+  const { sql, params } = buildDailyExportSql({ stationId, from, to, columns, limit, isFull: fullFields });
+  const res = await pool.query(sql, params);
+
+  // observations_daily 에 있는 공식 자료를 우선 사용하고, 없는 날짜는 시간자료 집계로 보충
+  const hourlyRows = await hourlyForDaily(stationId, from, to);
+  if (!hourlyRows.length && res.rows.length) return res.rows;
+
+  const officialMap = new Map(res.rows.map((r) => [r.observation_date, r]));
+  const byDay = new Map();
+  for (const h of hourlyRows) {
+    const d = h.observation_datetime.slice(0, 10);
+    if (!byDay.has(d)) byDay.set(d, []);
+    byDay.get(d).push(h);
+  }
+
+  const out = [];
+  const allDates = new Set([...officialMap.keys(), ...byDay.keys()]);
+  const sortedDates = [...allDates].sort();
+  for (const date of sortedDates) {
+    if (officialMap.has(date)) {
+      out.push(officialMap.get(date));
+      continue;
+    }
+    const list = byDay.get(date) || [];
+    const temps = list.map((x) => x.temperature).filter((v) => v != null);
+    const rains = list.map((x) => x.precipitation).filter((v) => v != null);
+    const hums = list.map((x) => x.humidity).filter((v) => v != null);
+    const derived = {
+      station_id: stationId,
+      station_name: list[0]?.station_name || null,
+      observation_date: date,
+      avg_temperature: temps.length ? Math.round((temps.reduce((a, b) => a + b, 0) / temps.length) * 10) / 10 : null,
+      min_temperature: temps.length ? Math.min(...temps) : null,
+      max_temperature: temps.length ? Math.max(...temps) : null,
+      precipitation: rains.length ? Math.round(rains.reduce((a, b) => a + b, 0) * 10) / 10 : null,
+      avg_humidity: hums.length ? Math.round(hums.reduce((a, b) => a + b, 0) / hums.length) : null,
+      source_kind: "DERIVED",
+      note: "시간자료에서 집계",
+    };
+    const row = {};
+    for (const c of cols) {
+      row[c] = derived[c] ?? null;
+    }
+    out.push(row);
+  }
+  if (Number.isInteger(limit) && limit > 0) {
+    return out.slice(0, limit);
+  }
+  return out;
 }
 
 export async function countDaily() {
