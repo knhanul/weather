@@ -18,6 +18,9 @@ const SESSION_DAYS = 30;
 const STATE_MAX_AGE = 600; // 10분
 // 관리 화면에서만 쓰는 조회 API (공개 화면에는 필요 없음)
 const ADMIN_GET = new Set(["/api/gaps", "/api/jobs"]);
+// 기계(자동 수집, 예: n8n) 토큰으로 호출할 수 있는 경로 — 수집 실행 두 개뿐
+export const COLLECT_PATHS = new Set(["/api/collect", "/api/collect-daily"]);
+const COLLECT_TOKEN_MIN = 32;
 
 const b64u = (buf) => Buffer.from(buf).toString("base64url");
 function parseCookies(header) {
@@ -69,6 +72,27 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
     secretNote = " · SESSION_SECRET 없음/짧음: 임시 값 생성(재시작하면 로그인이 풀림)";
   }
   const hmac = (v) => crypto.createHmac("sha256", secret).update(v).digest("base64url");
+  // 자동 수집 토큰(COLLECT_TOKEN). 없거나 32자 미만이면 꺼짐. 기본은 리버스 프록시(Caddy)를 거치지 않은
+  // 내부 직접 요청(X-Forwarded-For/Forwarded/X-Real-IP 없음)에서만 받는다. COLLECT_TOKEN_ALLOW_PROXIED=1 이면 외부도 허용.
+  const collectToken = (env.COLLECT_TOKEN || "").trim();
+  const collectTokenOn = collectToken.length >= COLLECT_TOKEN_MIN;
+  const collectAllowProxied = env.COLLECT_TOKEN_ALLOW_PROXIED === "1";
+  const sha = (v) => crypto.createHash("sha256").update(String(v)).digest();
+  const collectTokenHash = collectTokenOn ? sha(collectToken) : null;
+  function presentedCollectToken(req) {
+    const h = req.headers || {};
+    const m = /^Bearer\s+(\S+)\s*$/i.exec(String(h.authorization || ""));
+    return m ? m[1] : String(h["x-collect-token"] || "").trim();
+  }
+  const viaProxy = (req) => Boolean(req.headers?.["x-forwarded-for"] || req.headers?.forwarded || req.headers?.["x-real-ip"]);
+  // 수집 경로 + 맞는 토큰이면 true, 토큰을 냈지만 틀리면 "bad", 해당 없으면 false
+  function collectTokenCheck(req, url) {
+    if (!collectTokenOn || req.method !== "POST" || !COLLECT_PATHS.has(url.pathname)) return false;
+    const t = presentedCollectToken(req);
+    if (!t) return false;
+    if (!collectAllowProxied && viaProxy(req)) return "bad";
+    return crypto.timingSafeEqual(sha(t), collectTokenHash) ? true : "bad";
+  }
   const hashSession = (token) => hmac(`session:${token}`);
 
   function cookie(name, value, { maxAge, path = "/" } = {}) {
@@ -141,6 +165,12 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
 
   // 요청 차단 여부. null이면 통과.
   async function guard(req, url) {
+    const machine = collectTokenCheck(req, url);
+    if (machine === true) {
+      req._collectToken = true;
+      return null;
+    }
+    if (machine === "bad") return { status: 401, body: { ok: false, auth: "token", message: "수집 토큰이 맞지 않습니다." } };
     if (locked) {
       const write = !["GET", "HEAD", "OPTIONS"].includes(req.method);
       if (write || ADMIN_GET.has(url.pathname) || url.pathname.startsWith("/api/admin/")) return { status: 503, body: { ok: false, auth: "login", message: "로그인 설정이 완료되지 않아 관리 기능을 잠갔습니다." } };
@@ -435,5 +465,6 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
     : locked
       ? "auth LOCKED (AUTH_PROVIDER=nuni-id 이지만 NUNI_ID_ISSUER/NUNI_ID_CLIENT_ID/NUNI_ID_CLIENT_SECRET 없음) · 관리 기능 잠김"
       : "auth disabled (KAKAO_REST_API_KEY/KAKAO_CLIENT_SECRET not set) · 관리 기능 공개 상태";
-  return { enabled, provider, guard, handle, isAdmin, sessionUser, cleanup, startupLine, roleOf };
+  const collectNote = collectTokenOn ? ` · collect token on${collectAllowProxied ? " (proxied allowed)" : " (internal only)"}` : "";
+  return { enabled, provider, guard, handle, isAdmin, sessionUser, cleanup, startupLine: startupLine + collectNote, roleOf };
 }

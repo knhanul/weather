@@ -373,3 +373,14 @@ sed -i '/^AUTH_PROVIDER=/d' /etc/weather-hub.env && systemctl restart weather-hu
 - 마이그레이션 `migrations/hub/0003_asos_all_fields.sql` 은 컬럼 추가만 합니다(삭제·변경 없음). 앱이 시작할 때 `hub_migrations` 에 기록하며 한 번만 적용하고, 실패해도 조회는 그대로 PostgreSQL 로 하고 저장만 예전 컬럼으로 합니다(로그 `hub migration failed`).
 - 마이그레이션 전에 저장된 행은 새 컬럼이 비어 있습니다. 관리자가 같은 기간을 다시 수집하면 채워집니다(기존 값도 같은 규칙으로 갱신).
 - ⚠️ 마이그레이션을 먼저 적용하고 **옛 버전 앱**을 띄우면 `/api/hourly` 에 새 컬럼이 `null` 로 붙어 나옵니다(옛 코드의 `SELECT *`). 새 버전 앱이 직접 적용하게 두세요.
+
+## 10) 자동 수집 토큰 (`COLLECT_TOKEN`, n8n 매일 수집용 · 2026-10-08)
+
+- `COLLECT_TOKEN`(32자 이상)을 환경파일에 넣으면 **`POST /api/collect`, `POST /api/collect-daily` 두 경로만** 로그인 세션 없이
+  `Authorization: Bearer <토큰>` 또는 `X-Collect-Token: <토큰>` 헤더로 실행할 수 있습니다(상수 시간 비교). 다른 관리 경로는 열리지 않습니다.
+- 기본은 **내부 직접 요청만** 허용: Caddy 를 거친 요청(X-Forwarded-For/Forwarded/X-Real-IP 가 있음)은 토큰이 맞아도 401.
+  외부에서도 받아야 하면 `COLLECT_TOKEN_ALLOW_PROXIED=1`.
+- 토큰 요청은 `stationId`, `from`, `to` 를 반드시 보내야 합니다(빠지면 400, 수집 안 함). 작업 기록의 trigger 는 `SCHEDULED`.
+- 없거나 32자 미만이면 꺼짐(기존과 동일). 관리자 화면(세션) 수집은 그대로입니다.
+- 시작 로그 끝에 `· collect token on (internal only)` 가 붙으면 켜진 것(값은 출력하지 않음).
+- OVH: n8n(같은 `web` 네트워크)이 `http://weather-hub:8080` 으로 매일 06:00 KST 호출 — knhanul/server-ops README 참고.

@@ -288,13 +288,13 @@ async function fetchHourlyPage({ key, stationId, from, to, pageNo }) {
   return { list, totalCount: Number(body.totalCount || list.length) };
 }
 
-async function collectOfficial({ stationId = "108", from, to }) {
+async function collectOfficial({ stationId = "108", from, to, trigger = "MANUAL" }) {
   const key = await getKey();
   const job = {
     id: Date.now(),
     dataset: "ASOS_HOURLY",
     status: "RUNNING",
-    trigger: "MANUAL",
+    trigger,
     station_id: stationId,
     from,
     to,
@@ -397,13 +397,13 @@ async function deriveDaily(stationId, fromDate, toDate) {
   return out;
 }
 
-async function collectDaily({ stationId = "108", from, to }) {
+async function collectDaily({ stationId = "108", from, to, trigger = "MANUAL" }) {
   const key = await getKey();
   const job = {
     id: Date.now(),
     dataset: "ASOS_DAILY",
     status: "RUNNING",
-    trigger: "MANUAL",
+    trigger,
     station_id: stationId,
     from,
     to,
@@ -1033,6 +1033,16 @@ function readBody(req) {
   });
 }
 
+// 자동 수집 토큰으로 온 요청은 지점·기간을 반드시 명시해야 한다(기본값으로 수집하지 않음). 관리자 화면 요청은 기존과 동일.
+const WALL_RE = /^\d{4}-\d{2}-\d{2}( \d{2}(:\d{2}(:\d{2})?)?)?$/;
+function machineCollectError(req, body) {
+  if (!req._collectToken) return null;
+  if (!/^\d{2,4}$/.test(String(body.stationId ?? ""))) return "stationId(숫자 지점번호)가 필요합니다.";
+  if (!WALL_RE.test(String(body.from ?? "")) || !WALL_RE.test(String(body.to ?? ""))) return "from/to (YYYY-MM-DD[ HH:00:00]) 가 필요합니다.";
+  if (String(body.from) > String(body.to)) return "from 이 to 보다 늦습니다.";
+  return null;
+}
+
 seedIfEmpty();
 
 // 카카오 로그인(관리 기능 보호). 서버 시작 시 DB 연결 뒤에 만든다. 키가 없으면 꺼진 상태(기존과 동일).
@@ -1210,9 +1220,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/collect-daily") {
       const body = await readBody(req);
+      const bad = machineCollectError(req, body);
+      if (bad) return json(res, { ok: false, message: bad }, 400);
       const latest = latestOfficialHour();
       const job = await collectDaily({
         stationId: body.stationId || "108",
+        trigger: req._collectToken ? "SCHEDULED" : "MANUAL",
         from: body.from || addHours(latest, -7 * 24),
         to: body.to || latest,
       });
@@ -1220,9 +1233,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/collect") {
       const body = await readBody(req);
+      const bad = machineCollectError(req, body);
+      if (bad) return json(res, { ok: false, message: bad }, 400);
       const latest = latestOfficialHour();
       const job = await collectOfficial({
         stationId: body.stationId || "108",
+        trigger: req._collectToken ? "SCHEDULED" : "MANUAL",
         from: body.from || addHours(latest, -24),
         to: body.to || latest,
       });
