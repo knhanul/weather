@@ -1313,7 +1313,7 @@
       const onMove = (e) => { lastEv = e; if (!raf) raf = requestAnimationFrame(() => { raf = 0; showTip(lastEv, svg, box); }); };
       svg.addEventListener("pointermove", onMove);
       svg.addEventListener("pointerdown", onMove);
-      svg.addEventListener("pointerleave", () => hideTip(box));
+      svg.addEventListener("pointerleave", (e) => { if (e.pointerType !== "touch") hideTip(box); }); // 터치는 다음 탭까지 툴팁 유지
     }
     const tipOf = (box) => (box === $("chart") ? $("chartTip") : box.querySelector(".tip"));
     function showTip(e, svg, box = $("chart")) {
@@ -3028,6 +3028,6 @@
     // 대시보드 자료가 늦거나 실패해도 다른 화면은 그대로 뜨게
     Promise.allSettled([loadMe(), loadDash()]).then(route);
   </script>
-  <script src="/stats.js?v=3"></script>
+  <script src="/stats.js?v=4"></script>
 </body>
 </html>

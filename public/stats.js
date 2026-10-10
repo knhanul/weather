@@ -391,7 +391,8 @@
     };
     svg.addEventListener("pointermove", move);
     svg.addEventListener("pointerdown", move);
-    svg.addEventListener("pointerleave", hide);
+    // 터치는 손을 떼면 pointerleave 가 바로 와서 툴팁이 사라진다 → 터치는 다음 탭까지 남겨 둔다
+    svg.addEventListener("pointerleave", (ev) => ev.pointerType !== "touch" && hide());
   }
   let rsT = null;
   window.addEventListener("resize", () => {
