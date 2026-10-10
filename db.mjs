@@ -381,9 +381,11 @@ export async function upsertDaily(rows) {
   return { inserted, updated };
 }
 
-export async function listDailyOfficial(stationId) {
+export async function listDailyOfficial(stationId, fromDate = null, toDate = null) {
   if (my) return my.listDailyOfficial(...arguments);
-  const r = await pool.query(`SELECT ${DAILY_SELECT} FROM observations_daily WHERE station_id = $1`, [stationId]);
+  const r = fromDate && toDate
+    ? await pool.query(`SELECT ${DAILY_SELECT} FROM observations_daily WHERE station_id = $1 AND observation_date BETWEEN $2 AND $3`, [stationId, fromDate, toDate])
+    : await pool.query(`SELECT ${DAILY_SELECT} FROM observations_daily WHERE station_id = $1`, [stationId]);
   return r.rows;
 }
 

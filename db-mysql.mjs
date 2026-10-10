@@ -603,7 +603,9 @@ export async function hourlyForDaily(stationId, fromDate, toDate) {
   );
 }
 
-export async function listDailyOfficial(stationId) {
+// fromDate/toDate(선택): 일자료 백필(1990~) 뒤 지점 전체를 읽으면 NAS 에서 9~15초 → 필요한 기간만
+export async function listDailyOfficial(stationId, fromDate = null, toDate = null) {
+  if (fromDate && toDate) return q(`SELECT ${DAILY_SELECT} FROM observations_daily WHERE station_id = ? AND observation_date BETWEEN ? AND ?`, [stationId, fromDate, toDate]);
   return q(`SELECT ${DAILY_SELECT} FROM observations_daily WHERE station_id = ?`, [stationId]);
 }
 

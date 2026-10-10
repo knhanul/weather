@@ -371,7 +371,8 @@ async function deriveDaily(stationId, fromDate, toDate) {
     if (!byDay.has(d)) byDay.set(d, []);
     byDay.get(d).push(r);
   }
-  const official = db.usingPg() ? await db.listDailyOfficial(stationId) : loadJson(DAILY_FILE, []);
+  // 시간자료가 있는 날(fromDate~toDate)만 공식 일자료를 찾으므로 그 기간만 읽는다(결과 같음)
+  const official = db.usingPg() ? await db.listDailyOfficial(stationId, fromDate, toDate) : loadJson(DAILY_FILE, []);
   const officialIdx = new Map(official.filter((x) => x.station_id === stationId).map((x) => [x.observation_date, x]));
   const out = [];
   for (const [date, list] of [...byDay.entries()].sort()) {
