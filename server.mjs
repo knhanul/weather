@@ -13,6 +13,8 @@ import {
 import { createAuth, authConfigured } from "./auth.mjs";
 import { createPgStore, createMysqlStore, createJsonStore } from "./auth-store.mjs";
 import { handleLayouts, createPgLayoutStore, createMysqlLayoutStore, createJsonLayoutStore } from "./layouts.mjs";
+import { createStatsData } from "./stats-data.mjs";
+import { createStatsApi } from "./stats-api.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(__dirname, "data");
@@ -339,6 +341,14 @@ async function collectOfficial({ stationId = "108", from, to, trigger = "MANUAL"
 }
 
 async function upsertDaily(rows) {
+  try {
+    return await upsertDailyStore(rows);
+  } finally {
+    // 날씨 통계가 오래된 일자료로 계산하지 않게 저장한 지점의 메모리 자료를 버린다(다음 요청이 다시 읽음)
+    statsData.invalidate([...new Set(rows.map((r) => String(r.station_id)))]);
+  }
+}
+async function upsertDailyStore(rows) {
   if (db.usingPg()) return db.upsertDaily(rows);
   rows = rows.map(withoutExtras);
   const all = loadJson(DAILY_FILE, []);
@@ -1034,6 +1044,17 @@ function machineCollectError(req, body) {
 
 seedIfEmpty();
 
+// 날씨 통계(/api/stats/*): 지점별 공식 일자료를 메모리에 두고 서버에서 집계(stats-engine.mjs). 저장(upsertDaily)하면 그 지점을 비운다.
+const statsData = createStatsData({
+  loadRows: async (id) =>
+    db.usingPg()
+      ? db.statsDailyRows(id)
+      : loadJson(DAILY_FILE, []).filter((r) => String(r.station_id) === String(id) && r.source_kind !== "DERIVED"),
+  ttlMs: Number(process.env.STATS_CACHE_MS) || 30 * 60 * 1000,
+  log: (line) => console.log(line),
+});
+const handleStats = createStatsApi({ statsData, stations, officialDate: () => latestOfficialHour().slice(0, 10), json });
+
 // 카카오 로그인(관리 기능 보호). 서버 시작 시 DB 연결 뒤에 만든다. 키가 없으면 꺼진 상태(기존과 동일).
 let auth = createAuth({ env: {} });
 let layoutStore = null;
@@ -1056,6 +1077,7 @@ const server = http.createServer(async (req, res) => {
     if (denied) return json(res, denied.body, denied.status);
     if (await auth.handle(req, res, url)) return;
     if (await handleLayouts(req, res, url, { store: layoutStore, ownerOf: (r) => auth.ownerOf(r), allowedKeys: layoutKeys, readBody, json })) return;
+    if (url.pathname.startsWith("/api/stats/") && (await handleStats(req, res, url))) return;
     if (req.method === "GET" && url.pathname === "/api/hourly") {
       return json(res, await queryHourly(Object.fromEntries(url.searchParams)));
     }
@@ -1311,6 +1333,12 @@ const ready = (async () => {
   }
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`weather-hub ${PORT} latest=${latestOfficialHour()} storage=${db.storageKind()}`);
+    // 날씨 통계 첫 요청이 기다리지 않게 사용 중인 지점의 일자료를 뒤에서 한 지점씩 읽어 둔다
+    if (process.env.STATS_WARM !== "0") {
+      (async () => {
+        for (const s of (await stations()).filter((x) => x.enabled)) await statsData.get(s.station_id).catch(() => {});
+      })().catch(() => {});
+    }
   });
 })();
 await ready;

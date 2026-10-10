@@ -311,6 +311,17 @@ export async function dailySeriesPg(stationId, fromDate, toDate) {
   return r.rows;
 }
 
+// 날씨 통계(stats-data.mjs): 지점 하나의 공식 일자료 전체(통계에 쓰는 항목만, 날짜순). 기본 키 범위 읽기 — NAS 에서 지점당 0.4~0.7초, 앱이 기억해 둔다.
+export async function statsDailyRows(stationId) {
+  if (my) return my.statsDailyRows(...arguments);
+  const r = await pool.query(
+    `SELECT observation_date::text AS observation_date, avg_temperature, max_temperature, min_temperature, precipitation, avg_humidity, avg_wind_speed
+     FROM observations_daily WHERE station_id = $1 AND source_kind = 'OFFICIAL' ORDER BY observation_date`,
+    [stationId],
+  );
+  return r.rows;
+}
+
 export async function seriesPg(stationId, from16, to16) {
   if (my) return my.seriesPg(...arguments);
   const r = await pool.query(

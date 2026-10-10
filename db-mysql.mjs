@@ -544,6 +544,15 @@ export async function dailySeriesPg(stationId, fromDate, toDate) {
   );
 }
 
+// 날씨 통계: 지점 하나의 공식 일자료 전체(통계용 항목만). 기본 키 (station_id, observation_date) 범위 읽기
+export async function statsDailyRows(stationId) {
+  return q(
+    `SELECT observation_date, avg_temperature, max_temperature, min_temperature, precipitation, avg_humidity, avg_wind_speed
+     FROM observations_daily WHERE station_id = ? AND source_kind = 'OFFICIAL' ORDER BY observation_date`,
+    [stationId],
+  );
+}
+
 export async function seriesPg(stationId, from16, to16) {
   const r = await q(
     `SELECT LEFT(observation_datetime,16) AS t, station_name, temperature, precipitation, humidity, wind_speed
