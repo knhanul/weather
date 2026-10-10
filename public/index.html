@@ -13,7 +13,7 @@
   <link rel="icon" href="/brand/favicon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
   <link rel="manifest" href="/brand/site.webmanifest" />
-  <script src="/chart-full.js?v=1"></script>
+  <script src="/chart-full.js?v=2"></script>
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="누니날씨" />
   <meta property="og:title" content="누니날씨 · nuni weather" />
@@ -503,7 +503,7 @@
     .col-count-badge { display:inline-flex; align-items:center; height:26px; padding:0 10px; background:var(--soft); color:var(--pri-dark); font-size:12px; font-weight:700; border-radius:999px; }
     .sm-btn { height:30px; padding:0 10px; font-size:12px; }
   </style>
-  <link rel="stylesheet" href="/chart-full.css?v=1" />
+  <link rel="stylesheet" href="/chart-full.css?v=2" />
 </head>
 <body>
   <div class="layout">
@@ -3028,6 +3028,6 @@
     // 대시보드 자료가 늦거나 실패해도 다른 화면은 그대로 뜨게
     Promise.allSettled([loadMe(), loadDash()]).then(route);
   </script>
-  <script src="/stats.js?v=4"></script>
+  <script src="/stats.js?v=5"></script>
 </body>
 </html>

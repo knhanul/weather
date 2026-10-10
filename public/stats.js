@@ -781,8 +781,23 @@
     out.innerHTML = `
       <h2 class="sx-q">${E(q)}<small>${E(r.fromYear)}~${E(r.toYear)}년 · 지표마다 모든 지점에 자료가 온전한 공통 연도의 평균 — 각 지점이 원래 얼마나 덥고 추운지(평균)와 1990년대 대비 변화를 따로 봅니다.</small></h2>
       <div class="sx-key">${key.join("")}</div>
-      <div class="sx-bars" role="img" aria-label="${E(q)} 지점별 막대">${blocks}</div>
+      <div class="sx-bars" role="img" aria-label="${E(q)} 지점별 막대">${blocks}${window.ChartFull ? window.ChartFull.button() : ""}</div>
       ${regionFoot(r, url, null)}`;
+    // 크게 보기: HTML 막대는 겹친 화면 폭에 맞춰 그대로 다시 배치(그림 확대 아님)
+    const bars = out.querySelector(".sx-bars");
+    if (window.ChartFull && bars) {
+      window.ChartFull.register(bars, {
+        hostClass: "cf-html",
+        title: () => q,
+        sub: () => `${r.fromYear}~${r.toYear}년 · 공통 연도 평균 · 오른쪽: 1990년대 대비`,
+        legend: () => null,
+        source: () => "자료: 기상청 ASOS 공식 일자료 · 시간대 Asia/Seoul",
+        render: (el) => {
+          el.textContent = "";
+          el.appendChild(bars.cloneNode(true));
+        },
+      });
+    }
   }
   function renderRegionMonthly(out, r, url) {
     const m = r.metric;
