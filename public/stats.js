@@ -260,7 +260,11 @@
       const small = h2 && h2.querySelector("small");
       window.ChartFull.register(host, {
         hostClass: "sx-chart",
-        title: () => (cfg.aria && mainTitle && !mainTitle.includes(cfg.aria) ? `${mainTitle} — ${cfg.aria}` : mainTitle || cfg.aria || "그래프"),
+        title: () => {
+          // 그래프 설명(aria)이 카드 제목을 이미 담고 있으면 남는 부분만 덧붙인다
+          const extra = !cfg.aria ? "" : mainTitle && cfg.aria.includes(mainTitle) ? cfg.aria.replace(mainTitle, "").trim() : cfg.aria;
+          return mainTitle ? `${mainTitle}${extra ? ` — ${extra}` : ""}` : extra || "그래프";
+        },
         sub: () => [badges, small ? small.textContent.trim() : "", cfg.unit ? `단위 ${cfg.unit}` : ""].filter(Boolean).join(" · "),
         legend: () => {
           const lg = host.nextElementSibling;

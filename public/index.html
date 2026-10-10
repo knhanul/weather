@@ -503,7 +503,7 @@
     .col-count-badge { display:inline-flex; align-items:center; height:26px; padding:0 10px; background:var(--soft); color:var(--pri-dark); font-size:12px; font-weight:700; border-radius:999px; }
     .sm-btn { height:30px; padding:0 10px; font-size:12px; }
   </style>
-  <link rel="stylesheet" href="/chart-full.css?v=2" />
+  <link rel="stylesheet" href="/chart-full.css?v=3" />
 </head>
 <body>
   <div class="layout">
@@ -1162,7 +1162,7 @@
     // 크게 보기(chart-full.js): 같은 그리기 함수를 겹친 화면 크기로 다시 부른다
     if (window.ChartFull) window.ChartFull.register($("chart"), {
       hostClass: "dchart",
-      title: () => `${$("chartTitle").textContent}${currentSeries ? ` · ${currentSeries.station_id} ${currentSeries.station_name || ""}` : ""}`,
+      title: () => $("chartTitle").textContent,
       sub: () => `${$("chartRange").textContent} · 단위 °C${currentSeries && (currentSeries.points || []).some((p) => p.precipitation > 0) ? " / mm" : ""}`,
       legend: () => { const l = $("chartLegend").cloneNode(true); l.removeAttribute("id"); return l; },
       source: () => "자료: 기상청 ASOS · 시간대 Asia/Seoul(KST)",
@@ -3028,6 +3028,6 @@
     // 대시보드 자료가 늦거나 실패해도 다른 화면은 그대로 뜨게
     Promise.allSettled([loadMe(), loadDash()]).then(route);
   </script>
-  <script src="/stats.js?v=5"></script>
+  <script src="/stats.js?v=6"></script>
 </body>
 </html>
