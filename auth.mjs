@@ -5,6 +5,7 @@
 // 꺼져 있으면 guard/handle은 아무것도 막지 않는다(기존과 동일). 토큰·인가 코드·시크릿·세션 id는 로그에 남기지 않는다.
 import crypto from "node:crypto";
 import { nuniConfig, nuniConfigured, createNuniClient, nuniRoleIsAdmin } from "./auth-nuni.mjs";
+import { isLayoutPath } from "./layouts.mjs";
 
 export const authProvider = (env = process.env) => (String(env.AUTH_PROVIDER || "").trim().toLowerCase() === "nuni-id" ? "nuni-id" : "kakao");
 // 이 서버에서 로그인 기능이 켜지는지 (저장소를 만들지 판단)
@@ -163,6 +164,21 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
     };
   }
 
+  // 로그인한 본인만(관리 권한 불필요) — 개인 설정(다운로드 레이아웃)용. 차단 계정은 거부.
+  async function requireUser(req) {
+    const user = await sessionUser(req);
+    if (!user) return { status: 401, body: { ok: false, auth: "login", message: "로그인이 필요합니다." } };
+    if (roleOf(user) === "blocked") return { status: 403, body: { ok: false, auth: "blocked", message: "사용이 차단된 계정입니다." } };
+    return null;
+  }
+  // 개인 설정 소유자 id (= app_users.kakao_id, 누니 ID 모드는 'nuni:<회원 ID>'). 로그인 안 했거나 차단이면 null.
+  async function ownerOf(req) {
+    if (!enabled) return null;
+    const user = await sessionUser(req);
+    if (!user || roleOf(user) === "blocked") return null;
+    return String(user.kakao_id);
+  }
+
   // 요청 차단 여부. null이면 통과.
   async function guard(req, url) {
     const machine = collectTokenCheck(req, url);
@@ -181,6 +197,7 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
     if (write) {
       if (!sameOrigin(req)) return { status: 403, body: { ok: false, auth: "csrf", message: "다른 사이트에서 보낸 요청은 처리하지 않습니다." } };
       if (url.pathname === "/auth/logout") return null;
+      if (isLayoutPath(url.pathname)) return requireUser(req);
       return requireAdmin(req);
     }
     if (ADMIN_GET.has(url.pathname) || url.pathname.startsWith("/api/admin/")) return requireAdmin(req);
@@ -466,5 +483,5 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
       ? "auth LOCKED (AUTH_PROVIDER=nuni-id 이지만 NUNI_ID_ISSUER/NUNI_ID_CLIENT_ID/NUNI_ID_CLIENT_SECRET 없음) · 관리 기능 잠김"
       : "auth disabled (KAKAO_REST_API_KEY/KAKAO_CLIENT_SECRET not set) · 관리 기능 공개 상태";
   const collectNote = collectTokenOn ? ` · collect token on${collectAllowProxied ? " (proxied allowed)" : " (internal only)"}` : "";
-  return { enabled, provider, guard, handle, isAdmin, sessionUser, cleanup, startupLine: startupLine + collectNote, roleOf };
+  return { enabled, provider, guard, handle, isAdmin, sessionUser, ownerOf, cleanup, startupLine: startupLine + collectNote, roleOf };
 }

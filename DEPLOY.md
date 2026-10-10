@@ -384,3 +384,17 @@ sed -i '/^AUTH_PROVIDER=/d' /etc/weather-hub.env && systemctl restart weather-hu
 - 없거나 32자 미만이면 꺼짐(기존과 동일). 관리자 화면(세션) 수집은 그대로입니다.
 - 시작 로그 끝에 `· collect token on (internal only)` 가 붙으면 켜진 것(값은 출력하지 않음).
 - OVH: n8n(같은 `web` 네트워크)이 `http://weather-hub:8080` 으로 매일 06:00 KST 호출 — knhanul/server-ops README 참고.
+
+## 11) 다운로드 레이아웃을 사용자별로 저장 · 자료수집 지점 변경 시 날짜 유지 (2026-10-10)
+
+- 새 테이블 `export_layouts` (`migrations/hub/0004_export_layouts.sql`, 추가만). 앱이 시작할 때 적용하고 `hub_migrations` 에 기록.
+  열: id, owner_id(= `app_users.kakao_id`, 누니 ID 모드 `nuni:<회원 ID>`), kind(hourly/daily), name, columns(jsonb), is_default(종류별 하나), 시각. 개인정보 없음.
+- API (로그인한 본인 것만; 다른 사람 id 는 404): `GET/POST /api/export/layouts`, `GET/PATCH/DELETE /api/export/layouts/<id>`,
+  `POST /api/export/layouts/<id>/default` (`{"isDefault":false}` 면 해제). 쓰기는 같은 사이트(Origin) + 로그인 필요(관리 권한은 필요 없음), 차단 계정 거부.
+  이름 30자, 컬럼은 다운로드 카탈로그에 있는 것만, 사용자당 50개.
+- 화면: 로그인 → "내 계정에 저장"(저장·덮어쓰기·이름 변경·기본 지정·삭제). 비로그인 → 기본 프리셋만(편집 버튼 숨김, 다운로드는 그대로).
+  로그인 기능이 꺼진 서버 → 예전처럼 브라우저(localStorage).
+- 예전 레이아웃: 서버에 공용으로 저장된 레이아웃은 없었고(프리셋은 코드에 있는 읽기 전용), 각 브라우저 localStorage 에만 있었다.
+  로그인한 상태로 다운로드 화면을 처음 열면 그 브라우저의 레이아웃을 내 계정으로 한 번 옮기고(같은 이름·종류·컬럼이면 건너뜀),
+  원본은 `nuni_weather_export_layouts_moved` 로 백업만 남긴다.
+- 자료수집: 지점을 바꿔도 시작·종료는 그대로. 기본 구간은 처음 열 때와 '기본값' 버튼에서만 채운다.

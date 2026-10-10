@@ -11,6 +11,7 @@ import {
 } from "./kma-fields.mjs";
 import { createAuth, authConfigured } from "./auth.mjs";
 import { createPgStore, createJsonStore } from "./auth-store.mjs";
+import { handleLayouts, createPgLayoutStore, createJsonLayoutStore } from "./layouts.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(__dirname, "data");
@@ -21,6 +22,7 @@ const JOB_FILE = path.join(DATA, "jobs.json");
 const DAILY_FILE = path.join(DATA, "daily.json");
 const STATION_FILE = path.join(DATA, "stations.json");
 const AUTH_FILE = path.join(DATA, "auth.json"); // 로컬 개발(DATABASE_URL 없음)에서만 사용
+const LAYOUT_FILE = path.join(DATA, "export-layouts.json"); // 로컬 개발(DATABASE_URL 없음)에서만 사용
 const PORT = Number(process.env.PORT || 8080);
 const KST_MS = 9 * 60 * 60 * 1000;
 
@@ -1047,6 +1049,8 @@ seedIfEmpty();
 
 // 카카오 로그인(관리 기능 보호). 서버 시작 시 DB 연결 뒤에 만든다. 키가 없으면 꺼진 상태(기존과 동일).
 let auth = createAuth({ env: {} });
+let layoutStore = null;
+const layoutKeys = (kind) => new Set(getExportCatalog(kind, { fullFields: true }).map((c) => c.key));
 // 공개 응답에서 관리자 전용 정보(인증키 일부, 수집 메시지)를 뺀다. 로그인 기능이 꺼져 있으면 그대로.
 async function publicView(req, d) {
   if (await auth.isAdmin(req)) return d;
@@ -1064,6 +1068,7 @@ const server = http.createServer(async (req, res) => {
     const denied = await auth.guard(req, url);
     if (denied) return json(res, denied.body, denied.status);
     if (await auth.handle(req, res, url)) return;
+    if (await handleLayouts(req, res, url, { store: layoutStore, ownerOf: (r) => auth.ownerOf(r), allowedKeys: layoutKeys, readBody, json })) return;
     if (req.method === "GET" && url.pathname === "/api/hourly") {
       return json(res, await queryHourly(Object.fromEntries(url.searchParams)));
     }
@@ -1293,6 +1298,7 @@ const ready = (async () => {
     }
   }
   auth = createAuth({ env: process.env, store });
+  layoutStore = db.usingPg() ? createPgLayoutStore(db.getPool()) : createJsonLayoutStore(LAYOUT_FILE);
   console.log(auth.startupLine);
   if (auth.enabled) {
     const n = await auth.cleanup();

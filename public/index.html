@@ -342,6 +342,7 @@
     .dl-layout-row select { height:38px; min-width:200px; }
     .dl-layout-row input[type="text"] { height:38px; min-width:180px; flex:1; max-width:280px; }
     .dl-layout-row button { height:38px; padding:0 14px; font-size:13px; }
+    .x-layout-edit[hidden] { display:none !important; }
     .dl-groups-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:12px; margin-top:12px; }
     .dl-group-card { background:#fcfdff; border:1px solid var(--line); border-radius:10px; padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
     .dl-group-title { font-size:13.5px; font-weight:700; color:var(--fg); display:flex; align-items:center; gap:6px; border-bottom:1px solid var(--line); padding-bottom:6px; margin:0; }
@@ -543,7 +544,7 @@
           <div class="card">
             <div class="card-head">
               <h2>레이아웃 구성 관리</h2>
-              <span class="muted" style="font-size:12px;">선택한 자료 종류와 컬럼·순서를 브라우저에 저장</span>
+              <span class="muted" style="font-size:12px;" id="xLayoutWhere">선택한 자료 종류와 컬럼·순서를 브라우저에 저장</span>
             </div>
             <p class="muted" style="margin-top:2px;">자주 쓰는 컬럼 조합과 순서를 이름 붙여 저장하고 다시 불러올 수 있습니다. 날짜와 지점 같은 매번 바뀌는 조회 조건은 레이아웃과 분리되어 유지됩니다.</p>
             <div class="dl-layout-row" style="margin-top:8px;">
@@ -551,12 +552,15 @@
                 <label for="xLayoutSelect" style="display:block; font-size:12px; margin-bottom:4px; font-weight:600;">저장된 레이아웃 / 프리셋</label>
                 <select id="xLayoutSelect"></select>
               </div>
-              <div>
+              <div class="x-layout-edit">
                 <label for="xLayoutName" style="display:block; font-size:12px; margin-bottom:4px; font-weight:600;">레이아웃 이름</label>
                 <input id="xLayoutName" type="text" placeholder="예: 기온·강수 분석용" maxlength="30" />
               </div>
-              <button type="button" class="sec" id="xLayoutSave">새 구성으로 저장</button>
-              <button type="button" class="sec" id="xLayoutDelete" disabled title="기본 프리셋은 삭제할 수 없습니다">삭제</button>
+              <button type="button" class="sec x-layout-edit" id="xLayoutSave">새 구성으로 저장</button>
+              <button type="button" class="sec x-layout-edit" id="xLayoutUpdate" disabled title="내 레이아웃을 고른 뒤 컬럼을 바꾸면 덮어쓸 수 있습니다">현재 구성으로 덮어쓰기</button>
+              <button type="button" class="sec x-layout-edit" id="xLayoutRename" disabled title="내 레이아웃을 고르고 새 이름을 입력하세요">이름 변경</button>
+              <button type="button" class="sec x-layout-edit" id="xLayoutDefault" disabled title="이 종류의 다운로드 화면을 열 때 먼저 적용됩니다">기본으로 지정</button>
+              <button type="button" class="sec x-layout-edit" id="xLayoutDelete" disabled title="기본 프리셋은 삭제할 수 없습니다">삭제</button>
               <button type="button" class="sec" id="xLayoutReset">기본값 복원</button>
             </div>
             <p id="xLayoutMsg" class="muted" style="font-size:12px; margin-top:6px; margin-bottom:0;"></p>
@@ -1169,6 +1173,7 @@
     const jobTime = (id) => { const n = Number(id); return n > 1e12 ? fmtWall(n + 9 * HOUR).slice(0, 16) : String(id ?? ""); }; // id = 수집 시작 시각(ms) → KST
     let collectInit = false;
     let collectBusy = false;
+    let collectDatesTouched = false; // 사용자가 시작·종료를 직접 고쳤거나 다른 화면에서 구간을 넘겨받았는지
     function collectSummary(id) {
       return (dashCache?.stationSummaries || []).find((s) => String(s.station_id) === String(id)) || null;
     }
@@ -1302,10 +1307,13 @@
       try { await Promise.all([loadDash(), loadCollectJobs()]); } catch (e) { /* 새로고침 실패는 무시 */ }
     }
     $("cKind").addEventListener("change", () => { setCollectKind($("cKind").value); renderCollectHint(); });
-    $("cStation").addEventListener("change", applyCollectDefaults);
+    // 지점을 바꿔도 사용자가 넣은 시작·종료는 그대로 둔다(기본 구간이 필요하면 '기본값' 버튼)
+    $("cStation").addEventListener("change", renderCollectHint);
+    $("cFrom").addEventListener("input", () => { collectDatesTouched = true; });
+    $("cTo").addEventListener("input", () => { collectDatesTouched = true; });
     $("cFrom").addEventListener("change", renderCollectHint);
     $("cTo").addEventListener("change", renderCollectHint);
-    $("cReset").onclick = applyCollectDefaults;
+    $("cReset").onclick = () => { collectDatesTouched = false; applyCollectDefaults(); };
     $("cGo").onclick = runCollect;
     // ---------- 미적재 현황 ----------
     // 기간은 시작일~종료일(날짜)로 지정. 시간자료는 시작일 00시 ~ 종료일 23시(공식 최신 시각을 넘지 않음).
@@ -1977,13 +1985,15 @@
         let changed = false;
         if (kind === "hourly" || kind === "daily") { if ($("cKind").value !== kind) { setCollectKind(kind); changed = true; } }
         if (st && [...$("cStation").options].some((o) => o.value === st) && $("cStation").value !== st) { $("cStation").value = st; changed = true; }
-        if (changed) applyCollectDefaults();
+        // 지점·종류만 넘어온 경우: 사용자가 아직 구간을 건드리지 않았을 때만 그 지점 기본 구간을 채움(입력한 날짜는 유지)
+        if (changed && !collectDatesTouched) applyCollectDefaults();
         // #/collect?...&from=2026-09-18 00:00&to=2026-09-25 23:00 (미적재 현황에서 넘어올 때) 구간을 그대로 채움
         const from = hp.get("from"), to = hp.get("to");
         const okT = (v) => /^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?$/.test(v || "");
         if (okT(from) && okT(to)) {
           if ($("cKind").value === "daily") { $("cFrom").value = from.slice(0, 10); $("cTo").value = to.slice(0, 10); }
           else { $("cFrom").value = toPicker(from.length === 10 ? `${from} 00:00` : from); $("cTo").value = toPicker(to.length === 10 ? `${to} 23:00` : to); }
+          collectDatesTouched = true;
         }
         renderCollectHint();
       }
@@ -2015,21 +2025,96 @@
       filterText: ""
     };
 
-    function loadCustomLayouts() {
+    // 레이아웃 저장 위치: 로그인(server) = 내 계정(서버, 본인만), 로그인 기능 없는 서버(local) = 이 브라우저, 비로그인(readonly) = 기본 프리셋만
+    const DL_MOVED_KEY = DL_STORAGE_KEY + "_moved";
+    dlState.baseCustomId = null; // 마지막으로 불러온 내 레이아웃(컬럼을 바꿔도 덮어쓰기·이름 변경 대상)
+    dlState.mode = null;
+    function dlMode() {
+      if (!me.authEnabled) return "local";
+      return me.loggedIn && me.role !== "blocked" ? "server" : "readonly";
+    }
+    function readLocalLayouts() {
       try {
         const raw = localStorage.getItem(DL_STORAGE_KEY);
-        if (raw) dlState.layouts = JSON.parse(raw) || {};
+        const v = raw ? JSON.parse(raw) : {};
+        return v && typeof v === "object" ? v : {};
       } catch (e) {
-        dlState.layouts = {};
+        return {};
       }
     }
-
     function saveCustomLayouts() {
       try {
         localStorage.setItem(DL_STORAGE_KEY, JSON.stringify(dlState.layouts));
       } catch (e) {
         console.error("Failed to save layout to localStorage", e);
       }
+    }
+    async function layoutApi(method, path, body) {
+      const r = await fetch("/api/export/layouts" + path, { method, headers: body ? { "content-type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined, cache: "no-store" });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d.ok === false) throw new Error(d.message || `HTTP ${r.status}`);
+      return d;
+    }
+    // 이 브라우저에 예전 방식으로 저장해 둔 레이아웃을 로그인한 내 계정으로 한 번 옮긴다(같은 이름·종류·컬럼이면 건너뜀)
+    async function moveLocalLayoutsToAccount() {
+      const local = Object.values(readLocalLayouts()).filter((l) => l && (l.kind === "hourly" || l.kind === "daily") && l.name && Array.isArray(l.columns) && l.columns.length);
+      if (!local.length) return 0;
+      const have = new Set(Object.values(dlState.layouts).map((l) => `${l.kind}|${l.name}|${l.columns.join(",")}`));
+      let moved = 0;
+      for (const l of local) {
+        if (have.has(`${l.kind}|${l.name}|${l.columns.join(",")}`)) continue;
+        try {
+          const d = await layoutApi("POST", "", { kind: l.kind, name: String(l.name).slice(0, 30), columns: l.columns });
+          dlState.layouts[d.layout.id] = d.layout;
+          moved += 1;
+        } catch (e) {
+          console.warn("layout move skipped", e.message);
+        }
+      }
+      try {
+        localStorage.setItem(DL_MOVED_KEY, localStorage.getItem(DL_STORAGE_KEY) || "{}"); // 백업만 남김(다시 옮기지 않음)
+        localStorage.removeItem(DL_STORAGE_KEY);
+      } catch (e) {}
+      return moved;
+    }
+    async function loadCustomLayouts() {
+      const mode = dlMode();
+      const prevMode = dlState.mode;
+      dlState.mode = mode;
+      let note = "";
+      if (mode === "server") {
+        try {
+          const d = await layoutApi("GET", "");
+          dlState.layouts = Object.fromEntries((d.layouts || []).map((l) => [l.id, l]));
+          const moved = await moveLocalLayoutsToAccount();
+          if (moved) note = `이 브라우저에 저장돼 있던 레이아웃 ${moved}개를 내 계정으로 옮겼습니다.`;
+        } catch (e) {
+          dlState.layouts = {};
+          note = "내 레이아웃을 불러오지 못했습니다: " + e.message;
+        }
+      } else if (mode === "local") {
+        dlState.layouts = readLocalLayouts();
+      } else {
+        dlState.layouts = {};
+      }
+      if (dlState.baseCustomId && !dlState.layouts[dlState.baseCustomId]) dlState.baseCustomId = null;
+      renderLayoutMode(note);
+      return prevMode !== mode;
+    }
+    function renderLayoutMode(note) {
+      const mode = dlState.mode;
+      document.querySelectorAll(".x-layout-edit").forEach((el) => { el.hidden = mode === "readonly"; });
+      const where = $("xLayoutWhere");
+      if (where) where.textContent = mode === "server" ? "내 계정에 저장 · 로그인한 본인만 볼 수 있음" : mode === "local" ? "선택한 자료 종류와 컬럼·순서를 브라우저에 저장" : "기본 프리셋만 사용 · 로그인하면 내 레이아웃 저장";
+      const msg = $("xLayoutMsg");
+      if (msg && (note || mode === "readonly")) {
+        msg.style.color = "var(--muted)";
+        msg.textContent = note || "로그인하면 자주 쓰는 컬럼 구성을 내 계정에 저장하고 어느 기기에서나 불러올 수 있습니다.";
+      }
+    }
+    function userDefaultLayoutId(kind) {
+      const l = Object.values(dlState.layouts).find((x) => x && x.kind === kind && x.isDefault);
+      return l ? "custom:" + l.id : "preset:default";
     }
 
     async function initDownload() {
@@ -2048,7 +2133,7 @@
         }
       }
 
-      loadCustomLayouts();
+      const modeChanged = await loadCustomLayouts();
 
       if ($("xStation") && $("xStation").options.length === 0 && dashCache) {
         fillStations($("xStation"));
@@ -2067,8 +2152,8 @@
         setupDownloadEvents();
       }
 
-      if (dlState.orderedKeys.length === 0) {
-        applyLayout("preset:default");
+      if (dlState.orderedKeys.length === 0 || modeChanged) {
+        applyLayout(userDefaultLayoutId(dlState.kind));
       } else {
         populateLayoutSelect();
         renderColGroups();
@@ -2096,24 +2181,33 @@
 
       const customKeys = Object.keys(dlState.layouts).filter((k) => dlState.layouts[k]?.kind === dlState.kind);
       if (customKeys.length > 0) {
-        html += `<optgroup label="내 저장 레이아웃">`;
+        html += `<optgroup label="${dlState.mode === "server" ? "내 레이아웃" : "내 저장 레이아웃"}">`;
         for (const k of customKeys) {
-          html += `<option value="custom:${k}">${esc(dlState.layouts[k].name)}</option>`;
+          html += `<option value="custom:${esc(k)}">${dlState.layouts[k].isDefault ? "★ " : ""}${esc(dlState.layouts[k].name)}</option>`;
         }
         html += `</optgroup>`;
       }
       html += `<option value="custom_current">(사용자 지정 구성)</option>`;
       sel.innerHTML = html;
       sel.value = dlState.currentLayoutId;
-
-      const delBtn = $("xLayoutDelete");
-      if (delBtn) {
-        delBtn.disabled = !dlState.currentLayoutId.startsWith("custom:");
+      updateLayoutButtons();
+    }
+    function updateLayoutButtons() {
+      const base = dlState.baseCustomId && dlState.layouts[dlState.baseCustomId];
+      const onBase = Boolean(base) && (dlState.currentLayoutId === "custom:" + dlState.baseCustomId || dlState.currentLayoutId === "custom_current");
+      if ($("xLayoutDelete")) $("xLayoutDelete").disabled = !(base && dlState.currentLayoutId === "custom:" + dlState.baseCustomId);
+      if ($("xLayoutUpdate")) $("xLayoutUpdate").disabled = !(onBase && dlState.currentLayoutId === "custom_current");
+      if ($("xLayoutRename")) $("xLayoutRename").disabled = !onBase;
+      const defBtn = $("xLayoutDefault");
+      if (defBtn) {
+        defBtn.disabled = !onBase;
+        defBtn.textContent = base && base.isDefault ? "기본 해제" : "기본으로 지정";
       }
     }
 
     function applyLayout(layoutId) {
       dlState.currentLayoutId = layoutId;
+      if (!layoutId.startsWith("custom:")) dlState.baseCustomId = null;
       const cat = getCatalogForCurrentKind();
       let cols = [];
 
@@ -2122,6 +2216,8 @@
         cols = cat.presets?.[pid]?.columns || cat.defaultColumns;
       } else if (layoutId.startsWith("custom:")) {
         const cid = layoutId.slice(7);
+        if (dlState.layouts[cid]) dlState.baseCustomId = cid;
+        else dlState.currentLayoutId = "preset:default";
         cols = dlState.layouts[cid]?.columns || cat.defaultColumns;
       } else if (layoutId === "default" || layoutId === "preset:default") {
         cols = cat.defaultColumns;
@@ -2379,7 +2475,7 @@
         $("xHourlyDates").style.display = isHourly ? "flex" : "none";
         $("xDailyDates").style.display = isHourly ? "none" : "flex";
 
-        applyLayout("preset:default");
+        applyLayout(userDefaultLayoutId(dlState.kind));
       };
 
       $("xStation").onchange = triggerPreview;
@@ -2448,41 +2544,97 @@
         applyLayout(val);
       };
 
-      $("xLayoutSave").onclick = () => {
+      const layoutMsg = (text, tone) => {
+        const msg = $("xLayoutMsg");
+        if (msg) { msg.style.color = tone === "ok" ? "var(--ok)" : tone === "bad" ? "var(--bad)" : "var(--muted)"; msg.textContent = text; }
+      };
+      const layoutName = () => {
         const nameInput = $("xLayoutName");
         const name = (nameInput?.value || "").trim();
-        const msg = $("xLayoutMsg");
-        if (!name) {
-          if (msg) { msg.style.color = "var(--bad)"; msg.textContent = "레이아웃 이름을 입력해 주세요."; }
-          nameInput?.focus();
-          return;
-        }
-        const id = "layout_" + Date.now();
-        dlState.layouts[id] = {
-          id,
-          name,
-          kind: dlState.kind,
-          columns: [...dlState.orderedKeys],
-          updatedAt: Date.now()
-        };
-        saveCustomLayouts();
-        nameInput.value = "";
-        applyLayout("custom:" + id);
-        if (msg) { msg.style.color = "var(--ok)"; msg.textContent = `'${name}' 레이아웃이 브라우저에 저장되었습니다.`; }
+        if (!name) { layoutMsg("레이아웃 이름을 입력해 주세요.", "bad"); nameInput?.focus(); }
+        return name;
       };
+      // 저장소 공통 동작: server = /api/export/layouts (본인 것만), local = 이 브라우저
+      async function layoutSave(id, patch) {
+        if (dlState.mode === "server") {
+          const d = id ? await layoutApi("PATCH", "/" + encodeURIComponent(id), patch) : await layoutApi("POST", "", patch);
+          if (patch.isDefault === true || d.layout.isDefault) for (const l of Object.values(dlState.layouts)) if (l.kind === d.layout.kind && l.id !== d.layout.id) l.isDefault = false;
+          dlState.layouts[d.layout.id] = d.layout;
+          return d.layout;
+        }
+        const nid = id || "layout_" + Date.now();
+        const cur = dlState.layouts[nid] || { id: nid, kind: patch.kind };
+        const next = { ...cur, ...patch, id: nid, updatedAt: Date.now() };
+        if (patch.isDefault === true) for (const l of Object.values(dlState.layouts)) if (l.kind === next.kind && l.id !== nid) l.isDefault = false;
+        dlState.layouts[nid] = next;
+        saveCustomLayouts();
+        return next;
+      }
+      async function layoutRemove(id) {
+        if (dlState.mode === "server") await layoutApi("DELETE", "/" + encodeURIComponent(id));
+        delete dlState.layouts[id];
+        if (dlState.mode !== "server") saveCustomLayouts();
+      }
+      const busy = async (fn) => {
+        const btns = ["xLayoutSave", "xLayoutUpdate", "xLayoutRename", "xLayoutDefault", "xLayoutDelete"].map($).filter(Boolean);
+        btns.forEach((b) => { b.dataset.wasDisabled = b.disabled ? "1" : ""; b.disabled = true; });
+        try { await fn(); } catch (e) { layoutMsg("저장하지 못했습니다: " + e.message, "bad"); populateLayoutSelect(); }
+        finally { btns.forEach((b) => { if (b.dataset.wasDisabled !== "1") b.disabled = false; }); updateLayoutButtons(); }
+      };
+      const whereText = () => (dlState.mode === "server" ? "내 계정에" : "브라우저에");
 
-      $("xLayoutDelete").onclick = () => {
+      $("xLayoutSave").onclick = () => busy(async () => {
+        const name = layoutName();
+        if (!name) return;
+        const l = await layoutSave(null, { name, kind: dlState.kind, columns: [...dlState.orderedKeys] });
+        $("xLayoutName").value = "";
+        applyLayout("custom:" + l.id);
+        layoutMsg(`'${name}' 레이아웃이 ${whereText()} 저장되었습니다.`, "ok");
+      });
+
+      $("xLayoutUpdate").onclick = () => busy(async () => {
+        const id = dlState.baseCustomId;
+        if (!id || !dlState.layouts[id]) return;
+        const l = await layoutSave(id, { columns: [...dlState.orderedKeys] });
+        applyLayout("custom:" + l.id);
+        layoutMsg(`'${l.name}' 레이아웃을 현재 컬럼 구성으로 덮어썼습니다.`, "ok");
+      });
+
+      $("xLayoutRename").onclick = () => busy(async () => {
+        const id = dlState.baseCustomId;
+        if (!id || !dlState.layouts[id]) return;
+        const name = layoutName();
+        if (!name) return;
+        const keepCustom = dlState.currentLayoutId === "custom_current";
+        const l = await layoutSave(id, { name });
+        $("xLayoutName").value = "";
+        populateLayoutSelect();
+        if (keepCustom) { $("xLayoutSelect").value = "custom_current"; updateLayoutButtons(); }
+        layoutMsg(`레이아웃 이름을 '${l.name}'(으)로 바꿨습니다.`, "ok");
+      });
+
+      $("xLayoutDefault").onclick = () => busy(async () => {
+        const id = dlState.baseCustomId;
+        const cur = id && dlState.layouts[id];
+        if (!cur) return;
+        const make = !cur.isDefault;
+        const l = await layoutSave(id, { isDefault: make });
+        const keepCustom = dlState.currentLayoutId === "custom_current";
+        populateLayoutSelect();
+        if (keepCustom) { $("xLayoutSelect").value = "custom_current"; updateLayoutButtons(); }
+        layoutMsg(make ? `'${l.name}'을(를) ${dlState.kind === "daily" ? "일자료" : "시간자료"} 기본 레이아웃으로 지정했습니다.` : `'${l.name}' 기본 지정을 해제했습니다.`, "ok");
+      });
+
+      $("xLayoutDelete").onclick = () => busy(async () => {
         const selVal = $("xLayoutSelect").value;
         if (!selVal.startsWith("custom:")) return;
         const cid = selVal.slice(7);
         const name = dlState.layouts[cid]?.name || "레이아웃";
-        if (!confirm(`'${name}' 설정을 브라우저 저장소에서 삭제할까요? (기상 원본 DB는 영향받지 않습니다)`)) return;
-        delete dlState.layouts[cid];
-        saveCustomLayouts();
+        if (!confirm(`'${name}' 설정을 ${dlState.mode === "server" ? "내 계정" : "브라우저 저장소"}에서 삭제할까요? (기상 원본 DB는 영향받지 않습니다)`)) return;
+        await layoutRemove(cid);
         applyLayout("preset:default");
-        const msg = $("xLayoutMsg");
-        if (msg) { msg.style.color = "var(--muted)"; msg.textContent = `'${name}' 레이아웃을 삭제했습니다.`; }
-      };
+        layoutMsg(`'${name}' 레이아웃을 삭제했습니다.`);
+      });
 
       $("xLayoutReset").onclick = () => {
         applyLayout("preset:default");
@@ -2622,7 +2774,7 @@
       function markCustomLayout() {
         dlState.currentLayoutId = "custom_current";
         $("xLayoutSelect").value = "custom_current";
-        $("xLayoutDelete").disabled = true;
+        updateLayoutButtons();
       }
 
       $("xDownloadBtn").onclick = executeDownload;
