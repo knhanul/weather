@@ -294,7 +294,7 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
     const r = sameDayHistory(c.store, md, c);
     const table = {
       columns: [{ key: "year", label: "연도" }, { key: "date", label: "날짜" }, { key: "weekday", label: "요일" }, { key: "avg", label: "평균기온(℃)" }, { key: "max", label: "최고기온(℃)" }, { key: "min", label: "최저기온(℃)" }, { key: "rain", label: "강수량(mm)" }, { key: "rainy", label: "강수(0.1mm 이상)" }, { key: "status", label: "상태" }],
-      rows: r.rows.map((x) => ({ year: x.year, date: x.date || "", weekday: x.weekday || "", avg: x.avg ?? null, max: x.max ?? null, min: x.min ?? null, rain: x.rain ?? null, rainy: x.rainy == null ? "" : x.rainy ? "예" : "아니오", status: x.status === "ok" ? (x.rainBlank ? "자료 있음(강수 공란=무강수)" : "자료 있음") : STATUS_KO[x.status] || x.status })),
+      rows: r.rows.filter((x) => x.status !== "nodate").map((x) => ({ year: x.year, date: x.date || "", weekday: x.weekday || "", avg: x.avg ?? null, max: x.max ?? null, min: x.min ?? null, rain: x.rain ?? null, rainy: x.rainy == null ? "" : x.rainy ? "예" : "아니오", status: x.status === "ok" ? (x.rainBlank ? "자료 있음(강수 공란=무강수)" : "자료 있음") : STATUS_KO[x.status] || x.status })),
     };
     return csvOr(url, res, `weather-stats-day-${fileKey(c.st.station_id)}-${md}`, table, [...head(`매년 ${r.label}의 날씨`, c.st, `연도 ${c.fromYear}~${c.toYear} · 자료 ${c.asOf}까지`), ...r.text], { station: c.station, ...r, rules: LIFE_RULES.day });
   }
@@ -376,6 +376,8 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
         if (k === "precipitation") note = "공란(기상청 일자료 관례상 무강수)";
         else if (k === "max_new_snow" || k === "max_snow_depth") note = "공란(쌓인 눈 없음)";
         else if (k === "max_precip_1h") note = "공란(무강수 또는 4~10월 외 미제공)";
+        else if (k === "precip_duration") note = row.precipitation === null || row.precipitation === undefined ? "공란(무강수)" : "자료 없음";
+        else if (k === "weather_phenomena") note = "기록 없음";
         else note = "자료 없음";
       }
       if ((k === "max_temperature_time" || k === "min_temperature_time") && v) v = String(v).padStart(4, "0").replace(/^(\d\d)(\d\d)$/, "$1:$2");
