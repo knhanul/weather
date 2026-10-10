@@ -539,7 +539,7 @@ export async function queryDailyExportPg({ stationId, from, to, columns, limit =
   const { sql, params } = buildDailyExportSqlMysql({ stationId, from, to, columns, limit, isFull: fullFields });
   const officialRows = await q(sql, params);
   const hourlyRows = await hourlyForDaily(stationId, from, to);
-  return mergeDailyExport({ stationId, officialRows, hourlyRows, limit });
+  return mergeDailyExport({ stationId, cols: validateExportColumns("daily", columns), officialRows, hourlyRows, limit });
 }
 
 export function countDaily() {

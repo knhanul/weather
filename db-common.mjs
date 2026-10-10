@@ -2,9 +2,8 @@
 
 // 일자료 다운로드: observations_daily 의 공식 자료를 우선 쓰고, 없는 날짜는 시간자료 집계로 보충한다.
 // (예전 db.mjs queryDailyExportPg 안에 있던 로직을 그대로 옮김 — 결과 바이트 동일)
-// ⚠️ 알려진 버그(2026-10-10 확인, 저장소 이전과 분리해 따로 고침): 아래 `cols` 가 정의되어 있지 않아, 시간자료로 보충할 날이
-// 하나라도 있으면 ReferenceError("cols is not defined") → 일자료 다운로드·미리보기가 500. 운영 응답과 같게 두려고 그대로 옮겼다.
-export function mergeDailyExport({ stationId, officialRows, hourlyRows, limit = null }) {
+// cols: 다운로드할 일자료 컬럼(validateExportColumns 결과). 시간자료로 보충한 날도 이 컬럼만 담는다.
+export function mergeDailyExport({ stationId, cols, officialRows, hourlyRows, limit = null }) {
   if (!hourlyRows.length && officialRows.length) return officialRows;
   const officialMap = new Map(officialRows.map((r) => [r.observation_date, r]));
   const byDay = new Map();
@@ -38,7 +37,6 @@ export function mergeDailyExport({ stationId, officialRows, hourlyRows, limit = 
       note: "시간자료에서 집계",
     };
     const row = {};
-    // eslint-disable-next-line no-undef
     for (const c of cols) {
       row[c] = derived[c] ?? null;
     }

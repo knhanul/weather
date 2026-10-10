@@ -420,5 +420,5 @@ sed -i '/^AUTH_PROVIDER=/d' /etc/weather-hub.env && systemctl restart weather-hu
 - 자료 옮기기·검증: `node scripts/pg-to-mysql.mjs copy|verify [--tables a,b]` (DATABASE_URL·MYSQL_URL 필요, 다시 실행해도 안전, verify 는 표·지점별 행 수 + SHA-256),
   `node scripts/compare-drivers.mjs` (같은 입력으로 두 저장소 함수 결과 비교 — 관리자 전용 미적재·수집 이력 포함),
   `node scripts/mysql-integration.mjs` (이름이 `_test` 로 끝나는 빈 DB 에서만: 쓰기 경로·로그인·레이아웃 점검).
-- 알려진 기존 버그(이번 변경과 무관, 그대로 둠): 일자료 다운로드·미리보기에서 시간자료로 보충할 날이 있으면 `cols is not defined` 500 (`db-common.mjs` mergeDailyExport 주석).
+- 일자료 다운로드·미리보기 `cols is not defined` 500 은 2026-10-10 다음 커밋에서 고침(시간자료로 보충한 날은 요청한 컬럼만).
 - `scripts/approve-user.mjs` 는 PostgreSQL 전용(예전 그대로). MySQL 모드에서는 관리 화면에서 승인한다.

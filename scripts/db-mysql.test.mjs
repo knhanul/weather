@@ -113,3 +113,18 @@ test("db.mjs: DB_DRIVER 없으면 pg, mysql 이면 mysql", async () => {
   assert.equal(db.storageKind(), "json");
   void root;
 });
+
+test("mergeDailyExport: 공식 일자료가 없는 날은 시간자료로 보충하고 요청한 컬럼만 담는다 (예전 'cols is not defined' 500 수정)", () => {
+  const hourlyRows = [
+    { observation_datetime: "2026-09-01 00:00:00", station_name: "서울", temperature: 20, precipitation: 0.5, humidity: 60 },
+    { observation_datetime: "2026-09-01 01:00:00", station_name: "서울", temperature: 21, precipitation: 1, humidity: 70 },
+    { observation_datetime: "2026-09-02 00:00:00", station_name: "서울", temperature: 18, precipitation: null, humidity: 80 },
+  ];
+  const officialRows = [{ station_id: "108", observation_date: "2026-09-02", avg_temperature: 17.9 }];
+  const out = mergeDailyExport({ stationId: "108", cols: ["observation_date", "avg_temperature", "precipitation", "source_kind", "dew_point_avg"], officialRows, hourlyRows });
+  assert.deepEqual(out, [
+    { observation_date: "2026-09-01", avg_temperature: 20.5, precipitation: 1.5, source_kind: "DERIVED", dew_point_avg: null },
+    officialRows[0],
+  ]);
+  assert.equal(mergeDailyExport({ stationId: "108", cols: ["observation_date"], officialRows: [], hourlyRows, limit: 1 }).length, 1);
+});

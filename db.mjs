@@ -408,7 +408,7 @@ export async function queryDailyExportPg({ stationId, from, to, columns, limit =
 
   // observations_daily 에 있는 공식 자료를 우선 사용하고, 없는 날짜는 시간자료 집계로 보충 (db-common.mjs)
   const hourlyRows = await hourlyForDaily(stationId, from, to);
-  return mergeDailyExport({ stationId, officialRows: res.rows, hourlyRows, limit });
+  return mergeDailyExport({ stationId, cols: validateExportColumns("daily", columns), officialRows: res.rows, hourlyRows, limit });
 }
 
 export async function countDaily() {
