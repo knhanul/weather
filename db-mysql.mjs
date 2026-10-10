@@ -464,10 +464,10 @@ export async function countHourlyExportPg({ stationId, from, to }) {
   return r[0]?.n || 0;
 }
 
-export function buildHourlyExportSqlMysql({ stationId, from, to, columns, limit = null, isFull = false }) {
+export function buildHourlyExportSqlMysql({ stationId, from, to, columns, limit = null, offset = 0, isFull = false }) {
   const cols = validateExportColumns("hourly", columns);
   const parts = cols.map((c) => (isFull || HOURLY_LEGACY_COLUMNS.includes(c) ? qi(c) : `NULL AS ${qi(c)}`));
-  const lim = Number.isInteger(limit) && limit > 0 ? ` LIMIT ${limit}` : "";
+  const lim = Number.isInteger(limit) && limit > 0 ? ` LIMIT ${limit}${Number.isInteger(offset) && offset > 0 ? ` OFFSET ${offset}` : ""}` : "";
   return {
     sql: `SELECT ${parts.join(", ")} FROM observations_hourly
           WHERE station_id = ? AND observation_datetime >= ? AND observation_datetime <= ?
@@ -477,9 +477,9 @@ export function buildHourlyExportSqlMysql({ stationId, from, to, columns, limit 
   };
 }
 
-export async function queryHourlyExportPg({ stationId, from, to, columns, limit = null }) {
+export async function queryHourlyExportPg({ stationId, from, to, columns, limit = null, offset = 0 }) {
   if (!pool) throw new Error("mysql not ready");
-  const { sql, params } = buildHourlyExportSqlMysql({ stationId, from, to, columns, limit, isFull: fullFields });
+  const { sql, params } = buildHourlyExportSqlMysql({ stationId, from, to, columns, limit, offset, isFull: fullFields });
   return q(sql, params);
 }
 

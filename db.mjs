@@ -237,23 +237,23 @@ export async function countHourlyExportPg({ stationId, from, to }) {
   return r.rows[0]?.n || 0;
 }
 
-export function buildHourlyExportSql({ stationId, from, to, columns, limit = null, isFull = false }) {
+export function buildHourlyExportSql({ stationId, from, to, columns, limit = null, offset = 0, isFull = false }) {
   const cols = validateExportColumns("hourly", columns);
   const selectParts = cols.map((c) => {
     const exists = isFull || HOURLY_LEGACY_COLUMNS.includes(c);
     return exists ? `"${c}"` : `NULL AS "${c}"`;
   });
-  const limitClause = Number.isInteger(limit) && limit > 0 ? ` LIMIT ${limit}` : "";
+  const limitClause = Number.isInteger(limit) && limit > 0 ? ` LIMIT ${limit}${Number.isInteger(offset) && offset > 0 ? ` OFFSET ${offset}` : ""}` : "";
   const sql = `SELECT ${selectParts.join(", ")} FROM observations_hourly
              WHERE station_id = $1 AND observation_datetime >= $2 AND observation_datetime <= $3
              ORDER BY observation_datetime ASC${limitClause}`;
   return { sql, params: [stationId, from, to], columns: cols };
 }
 
-export async function queryHourlyExportPg({ stationId, from, to, columns, limit = null }) {
+export async function queryHourlyExportPg({ stationId, from, to, columns, limit = null, offset = 0 }) {
   if (my) return my.queryHourlyExportPg(...arguments);
   if (!pool) throw new Error("pg not ready");
-  const { sql, params } = buildHourlyExportSql({ stationId, from, to, columns, limit, isFull: fullFields });
+  const { sql, params } = buildHourlyExportSql({ stationId, from, to, columns, limit, offset, isFull: fullFields });
   const r = await pool.query(sql, params);
   return r.rows;
 }
@@ -435,7 +435,7 @@ export function buildDailyExportSql({ stationId, from, to, columns, limit = null
     const exists = isFull || DAILY_LEGACY_COLUMNS.includes(c);
     return exists ? `"${c}"` : `NULL AS "${c}"`;
   });
-  const limitClause = Number.isInteger(limit) && limit > 0 ? ` LIMIT ${limit}` : "";
+  const limitClause = Number.isInteger(limit) && limit > 0 ? ` LIMIT ${limit}${Number.isInteger(offset) && offset > 0 ? ` OFFSET ${offset}` : ""}` : "";
   const sql = `SELECT ${selectParts.join(", ")} FROM observations_daily
                 WHERE station_id = $1 AND observation_date >= $2 AND observation_date <= $3
                 ORDER BY observation_date ASC${limitClause}`;

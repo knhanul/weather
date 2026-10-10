@@ -13,6 +13,7 @@ import {
 import { createAuth, authConfigured } from "./auth.mjs";
 import { createPgStore, createMysqlStore, createJsonStore } from "./auth-store.mjs";
 import { handleLayouts, createPgLayoutStore, createMysqlLayoutStore, createJsonLayoutStore } from "./layouts.mjs";
+import { handlePrefs, createPgPrefsStore, createMysqlPrefsStore, createJsonPrefsStore } from "./view-prefs.mjs";
 import { createStatsData } from "./stats-data.mjs";
 import { createStatsApi } from "./stats-api.mjs";
 import { createStatsHourly } from "./stats-hourly.mjs";
@@ -27,6 +28,7 @@ const DAILY_FILE = path.join(DATA, "daily.json");
 const STATION_FILE = path.join(DATA, "stations.json");
 const AUTH_FILE = path.join(DATA, "auth.json"); // 로컬 개발(DATABASE_URL 없음)에서만 사용
 const LAYOUT_FILE = path.join(DATA, "export-layouts.json"); // 로컬 개발(DATABASE_URL 없음)에서만 사용
+const PREFS_FILE = path.join(DATA, "view-prefs.json"); // 로컬 개발에서만 사용
 const PORT = Number(process.env.PORT || 8080);
 const KST_MS = 9 * 60 * 60 * 1000;
 
@@ -230,6 +232,71 @@ async function getExportData({ kind = "hourly", stationId = "108", from, to, col
   });
 
   return { kind, stationId, from: start, to: end, columns: cols, rows, total: allHourly.length };
+}
+
+// 시간별·일별 날씨 화면(/api/view): 고른 레이아웃의 컬럼만, 페이지 단위로. 기존 /api/hourly·/api/daily 응답은 그대로 둔다.
+// 시간자료는 DB 에서 LIMIT/OFFSET 으로 그 페이지만 읽고, 일자료는 기간 전체(최대 VIEW_MAX_DAYS일, 공식 + 공식 없는 날은 시간자료 집계)를 만든 뒤 자른다.
+const VIEW_MAX_DAYS = 3700;
+const VIEW_PAGE_MAX = 1000;
+class ViewError extends Error {}
+async function getViewData(sp) {
+  const kind = sp.get("kind") === "daily" ? "daily" : sp.get("kind") === "hourly" || !sp.get("kind") ? "hourly" : null;
+  if (!kind) throw new ViewError("kind 는 hourly 또는 daily 입니다.");
+  const stationId = sp.get("stationId") || "108";
+  if (!/^\d{1,6}$/.test(stationId)) throw new ViewError("지점 번호가 맞지 않습니다.");
+  const colParam = sp.get("columns");
+  const asked = colParam ? colParam.split(",").map((x) => x.trim()).filter(Boolean) : null;
+  const cols = validateExportColumns(kind, asked);
+  const size = Math.min(VIEW_PAGE_MAX, Math.max(1, Math.floor(Number(sp.get("pageSize")) || 200)));
+  const page = Math.max(1, Math.floor(Number(sp.get("page")) || 1));
+  const from = sp.get("from") || null;
+  const to = sp.get("to") || null;
+  const okT = (v) => v == null || (kind === "daily" ? /^\d{4}-\d{2}-\d{2}$/.test(v) : /^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?$/.test(v));
+  if (!okT(from) || !okT(to)) throw new ViewError(kind === "daily" ? "날짜는 YYYY-MM-DD 형식입니다." : "일시는 YYYY-MM-DD HH:MM 형식입니다.");
+  const full = db.usingPg() ? db.fullFieldsReady() : false;
+  const meta = new Map(getExportCatalog(kind, { fullFields: full }).map((c) => [c.col, c]));
+  const columns = cols.map((c) => {
+    const m = meta.get(c) || {};
+    return { key: c, label: m.label || c, unit: m.unit || "", group: m.group || "기타", type: m.type || "num", available: m.available !== false };
+  });
+  let rows, total, start, end;
+  // 출처(공식/집계) 표시용으로 source_kind 는 늘 함께 읽는다(응답 columns 에는 고른 것만)
+  const qcols = cols.includes("source_kind") ? cols : [...cols, "source_kind"];
+  if (kind === "hourly") {
+    const latest = latestOfficialHour();
+    start = from || addHours(latest, -24);
+    end = to || latest;
+    if (start.length === 10) start += " 00:00";
+    if (end.length === 10) end += " 23:59:59";
+    else if (end.length === 16) end += ":59"; // 'HH:MM' 끝 시각의 'HH:MM:00' 행도 들어가게
+    if (db.usingPg()) {
+      total = await db.countHourlyExportPg({ stationId, from: start, to: end });
+      rows = (page - 1) * size < total ? await db.queryHourlyExportPg({ stationId, from: start, to: end, columns: qcols, limit: size, offset: (page - 1) * size }) : [];
+    } else {
+      const d = await getExportData({ kind, stationId, from: start, to: end, columns: qcols });
+      total = d.rows.length;
+      rows = d.rows.slice((page - 1) * size, page * size);
+    }
+  } else {
+    const latest = latestOfficialHour().slice(0, 10);
+    start = from || addHours(latestOfficialHour(), -24 * 30).slice(0, 10);
+    end = to || latest;
+    const days = Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000) + 1;
+    if (!(days >= 1)) throw new ViewError("종료일이 시작일보다 앞섭니다.");
+    if (days > VIEW_MAX_DAYS) throw new ViewError(`일별 날씨는 한 번에 ${VIEW_MAX_DAYS}일까지 볼 수 있습니다(지금 ${days}일).`);
+    const d = await getExportData({ kind, stationId, from: start, to: end, columns: qcols });
+    total = d.rows.length;
+    rows = d.rows.slice((page - 1) * size, page * size);
+  }
+  // 고른 컬럼만(+ 출처 표시용 source_kind) 돌려준다
+  const pick = rows.map((r) => {
+    const o = {};
+    for (const c of cols) o[c] = r[c] ?? null;
+    if (!("source_kind" in o) && r.source_kind) o.source_kind = r.source_kind;
+    if (kind === "hourly" && o.observation_datetime != null) o.observation_datetime = String(o.observation_datetime).slice(0, 19);
+    return o;
+  });
+  return { ok: true, timezone: "Asia/Seoul", kind, stationId, from: start, to: end, columns, rows: pick, total, page, pageSize: size, pages: Math.max(1, Math.ceil(total / size)) };
 }
 
 async function getKey() {
@@ -1081,6 +1148,8 @@ const handleStats = createStatsApi({
 // 카카오 로그인(관리 기능 보호). 서버 시작 시 DB 연결 뒤에 만든다. 키가 없으면 꺼진 상태(기존과 동일).
 let auth = createAuth({ env: {} });
 let layoutStore = null;
+let prefsStore = null;
+const presetIdsOf = (kind) => new Set(EXPORT_PRESETS.filter((p) => p.kind === kind).map((p) => p.id));
 const layoutKeys = (kind) => new Set(getExportCatalog(kind, { fullFields: true }).map((c) => c.key));
 // 공개 응답에서 관리자 전용 정보(인증키 일부, 수집 메시지)를 뺀다. 로그인 기능이 꺼져 있으면 그대로.
 async function publicView(req, d) {
@@ -1100,6 +1169,15 @@ const server = http.createServer(async (req, res) => {
     if (denied) return json(res, denied.body, denied.status);
     if (await auth.handle(req, res, url)) return;
     if (await handleLayouts(req, res, url, { store: layoutStore, ownerOf: (r) => auth.ownerOf(r), allowedKeys: layoutKeys, readBody, json })) return;
+    if (await handlePrefs(req, res, url, { store: prefsStore, layoutStore, ownerOf: (r) => auth.ownerOf(r), presetIds: presetIdsOf, readBody, json })) return;
+    if (req.method === "GET" && url.pathname === "/api/view") {
+      try {
+        return json(res, await getViewData(url.searchParams));
+      } catch (e) {
+        if (e instanceof ViewError) return json(res, { ok: false, message: e.message }, 400);
+        throw e;
+      }
+    }
     if (url.pathname.startsWith("/api/stats/") && (await handleStats(req, res, url))) return;
     if (req.method === "GET" && url.pathname === "/api/hourly") {
       return json(res, await queryHourly(Object.fromEntries(url.searchParams)));
@@ -1348,6 +1426,7 @@ const ready = (async () => {
   }
   auth = createAuth({ env: process.env, store });
   layoutStore = kind === "mysql" ? createMysqlLayoutStore(db.getPool()) : kind === "postgresql" ? createPgLayoutStore(db.getPool()) : createJsonLayoutStore(LAYOUT_FILE);
+  prefsStore = kind === "mysql" ? createMysqlPrefsStore(db.getPool()) : kind === "postgresql" ? createPgPrefsStore(db.getPool()) : createJsonPrefsStore(PREFS_FILE);
   console.log(auth.startupLine);
   if (auth.enabled) {
     const n = await auth.cleanup();

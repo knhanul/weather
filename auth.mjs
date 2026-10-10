@@ -6,6 +6,7 @@
 import crypto from "node:crypto";
 import { nuniConfig, nuniConfigured, createNuniClient, nuniRoleIsAdmin } from "./auth-nuni.mjs";
 import { isLayoutPath } from "./layouts.mjs";
+import { isPrefsPath } from "./view-prefs.mjs";
 
 export const authProvider = (env = process.env) => (String(env.AUTH_PROVIDER || "").trim().toLowerCase() === "nuni-id" ? "nuni-id" : "kakao");
 // 이 서버에서 로그인 기능이 켜지는지 (저장소를 만들지 판단)
@@ -197,7 +198,7 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
     if (write) {
       if (!sameOrigin(req)) return { status: 403, body: { ok: false, auth: "csrf", message: "다른 사이트에서 보낸 요청은 처리하지 않습니다." } };
       if (url.pathname === "/auth/logout") return null;
-      if (isLayoutPath(url.pathname)) return requireUser(req);
+      if (isLayoutPath(url.pathname) || isPrefsPath(url.pathname)) return requireUser(req); // 개인 설정: 로그인(차단 아님)이면 됨
       return requireAdmin(req);
     }
     if (ADMIN_GET.has(url.pathname) || url.pathname.startsWith("/api/admin/")) return requireAdmin(req);
