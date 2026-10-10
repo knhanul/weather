@@ -534,6 +534,16 @@ export function pickLongestPerT(rows) {
   return out;
 }
 
+// 그래프 일 단위(30일 초과): 공식 일자료만, 날짜순. 기본 키(station_id, observation_date) 범위 → 24개월 731행
+export async function dailySeriesPg(stationId, fromDate, toDate) {
+  return q(
+    `SELECT observation_date, avg_temperature, min_temperature, max_temperature, precipitation, avg_humidity, avg_wind_speed
+     FROM observations_daily WHERE station_id = ? AND observation_date BETWEEN ? AND ? AND source_kind = 'OFFICIAL'
+     ORDER BY observation_date`,
+    [stationId, fromDate, toDate],
+  );
+}
+
 export async function seriesPg(stationId, from16, to16) {
   const r = await q(
     `SELECT LEFT(observation_datetime,16) AS t, station_name, temperature, precipitation, humidity, wind_speed

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as db from "./db.mjs";
+import { dailyChartPoints } from "./db-common.mjs";
 import {
   mapHourlyItem, mapDailyItem, withoutExtras, kmaResponseError,
   HOURLY_DEFAULT_EXPORT, DAILY_DEFAULT_EXPORT,
@@ -536,42 +537,16 @@ async function stationSummaries(stationList) {
   });
 }
 
-// 기간 지정(from/to) 그래프: 31일까지는 시간 단위, 그보다 길면 하루 단위로 묶는다(최대 366일).
-const SERIES_HOURLY_MAX_DAYS = 31;
-const SERIES_RANGE_MAX_DAYS = 366;
-function roundTo(v, d = 1) {
-  const f = 10 ** d;
-  return Math.round(v * f) / f;
-}
-// 시간 단위 점(중복 제거된 것)을 날짜별로 묶는다. NULL은 0으로 바꾸지 않고 값 있는 시각만 집계한다.
-function dailyFromHourly(points) {
-  const byDay = new Map();
-  for (const p of points) {
-    const d = String(p.t).slice(0, 10);
-    if (!byDay.has(d)) byDay.set(d, []);
-    byDay.get(d).push(p);
-  }
-  return [...byDay.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([d, list]) => {
-      const vals = (k) => list.map((x) => x[k]).filter((v) => v != null && Number.isFinite(Number(v))).map(Number);
-      const temps = vals("temperature");
-      const rains = vals("precipitation");
-      const hums = vals("humidity");
-      const winds = vals("wind_speed");
-      const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
-      return {
-        t: `${d} 00:00`,
-        temperature: temps.length ? roundTo(avg(temps)) : null,
-        max_temperature: temps.length ? Math.max(...temps) : null,
-        min_temperature: temps.length ? Math.min(...temps) : null,
-        precipitation: rains.length ? roundTo(rains.reduce((x, y) => x + y, 0)) : null,
-        humidity: hums.length ? Math.round(avg(hums)) : null,
-        wind_speed: winds.length ? roundTo(avg(winds)) : null,
-        hours: list.length,
-        temp_hours: temps.length,
-      };
-    });
+// 기간 지정(from/to) 그래프: 30일까지는 시간 단위, 그보다 길면 기상청 공식 일자료(observations_daily)로 그린다(최대 731일 = 24개월).
+// 공식 일자료가 없는 날은 점을 만들지 않는다(시간자료로 메우지 않음 → 그래프에서 끊김).
+const SERIES_HOURLY_MAX_DAYS = 30;
+const SERIES_RANGE_MAX_DAYS = 731;
+async function officialDailyPoints(stationId, fromDate, toDate) {
+  const rows = db.usingPg()
+    ? await db.dailySeriesPg(stationId, fromDate, toDate)
+    : loadJson(DAILY_FILE, []).filter((r) => String(r.station_id) === stationId && r.source_kind !== "DERIVED" && r.observation_date >= fromDate && r.observation_date <= toDate)
+        .sort((a, b) => String(a.observation_date).localeCompare(String(b.observation_date)));
+  return dailyChartPoints(rows);
 }
 async function seriesPoints(stationId, from16, to16) {
   if (db.usingPg()) {
@@ -636,10 +611,15 @@ async function seriesRange(st, stationId, fromRaw, toRaw, official) {
   const from16 = `${msToH13(fromMs)}:00`;
   const to16 = `${msToH13(toMs)}:00`;
   const resolution = spanDays > SERIES_HOURLY_MAX_DAYS ? "day" : "hour";
-  const [latest, hourly] = await Promise.all([stationLatest(stationId), seriesPoints(stationId, from16, to16)]);
+  const daily = resolution === "day";
+  const [latest, raw] = await Promise.all([
+    stationLatest(stationId),
+    daily ? officialDailyPoints(stationId, msToYmd(fromMs), msToYmd(toMs)) : seriesPoints(stationId, from16, to16),
+  ]);
   const lag = latest ? lagHours(latest, official) : null;
-  const expected = Math.round((toMs - fromMs) / 3600000) + 1;
-  const points = resolution === "day" ? dailyFromHourly(hourly) : hourly;
+  // 일 단위: expected/present 는 날 수(공식 일자료가 있는 날). 시간 단위: 시각 수.
+  const expected = daily ? spanDays : Math.round((toMs - fromMs) / 3600000) + 1;
+  const points = raw;
   return {
     status: 200,
     body: {
@@ -654,12 +634,13 @@ async function seriesRange(st, stationId, fromRaw, toRaw, official) {
       range_from: from16,
       range_to: to16,
       days: spanDays,
-      hours: expected,
+      hours: Math.round((toMs - fromMs) / 3600000) + 1,
+      source: daily ? "official_daily" : "hourly",
       latest,
       lag_hours: lag,
       stale: lag != null && lag > 24,
       expected,
-      present: hourly.length,
+      present: daily ? points.filter((p) => p.temperature != null).length : raw.length,
       count: points.length,
       points,
     },

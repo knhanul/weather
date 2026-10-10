@@ -84,3 +84,18 @@ export function hourGapIntervals(stationId, a, b, have) {
 // 'YYYY-MM-DD HH:MM' 같은 접두어 p 로 시작하거나 그보다 뒤·앞인 observation_datetime 범위를 인덱스로 찾기 위한 상한.
 // left(x, len(p)) <= p  <=>  x <= p + '~'  ('~' 는 숫자·':'·' ' 보다 큰 ASCII)
 export const prefixUpper = (p) => `${p}~`;
+
+// 그래프 일 단위 점: 공식 일자료 행 → { t:'YYYY-MM-DD 00:00', temperature(일평균), max/min, precipitation, humidity, wind_speed }.
+// 값이 없으면 NULL 그대로(0 으로 바꾸지 않음), 없는 날은 점을 만들지 않는다(그래프에서 끊김).
+export function dailyChartPoints(rows) {
+  const n = (v) => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+  return rows.map((r) => ({
+    t: `${String(r.observation_date).slice(0, 10)} 00:00`,
+    temperature: n(r.avg_temperature),
+    max_temperature: n(r.max_temperature),
+    min_temperature: n(r.min_temperature),
+    precipitation: n(r.precipitation),
+    humidity: n(r.avg_humidity),
+    wind_speed: n(r.avg_wind_speed),
+  }));
+}

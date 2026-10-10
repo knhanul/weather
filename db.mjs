@@ -299,6 +299,18 @@ export async function latestHourPg(stationId) {
   return r.rows[0]?.t || null;
 }
 
+// 그래프 일 단위(30일 초과): 공식 일자료만, 날짜순
+export async function dailySeriesPg(stationId, fromDate, toDate) {
+  if (my) return my.dailySeriesPg(...arguments);
+  const r = await pool.query(
+    `SELECT observation_date::text AS observation_date, avg_temperature, min_temperature, max_temperature, precipitation, avg_humidity, avg_wind_speed
+     FROM observations_daily WHERE station_id = $1 AND observation_date BETWEEN $2 AND $3 AND source_kind = 'OFFICIAL'
+     ORDER BY observation_date`,
+    [stationId, fromDate, toDate],
+  );
+  return r.rows;
+}
+
 export async function seriesPg(stationId, from16, to16) {
   if (my) return my.seriesPg(...arguments);
   const r = await pool.query(

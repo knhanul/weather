@@ -202,3 +202,15 @@ test("splitDayRange: 온전한 날(요약표)과 양 끝 일부 날(원본) 나�
   assert.deepEqual(splitDayRange("2026-10-01 05", "2026-10-01 12"), { full: null, edges: [{ a: "2026-10-01 05", b: "2026-10-01 12" }] });
   assert.deepEqual(splitDayRange("2026-10-01 05", "2026-10-02 03"), { full: null, edges: [{ a: "2026-10-01 05", b: "2026-10-02 03" }] });
 });
+
+test("dailyChartPoints: 공식 일자료 → 그래프 점(NULL 유지, 없는 날은 만들지 않음)", async () => {
+  const { dailyChartPoints } = await import("../db-common.mjs");
+  const out = dailyChartPoints([
+    { observation_date: "2026-09-01", avg_temperature: 24.1, min_temperature: "20.5", max_temperature: 28, precipitation: null, avg_humidity: 70, avg_wind_speed: "" },
+    { observation_date: "2026-09-03", avg_temperature: null, min_temperature: null, max_temperature: null, precipitation: 0, avg_humidity: null, avg_wind_speed: 1.2 },
+  ]);
+  assert.deepEqual(out, [
+    { t: "2026-09-01 00:00", temperature: 24.1, max_temperature: 28, min_temperature: 20.5, precipitation: null, humidity: 70, wind_speed: null },
+    { t: "2026-09-03 00:00", temperature: null, max_temperature: null, min_temperature: null, precipitation: 0, humidity: null, wind_speed: 1.2 },
+  ]);
+});
