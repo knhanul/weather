@@ -422,3 +422,9 @@ sed -i '/^AUTH_PROVIDER=/d' /etc/weather-hub.env && systemctl restart weather-hu
   `node scripts/mysql-integration.mjs` (이름이 `_test` 로 끝나는 빈 DB 에서만: 쓰기 경로·로그인·레이아웃 점검).
 - 일자료 다운로드·미리보기 `cols is not defined` 500 은 2026-10-10 다음 커밋에서 고침(시간자료로 보충한 날은 요청한 컬럼만).
 - `scripts/approve-user.mjs` 는 PostgreSQL 전용(예전 그대로). MySQL 모드에서는 관리 화면에서 승인한다.
+
+## 13. 기상청 오류 판별 · 시간자료 41일 단위 (2026-10-10)
+
+- 공공데이터포털이 미등록 키에 주는 `HTTP 403` + `OpenAPI_ServiceResponse.cmmMsgHeader.errMsg=SERVICE_KEY_IS_NOT_REGISTERED_ERROR` 를 이제 **FAILED** 로 기록한다(예전: 0건 COMPLETED). 시간·일자료 공통 `kmaResponseError` (kma-fields.mjs).
+- 시간자료 수집 구간을 7일 → 41일(984행, 기상청 호출 1번)로. 같은 기간에 호출 수가 약 1/6.
+- 일자료(AsosDalyInfoService)는 현재 키로 403 — 공공데이터포털에서 "기상청_지상(종관, ASOS) 일자료 조회서비스" 활용신청 필요.

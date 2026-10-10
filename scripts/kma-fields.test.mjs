@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   HOURLY_FIELDS, DAILY_FIELDS, HOURLY_EXTRA, DAILY_EXTRA, HOURLY_LEGACY_COLUMNS, DAILY_LEGACY_COLUMNS,
-  mapHourlyItem, mapDailyItem, withoutExtras, toNum, toText,
+  mapHourlyItem, mapDailyItem, withoutExtras, toNum, toText, kmaResponseError,
 } from "../kma-fields.mjs";
 import { buildUpsert } from "../db.mjs";
 
@@ -255,4 +255,13 @@ test("PG 통합: 마이그레이션 적용 → UPSERT 가 새 컬럼과 raw 를 
   const list = await db.listDailyOfficial("108");
   assert.deepEqual(Object.keys(list[0]), DAILY_LEGACY_COLUMNS);
   await pool.end();
+});
+
+test("kmaResponseError: 미등록 키(403 SERVICE_KEY_IS_NOT_REGISTERED)는 오류 → 일자료 수집이 0건 COMPLETED 가 아니라 FAILED", () => {
+  const forbidden = { OpenAPI_ServiceResponse: { cmmMsgHeader: { errMsg: "SERVICE_KEY_IS_NOT_REGISTERED_ERROR", returnAuthMsg: "등록되지 않은 서비스키", returnReasonCode: "30" } } };
+  assert.match(kmaResponseError(403, forbidden), /^SERVICE_KEY_IS_NOT_REGISTERED_ERROR .*\(30\) HTTP 403$/);
+  assert.equal(kmaResponseError(200, { response: { header: { resultCode: "03", resultMsg: "NO_DATA" } } }), "03 NO_DATA");
+  assert.equal(kmaResponseError(403, {}), "HTTP 403");
+  assert.equal(kmaResponseError(200, {}), "기상청 응답 형식이 아닙니다");
+  assert.equal(kmaResponseError(200, { response: { header: { resultCode: "00", resultMsg: "NORMAL_SERVICE" }, body: { totalCount: 0 } } }), null);
 });

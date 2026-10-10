@@ -484,3 +484,15 @@ export function formatCsvRow(row, cols) {
   return cols.map((col) => escapeCsvValue(row[col])).join(",");
 }
 
+
+// 기상청(공공데이터포털) 응답 오류 판별. 미등록 키는 HTTP 403 + {"OpenAPI_ServiceResponse":{"cmmMsgHeader":{"errMsg":"SERVICE_KEY_IS_NOT_REGISTERED_ERROR",...}}}
+// 로 오는데 response.header 가 없어서 예전에는 "0건 COMPLETED" 로 기록됐다. 오류면 메시지 문자열, 정상이면 null.
+export function kmaResponseError(httpStatus, parsed) {
+  const gw = parsed?.OpenAPI_ServiceResponse?.cmmMsgHeader;
+  if (gw) return [gw.errMsg, gw.returnAuthMsg, gw.returnReasonCode && `(${gw.returnReasonCode})`, httpStatus && `HTTP ${httpStatus}`].filter(Boolean).join(" ");
+  const header = parsed?.response?.header;
+  if (header?.resultCode && header.resultCode !== "00") return `${header.resultCode} ${header.resultMsg || ""}`.trim();
+  if (httpStatus && (httpStatus < 200 || httpStatus >= 300)) return `HTTP ${httpStatus}`;
+  if (!parsed?.response) return "기상청 응답 형식이 아닙니다";
+  return null;
+}

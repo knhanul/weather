@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as db from "./db.mjs";
 import {
-  mapHourlyItem, mapDailyItem, withoutExtras,
+  mapHourlyItem, mapDailyItem, withoutExtras, kmaResponseError,
   HOURLY_DEFAULT_EXPORT, DAILY_DEFAULT_EXPORT,
   EXPORT_PRESETS, getExportCatalog, validateExportColumns,
   formatCsvRow,
@@ -280,10 +280,8 @@ async function fetchHourlyPage({ key, stationId, from, to, pageNo }) {
   } catch {
     throw new Error(text.slice(0, 180) || `HTTP ${res.status}`);
   }
-  const header = parsed?.response?.header ?? {};
-  if (header.resultCode && header.resultCode !== "00") {
-    throw new Error(`${header.resultCode} ${header.resultMsg || ""}`.trim());
-  }
+  const kerr = kmaResponseError(res.status, parsed);
+  if (kerr) throw new Error(kerr);
   const body = parsed?.response?.body ?? {};
   const items = body?.items?.item;
   const list = !items ? [] : Array.isArray(items) ? items : [items];
@@ -312,7 +310,8 @@ async function collectOfficial({ stationId = "108", from, to, trigger = "MANUAL"
     await saveJobs(job);
     return job;
   }
-  const chunks = splitRange(from, to, 24 * 7);
+  // 41일 = 984행 → 기상청 호출 1번(numOfRows 999). 예전 7일 단위는 같은 기간에 호출이 6배.
+  const chunks = splitRange(from, to, 24 * 41);
   try {
     for (const chunk of chunks) {
       let page = 1;
@@ -432,11 +431,17 @@ async function collectDaily({ stationId = "108", from, to, trigger = "MANUAL" })
   url.searchParams.set("stnIds", stationId);
   try {
     const res = await fetch(url, { headers: { Accept: "application/json" } });
-    const parsed = JSON.parse(await res.text());
-    const header = parsed?.response?.header ?? {};
-    if (header.resultCode && header.resultCode !== "00") {
+    const text = await res.text();
+    let parsed = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      /* 아래에서 오류로 처리 */
+    }
+    const kerr = parsed ? kmaResponseError(res.status, parsed) : text.slice(0, 180) || `HTTP ${res.status}`;
+    if (kerr) {
       job.status = "FAILED";
-      job.message = `${header.resultCode} ${header.resultMsg || ""}`.trim();
+      job.message = kerr;
     } else {
       const items = parsed?.response?.body?.items?.item;
       const list = !items ? [] : Array.isArray(items) ? items : [items];
