@@ -13,6 +13,8 @@ const pairs = [
   ["summaries", `SELECT station_id, CAST(SUM(n_rows) AS SIGNED) AS n_rows, CAST(SUM(h) AS SIGNED) AS hours, LEFT(MIN(f),16) AS first_observation, LEFT(MAX(l),16) AS last_observation
      FROM (SELECT station_id, ym, SUM(n_rows) AS n_rows, MAX(hours) AS h, MIN(first_dt) AS f, MAX(last_dt) AS l FROM hourly_month_stats GROUP BY station_id, ym) x GROUP BY station_id ORDER BY station_id`,
     `SELECT station_id, COUNT(*) AS n_rows, COUNT(DISTINCT LEFT(observation_datetime,16)) AS hours, LEFT(MIN(observation_datetime),16) AS first_observation, LEFT(MAX(observation_datetime),16) AS last_observation FROM observations_hourly GROUP BY station_id ORDER BY station_id`],
+  ["dayCounts", "SELECT station_id, d, n, n_rows AS `rows` FROM hourly_day_stats ORDER BY station_id, d",
+    "SELECT station_id, LEFT(observation_datetime,10) AS d, COUNT(DISTINCT LEFT(observation_datetime,13)) AS n, COUNT(*) AS `rows` FROM observations_hourly GROUP BY station_id, d ORDER BY station_id, d"],
 ];
 let bad = 0;
 for (const [name, fast, slow] of pairs) {

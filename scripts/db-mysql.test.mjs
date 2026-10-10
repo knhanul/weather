@@ -191,3 +191,14 @@ test("touchedMonths: 저장한 행의 지점·월 목록", async () => {
     [["108", "2026-10"], ["108", "2026-11"], ["112", "1990-01"]],
   );
 });
+
+test("splitDayRange: 온전한 날(요약표)과 양 끝 일부 날(원본) 나누기", async () => {
+  const { splitDayRange } = await import("../db-mysql.mjs");
+  assert.deepEqual(splitDayRange("2023-10-06 00", "2026-10-10 23"), { full: ["2023-10-06", "2026-10-10"], edges: [] });
+  assert.deepEqual(splitDayRange("2026-10-01 05", "2026-10-10 12"), {
+    full: ["2026-10-02", "2026-10-09"],
+    edges: [{ a: "2026-10-01 05", b: "2026-10-01 23" }, { a: "2026-10-10 00", b: "2026-10-10 12" }],
+  });
+  assert.deepEqual(splitDayRange("2026-10-01 05", "2026-10-01 12"), { full: null, edges: [{ a: "2026-10-01 05", b: "2026-10-01 12" }] });
+  assert.deepEqual(splitDayRange("2026-10-01 05", "2026-10-02 03"), { full: null, edges: [{ a: "2026-10-01 05", b: "2026-10-02 03" }] });
+});

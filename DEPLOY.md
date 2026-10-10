@@ -437,3 +437,4 @@ sed -i '/^AUTH_PROVIDER=/d' /etc/weather-hub.env && systemctl restart weather-hu
 - 요약표 `hourly_month_stats`(지점×월×dataset: 행 수·시각 수·처음·끝), `daily_station_stats`(지점별 행 수), migration `mysql/0002`. 저장할 때 건드린 지점·월만 다시 센다(한 줄로 처리). 처음 시작 때 비어 있으면 뒤에서 채우고(`hub_stats_meta`), 그동안은 예전 집계. 값은 같다: `node scripts/check-stats.mjs`.
 - 집계 캐시: 만료돼도 직전 값을 바로 주고 뒤에서 한 번만 다시 계산, 처음 계산은 동시 요청이 함께 기다림.
 - 화면: 대시보드 자료가 늦거나 실패해도 다른 화면은 뜨고, 대시보드에는 "불러오는 중"/"다시 시도".
+- 미적재 현황(/api/gaps): 지점·일자별 시각 수를 `hourly_day_stats`(migration `mysql/0003`)에서 — 온전한 날은 요약표, 범위 양 끝 일부 날만 원본. 1100일 × 8개 지점 12초 → 1초 미만. 공식 일자료 날짜는 좁은 색인 강제(3초 → 0.x초). 요약표 버전 `obs_stats_v2` (배포 때 다시 채움).

@@ -646,14 +646,14 @@ function statsQueue(fn) {
   return p;
 }
 async function loadStatsReady() {
-  const r = await q("SELECT name FROM hub_stats_meta WHERE name = 'obs_stats_v1'");
+  const r = await q("SELECT name FROM hub_stats_meta WHERE name = 'obs_stats_v2'");
   return r.length > 0;
 }
 // 요약표 갱신이 실패하면 값이 틀릴 수 있으니 원본 집계로 돌아가고 다음 시작 때 다시 만든다
 function markStatsStale(e) {
   console.error("mysql stats refresh failed — falling back to full aggregates", e?.code || e?.message);
   statsReady = false;
-  q("DELETE FROM hub_stats_meta WHERE name = 'obs_stats_v1'", [], { retry: false }).catch(() => {});
+  q("DELETE FROM hub_stats_meta WHERE name = 'obs_stats_v2'", [], { retry: false }).catch(() => {});
 }
 export function touchedMonths(rows) {
   const m = new Map();
@@ -687,7 +687,16 @@ async function refreshHourlyStats(pairs) {
        WHERE station_id = ? AND observation_datetime >= ? AND observation_datetime < ?`,
       range,
     );
-    await tx((run) => writeMonthStats(run, stationId, ym, perDs, h[0].h));
+    const days = await q(
+      `SELECT LEFT(observation_datetime,10) AS d, COUNT(DISTINCT LEFT(observation_datetime,13)) AS n, COUNT(*) AS n_rows FROM observations_hourly
+       WHERE station_id = ? AND observation_datetime >= ? AND observation_datetime < ? GROUP BY d`,
+      range,
+    );
+    await tx(async (run) => {
+      await writeMonthStats(run, stationId, ym, perDs, h[0].h);
+      await run("DELETE FROM hourly_day_stats WHERE station_id = ? AND d >= ? AND d < ?", range);
+      if (days.length) await run(`INSERT INTO hourly_day_stats (station_id, d, n, n_rows) VALUES ${days.map(() => "(?,?,?,?)").join(",")}`, days.flatMap((x) => [stationId, x.d, x.n, x.n_rows]));
+    });
   }
 }
 async function refreshDailyStats(stationIds) {
@@ -710,6 +719,10 @@ export async function rebuildStats() {
       `SELECT LEFT(observation_datetime,7) AS ym, COUNT(DISTINCT LEFT(observation_datetime,16)) AS h FROM observations_hourly WHERE station_id = ? GROUP BY ym`,
       [id],
     )).map((r) => [r.ym, r.h]));
+    const days = (await q(
+      `SELECT LEFT(observation_datetime,10) AS d, COUNT(DISTINCT LEFT(observation_datetime,13)) AS n, COUNT(*) AS n_rows FROM observations_hourly WHERE station_id = ? GROUP BY d`,
+      [id],
+    )).map((x) => [id, x.d, x.n, x.n_rows]);
     // 한 지점 = DELETE 1번 + 여러 행 INSERT 몇 번(NAS 왕복이 ~90ms 라 월마다 쓰면 지점당 1분 넘게 걸린다)
     const vals = perDs.map((r) => [id, r.ym, r.dataset, r.n, hours.get(r.ym) ?? 0, r.f, r.l]);
     await tx(async (run) => {
@@ -718,14 +731,21 @@ export async function rebuildStats() {
         const part = vals.slice(i, i + 500);
         await run(`INSERT INTO hourly_month_stats (station_id, ym, dataset, n_rows, hours, first_dt, last_dt) VALUES ${part.map(() => "(?,?,?,?,?,?,?)").join(",")}`, part.flat());
       }
+      await run("DELETE FROM hourly_day_stats WHERE station_id = ?", [id]);
+      for (let i = 0; i < days.length; i += 2000) {
+        const part = days.slice(i, i + 2000);
+        await run(`INSERT INTO hourly_day_stats (station_id, d, n, n_rows) VALUES ${part.map(() => "(?,?,?,?)").join(",")}`, part.flat());
+      }
     });
   }
   // 지점이 원본에서 사라진 경우(직접 지운 경우)
-  if (ids.length) await q(`DELETE FROM hourly_month_stats WHERE station_id NOT IN (${ids.map(() => "?").join(",")})`, ids, { retry: false });
-  else await q("DELETE FROM hourly_month_stats", [], { retry: false });
+  for (const t of ["hourly_month_stats", "hourly_day_stats"]) {
+    if (ids.length) await q(`DELETE FROM ${t} WHERE station_id NOT IN (${ids.map(() => "?").join(",")})`, ids, { retry: false });
+    else await q(`DELETE FROM ${t}`, [], { retry: false });
+  }
   await q("DELETE FROM daily_station_stats", [], { retry: false });
   await q("INSERT INTO daily_station_stats (station_id, n_rows) SELECT station_id, COUNT(*) FROM observations_daily GROUP BY station_id", [], { retry: false });
-  await q("REPLACE INTO hub_stats_meta (name, built_at) VALUES ('obs_stats_v1', NOW(6))", [], { retry: false });
+  await q("REPLACE INTO hub_stats_meta (name, built_at) VALUES ('obs_stats_v2', NOW(6))", [], { retry: false });
   statsReady = true;
   console.log(`mysql stats built: ${ids.length} stations in ${Math.round((Date.now() - t0) / 1000)}s`);
 }
@@ -826,7 +846,37 @@ export function gapDayCountsPg(ranges) {
   for (const [k, v] of dayCountMemo) if (Date.now() - v.at >= 5000) dayCountMemo.delete(k);
   return p;
 }
+// 요약표가 있으면: 범위 안의 온전한 날은 hourly_day_stats 에서, 범위 양 끝의 일부만 걸친 날만 원본에서 센다(결과는 같다).
+export function splitDayRange(a, b) {
+  const dA = a.slice(0, 10);
+  const dB = b.slice(0, 10);
+  const next = (d, k) => new Date(Date.parse(`${d}T00:00:00Z`) + k * 86400000).toISOString().slice(0, 10);
+  const fullFrom = a.slice(11, 13) === "00" ? dA : next(dA, 1);
+  const fullTo = b.slice(11, 13) === "23" ? dB : next(dB, -1);
+  const edges = [];
+  if (fullFrom > fullTo) return { full: null, edges: [{ a, b }] };
+  if (fullFrom !== dA) edges.push({ a, b: `${dA} 23` < b ? `${dA} 23` : b });
+  if (fullTo !== dB) edges.push({ a: `${dB} 00` > a ? `${dB} 00` : a, b });
+  return { full: [fullFrom, fullTo], edges };
+}
 async function gapDayCountsQuery(ranges) {
+  if (!statsReady) return gapDayCountsRaw(ranges);
+  const full = [];
+  const edges = [];
+  for (const r of ranges) {
+    const sp = splitDayRange(r.a, r.b);
+    if (sp.full) full.push({ station_id: r.station_id, from: sp.full[0], to: sp.full[1] });
+    for (const e of sp.edges) edges.push({ station_id: r.station_id, ...e });
+  }
+  const [f, e] = await Promise.all([
+    full.length
+      ? q(full.map(() => "SELECT station_id, d, n, n_rows AS `rows` FROM hourly_day_stats WHERE station_id = ? AND d BETWEEN ? AND ?").join(" UNION ALL "), full.flatMap((x) => [x.station_id, x.from, x.to]))
+      : [],
+    edges.length ? gapDayCountsRaw(edges) : [],
+  ]);
+  return [...f, ...e];
+}
+async function gapDayCountsRaw(ranges) {
   const parts = ranges.map(
     () => `SELECT station_id, LEFT(observation_datetime,10) AS d,
                   COUNT(DISTINCT LEFT(observation_datetime,13)) AS n, COUNT(*) AS \`rows\`
@@ -874,7 +924,8 @@ export async function gapHourIntervalsPg(ranges, dayCounts = null) {
 export async function gapOfficialDaysPg(stationIds, fromDate, toDate) {
   if (!stationIds.length) return [];
   return q(
-    `SELECT station_id, observation_date AS d FROM observations_daily
+    // 좁은 색인(observation_date + 기본 키)만 읽게: 넓은 행을 범위로 읽으면 1100일 × 8개 지점에 3초
+    `SELECT station_id, observation_date AS d FROM observations_daily FORCE INDEX (observations_daily_date)
      WHERE station_id IN (${inList(stationIds.length)}) AND observation_date BETWEEN ? AND ?`,
     [...stationIds, fromDate, toDate],
   );
