@@ -5,7 +5,7 @@
 .cf-btn svg { width: 14px; height: 14px; }
 @media (max-width: 560px) { .cf-btn span { display: none; } .cf-btn { width: 32px; height: 32px; padding: 0; justify-content: center; } .cf-btn svg { width: 16px; height: 16px; } }
 html.cf-lock, html.cf-lock body { overflow: hidden; }
-.cf-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(13, 27, 61, .55); }
+.cf-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(13, 27, 61, .55); -webkit-tap-highlight-color: transparent; }
 .cf-overlay.cf-mobile { background: var(--surface, #fff); }
 .cf-stage { display: flex; flex-direction: column; background: var(--surface, #fff); color: var(--fg, #0d1b3d); box-sizing: border-box; overflow: hidden; }
 .cf-desk .cf-stage { position: absolute; top: 4vh; left: 4vw; width: 92vw; height: 92vh; border-radius: 16px; padding: 16px 20px 12px; box-shadow: 0 20px 50px rgba(13, 27, 61, .3); }
