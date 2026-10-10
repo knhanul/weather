@@ -230,7 +230,7 @@
     if (!table || !table.rows?.length) return "";
     const isNum = (v) => typeof v === "number";
     return `<details class="sx-table" open><summary>요약표 (${table.rows.length}행)</summary><div class="sx-table-wrap"><table><thead><tr>${table.columns.map((c) => `<th>${E(c.label)}</th>`).join("")}</tr></thead><tbody>${table.rows
-      .map((r, i) => `<tr${dimRow(r, i) ? ' class="dim"' : ""}>${table.columns.map((c) => `<td${isNum(r[c.key]) ? ' class="num"' : ""}>${r[c.key] === null || r[c.key] === undefined || r[c.key] === "" ? "—" : E(isNum(r[c.key]) ? num(r[c.key], 1) : r[c.key])}</td>`).join("")}</tr>`)
+      .map((r, i) => `<tr${dimRow(r, i) ? ' class="dim"' : ""}>${table.columns.map((c, ci) => `<td${isNum(r[c.key]) || ((r[c.key] === null || r[c.key] === "") && ci > 0) ? ' class="num"' : ""}>${r[c.key] === null || r[c.key] === undefined || r[c.key] === "" ? "—" : E(isNum(r[c.key]) ? r[c.key].toLocaleString("ko-KR", { maximumFractionDigits: 1, useGrouping: false }) : r[c.key])}</td>`).join("")}</tr>`)
       .join("")}</tbody></table></div></details>`;
   }
   const stateHtml = (msg, cls = "") => `<div class="sx-state ${cls}">${msg}</div>`;
@@ -592,7 +592,7 @@
       <div class="sx-key">${keyBoxes}</div>
       ${notes.map((w) => `<p class="sx-warn">${E(w)}</p>`).join("")}
       ${has ? `<div class="sx-chart" id="yxChart"></div>${legendHtml(r.series.map((s, k) => ({ label: `${s.year}년`, color: COLORS[k % 4] })))}` : stateHtml("고른 연도에 표시할 자료가 없습니다.")}
-      <div class="sx-tools"><span class="muted">${E(m.label)} 대신 그 지표가 쓰는 하루 값을 보여 줍니다.</span><a class="dl-chip-btn" href="${E(url)}&format=csv" download>통계 결과 CSV 내려받기</a></div>
+      <div class="sx-tools"><span class="muted">겹쳐보기는 연도 집계값(${E(m.label)})이 아니라 하루하루의 ${E(v.label)}입니다.</span><a class="dl-chip-btn" href="${E(url)}&format=csv" download>통계 결과 CSV 내려받기</a></div>
       ${tableHtml(r.table)}
       ${rulesHtml(m, ["겹쳐보기: 2월 29일은 윤년에만 값이 있습니다. 자료 없는 날은 점이 없고, 누적 강수는 그날 이후 끊습니다."])}`;
     if (has)

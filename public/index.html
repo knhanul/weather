@@ -340,6 +340,8 @@
     .st-tabs a.on { background:var(--pri); color:#fff; }
     .st-panel { display:grid; gap:16px; min-width:0; }
     .st-panel[hidden] { display:none; }
+    #dash, #dash > *, .st-panel > * { min-width:0; }
+    .sx-table-wrap table { width:max-content; min-width:100%; }
     .q-cards { display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); margin-top:12px; }
     a.q-card { display:flex; flex-direction:column; gap:6px; padding:12px 14px; border:1px solid var(--line); border-radius:12px; background:#fbfdff; text-decoration:none; color:var(--fg); transition:border-color .15s, box-shadow .15s; }
     a.q-card:hover { border-color:var(--pri); box-shadow:var(--shadow-sm); color:var(--fg); }

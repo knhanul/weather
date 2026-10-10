@@ -4,3 +4,5 @@
 |---|---|---|
 | 2026-10-11 06:40 | A 조사 | `docs/STATS_SURVEY.md` — 운영 DB 항목별 채움 비율, 강수 공란 = 무강수 근거, 기상청 정의 |
 | 2026-10-11 07:10 | B·C 엔진·API | `stats-engine.mjs`(기간 해석·결측·지표·순위·1990년대 대비·진행 중 비교·지역 공통 연도·CSV), `stats-data.mjs`(지점별 일자료 메모리, 저장 시 비움), `stats-api.mjs`(`/api/stats/meta·yearly·overlay·region·highlights`, `format=csv`), `db*.mjs statsDailyRows`, `server.mjs` 연결. 테스트 `scripts/stats-engine.test.mjs` 19개 통과 |
+| 2026-10-11 07:50 | D 화면 | `public/stats.js`(탭 라우팅·조건 고르기·SVG 그래프·툴팁·요약표·CSV 링크·계산 기준), `public/index.html`(메뉴 이름, 탭, 질문 카드, CSS). 생활 속 날씨·날씨 기록은 숫자 없는 '준비 중' + 지금 볼 수 있는 연도별 비교 바로가기만 |
+| 2026-10-11 08:20 | E·F 검증(시험 컨테이너) | OVH `weather-stats-test`(127.0.0.1:8099, 같은 .env·NAS) 에서: 통계 API 0.11~0.47초, NAS SQL 직접 집계와 값 대조(5월 평균기온 37개 연도, 연 강수일수·총강수량 36개 연도, 2018 여름 기간 최고 39.6℃@8/1 과 최고기온 평균 31.3℃, 2025 겨울 2024.12.1~2025.2.28 영하일 78일) 모두 일치. 기존 API 16개 응답 해시 운영과 동일(health 의 db_ms 만 다름), 관리자 API 401·POST 403 그대로. `node --test scripts/*.test.mjs` 271 중 실패 7 — 1dece0e 에서도 같은 7개(브랜드/공유카드·auth 스키마 테스트, 이번 변경과 무관). 스크린샷 /workspace/shots/stats-*.png (1440·390, 가로 넘침 없음, 콘솔 오류 없음) |
