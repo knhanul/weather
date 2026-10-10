@@ -180,7 +180,7 @@ export function truncatedPeriod(p, year, refYear, asOf) {
 // - 그날 공식 일자료 행이 없으면 모든 항목 = 자료 없음(NaN).
 // - 행이 있고 일강수량이 공란(NULL)이면 기상청 일자료 관례대로 무강수(0)로 센다. 단, 그 행의 기온 3개도 모두 비어 있으면 강수도 자료 없음.
 // - 그 밖의 NULL 은 그 항목만 자료 없음.
-const FIELDS = ["avg", "max", "min", "rain", "hum", "wind"];
+const FIELDS = ["avg", "max", "min", "rain", "hum", "wind", "nsnow", "sdep"];
 export function buildDailyStore(stationId, rows) {
   const list = rows
     .map((r) => ({ ...r, dn: ymdToDn(r.observation_date) }))
@@ -200,12 +200,18 @@ export function buildDailyStore(stationId, rows) {
     arr.min[i] = num(r.min_temperature);
     arr.hum[i] = num(r.avg_humidity);
     arr.wind[i] = num(r.avg_wind_speed);
+    const hasTemp = Number.isFinite(arr.avg[i]) || Number.isFinite(arr.max[i]) || Number.isFinite(arr.min[i]);
     const rain = num(r.precipitation);
     if (Number.isFinite(rain)) arr.rain[i] = rain;
-    else if (Number.isFinite(arr.avg[i]) || Number.isFinite(arr.max[i]) || Number.isFinite(arr.min[i])) {
+    else if (hasTemp) {
       arr.rain[i] = 0;
       rainBlank[i] = 1;
     }
+    // 눈(최심신적설·최심적설, cm): 강수와 같은 규칙 — 행이 있는데 공란이면 '눈 없음(0)'. 적설 깊이는 더하지 않는다(강설량 아님).
+    const ns = num(r.max_new_snow);
+    const sd = num(r.max_snow_depth);
+    arr.nsnow[i] = Number.isFinite(ns) ? ns : hasTemp ? 0 : NaN;
+    arr.sdep[i] = Number.isFinite(sd) ? sd : hasTemp ? 0 : NaN;
   }
   return {
     stationId: String(stationId),
@@ -247,6 +253,10 @@ export const METRICS = {
   hot30_days: { label: "최고기온 30℃ 이상인 날", unit: "일", chart: "bar", group: "days", field: "max", agg: "count", test: (v) => v >= 30, digits: 0, def: "일최고기온 30℃ 이상인 날 수(서비스 기준이며 여름 시작 기준이 아님)" },
   heatwave_days: { label: "폭염일수", unit: "일", chart: "bar", group: "days", field: "max", agg: "count", test: (v) => v >= 33, digits: 0, def: "일최고기온 33℃ 이상인 날 수(기상청 폭염일수 정의)" },
   frost_days: { label: "최저기온 0℃ 미만인 날", unit: "일", chart: "bar", group: "days", field: "min", agg: "count", test: (v) => v < 0, digits: 0, def: "일최저기온이 0℃ 미만인 날 수" },
+  snow_days: { label: "눈이 새로 쌓인 날", unit: "일", chart: "bar", group: "snow", field: "nsnow", agg: "count", test: (v) => v > 0, digits: 0, def: "일 최심신적설이 0cm보다 큰 날 수(그날 새로 내려 쌓인 눈이 관측된 날). 눈이 내렸어도 쌓이지 않은 날은 들어가지 않음" },
+  snow_cover_days: { label: "눈이 쌓여 있던 날", unit: "일", chart: "bar", group: "snow", field: "sdep", agg: "count", test: (v) => v > 0, digits: 0, def: "일 최심적설이 0cm보다 큰 날 수(전날 쌓인 눈이 남은 날 포함)" },
+  snow_new_max: { label: "하루 신적설 최대", unit: "cm", chart: "bar", group: "snow", field: "nsnow", agg: "max", digits: 1, def: "기간 안 일 최심신적설 중 가장 큰 값(하루, 날짜 표시). 신적설·적설을 더해 강설량을 만들지 않음" },
+  snow_depth_max: { label: "최심적설 최대", unit: "cm", chart: "bar", group: "snow", field: "sdep", agg: "max", digits: 1, def: "기간 안 일 최심적설(가장 깊이 쌓인 눈) 중 가장 큰 값" },
   ice_days: { label: "최고기온 0℃ 미만인 날", unit: "일", chart: "bar", group: "days", field: "max", agg: "count", test: (v) => v < 0, digits: 0, def: "일최고기온이 0℃ 미만인 날 수(하루 종일 영하)" },
 };
 export const METRIC_ORDER = Object.keys(METRICS);
@@ -599,3 +609,594 @@ export const RULES = [
   "1990년대 대비 변화 = 최근 완료된 10개 연도 평균 − 1990~1999년 평균. 두 구간 모두 자료가 온전한 해가 8개 이상일 때만 계산합니다. 기온 차이는 ℃, 강수량은 mm, 날 수는 일로 표시하고, 기준값이 0이면 증감률을 내지 않습니다.",
   "순위는 같은 값이면 같은 순위입니다. 과거 관측 결과이며 앞으로의 예보·확률이 아닙니다.",
 ];
+
+// ================================================================ 2단계: 생활 속 날씨 · 날씨 기록
+// 아래 함수도 모두 위의 기간 해석(resolvePeriod)·결측 규칙(dayValue)·지표 정의(METRICS)를 그대로 쓴다.
+const RAIN_DAY = (v) => METRICS.rain_days.test(v); // 강수일 = 일강수량 0.1mm 이상(한 곳에서만 정의)
+const HOT_DAY = (v) => METRICS.hot30_days.test(v); // 최고기온 30℃ 이상(서비스 기준)
+const meanOf = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN);
+// 월·일 위치(평년 기준 1/1 = 1). 2/29 는 2/28 과 3/1 사이(59.5). 해를 넘는 기간이면 시작 해의 1/1 부터 센다.
+export function mdPos(ymdStr, periodStartYmd = null) {
+  const m = +ymdStr.slice(5, 7);
+  const d = +ymdStr.slice(8, 10);
+  let pos = m === 2 && d === 29 ? 59.5 : ymdToDn(`2001-${p2(m)}-${p2(d)}`) - ymdToDn("2001-01-01") + 1;
+  if (periodStartYmd && +ymdStr.slice(0, 4) > +periodStartYmd.slice(0, 4)) pos += 365;
+  return pos;
+}
+export function posToMd(pos) {
+  if (pos === 59.5) return "2/29";
+  const dn = ymdToDn("2001-01-01") + ((Math.round(pos) - 1) % 365);
+  const s = dnToYmd(dn);
+  return `${+s.slice(5, 7)}/${+s.slice(8, 10)}`;
+}
+
+// ---------------------------------------------------------------- 더위가 일찍 올까: 매년 첫·마지막 '최고기온 30℃ 이상' 날짜와 일수
+// 값은 그 해 구간이 온전할 때만(빠진 날이 있으면 첫날·마지막 날을 확정할 수 없음). 진행 중인 해는 asOf 까지의 첫날만 참고로.
+export function thresholdDatesYear(store, metricId, p, year, asOf) {
+  const m = getMetric(metricId);
+  if (m.agg !== "count") throw new StatsError("날짜를 셀 수 있는 지표가 아닙니다");
+  const r = resolvePeriod(p, year);
+  if (!r) return { year, status: "nodate", first: null, last: null, count: null, obs: 0, days: 0 };
+  const base = { year, start: r.start, end: r.end, days: r.days };
+  if (r.start > asOf) return { ...base, status: "future", first: null, last: null, count: null, obs: 0 };
+  const end = r.end > asOf ? asOf : r.end;
+  let obs = 0;
+  let cnt = 0;
+  let first = null;
+  let last = null;
+  let missingBeforeFirst = false;
+  for (let dn = ymdToDn(r.start); dn <= ymdToDn(end); dn++) {
+    const v = dayValue(store, m.field, dn);
+    if (!Number.isFinite(v)) {
+      if (first == null) missingBeforeFirst = true;
+      continue;
+    }
+    obs++;
+    if (m.test(v)) {
+      cnt++;
+      if (first == null) first = dnToYmd(dn);
+      last = dnToYmd(dn);
+    }
+  }
+  if (r.end > asOf) return { ...base, status: "ongoing", until: asOf, obs, first: missingBeforeFirst ? null : first, last: null, count: null, countSoFar: cnt };
+  if (!store.n || r.end < store.firstDate) return { ...base, status: "none", first: null, last: null, count: null, obs: 0 };
+  const complete = obs === r.days;
+  if (!complete) return { ...base, status: obs ? "partial" : "none", obs, first: null, last: null, count: null };
+  return { ...base, status: "complete", obs, first, last, count: cnt, firstPos: first ? mdPos(first, r.start) : null, lastPos: last ? mdPos(last, r.start) : null };
+}
+const POS_METRIC = { digits: 0, agg: "mean", group: "date", unit: "일" };
+const CNT_METRIC = { digits: 0, agg: "count", group: "days", unit: "일" };
+export function thresholdDates(store, metricId, p, { fromYear, toYear, asOf, dataFrom = BASELINE.from }) {
+  const m = getMetric(metricId);
+  const rows = [];
+  for (let y = fromYear; y <= toYear; y++) rows.push(thresholdDatesYear(store, metricId, p, y, asOf));
+  const all = [];
+  for (let y = Math.min(dataFrom, fromYear); y <= Math.max(toYear, +asOf.slice(0, 4)); y++) all.push(thresholdDatesYear(store, metricId, p, y, asOf));
+  // 첫날 비교: 그런 날이 있었던 온전한 해만(없던 해는 '날짜 없음'이라 평균에 넣지 않음)
+  const asRows = (key) => all.map((r) => ({ year: r.year, status: r.status === "complete" && r[key] != null ? "complete" : r.status === "complete" ? "noevent" : r.status, raw: r[key] }));
+  const firstDelta = decadeDelta(POS_METRIC, asRows("firstPos"));
+  const lastDelta = decadeDelta(POS_METRIC, asRows("lastPos"));
+  const countDelta = decadeDelta(CNT_METRIC, all.map((r) => ({ year: r.year, status: r.status, raw: r.count })));
+  const ok = rows.filter((r) => r.status === "complete");
+  const withFirst = ok.filter((r) => r.first);
+  const summary = {
+    completeYears: ok.length,
+    noEventYears: ok.filter((r) => !r.first).map((r) => r.year),
+    earliest: withFirst.length ? withFirst.reduce((a, b) => (b.firstPos < a.firstPos ? b : a)) : null,
+    latestFirst: withFirst.length ? withFirst.reduce((a, b) => (b.firstPos > a.firstPos ? b : a)) : null,
+    latestLast: withFirst.length ? withFirst.reduce((a, b) => (b.lastPos > a.lastPos ? b : a)) : null,
+    incomplete: rows.filter((r) => r.status === "partial" || r.status === "none").map((r) => ({ year: r.year, obs: r.obs, days: r.days })),
+  };
+  const ong = rows.find((r) => r.status === "ongoing") || null;
+  const text = [];
+  const dayWord = (d, early, late) => (d < 0 ? `${Math.abs(d)}일 ${early}` : d > 0 ? `${d}일 ${late}` : "같은 날");
+  if (firstDelta.available) text.push(`첫 ${m.label.replace("인 날", "")} 날은 ${firstDelta.baseline.from}~${firstDelta.baseline.to}년 평균 ${posToMd(firstDelta.baseline.mean)} → ${firstDelta.recent.from}~${firstDelta.recent.to}년 평균 ${posToMd(firstDelta.recent.mean)}로 ${dayWord(firstDelta.delta, "빨라졌습니다", "늦어졌습니다")}.`);
+  else text.push(`첫날 비교: ${firstDelta.reason}`);
+  if (lastDelta.available) text.push(`마지막 날은 ${posToMd(lastDelta.baseline.mean)} → ${posToMd(lastDelta.recent.mean)}로 ${dayWord(lastDelta.delta, "빨라졌습니다", "늦어졌습니다")}.`);
+  if (countDelta.available) text.push(`그런 날 수는 ${countDelta.baseline.mean}일 → ${countDelta.recent.mean}일(${countDelta.delta > 0 ? "+" : countDelta.delta < 0 ? "−" : "±"}${Math.abs(countDelta.delta)}일)입니다.`);
+  if (ong && ong.first) text.push(`진행 중인 ${ong.year}년은 ${mdOf(ong.first)}에 처음 기록했습니다(${mdOf(ong.until)}까지 ${ong.countSoFar}일).`);
+  return { metric: metricInfo(metricId), period: { key: p.key, label: periodLabel(p) }, fromYear, toYear, asOf, rows, summary, firstDelta, lastDelta, countDelta, ongoing: ong, text };
+}
+
+// ---------------------------------------------------------------- 연속 강수·무강수(결측일을 건너뛰어 잇지 않음)
+// wet = 강수일(0.1mm 이상)이 이어진 날, dry = 자료가 있고 강수일이 아닌 날(0.1mm 미만·무강수)이 이어진 날.
+export const RUN_KINDS = { wet: { label: "연속 강수일", test: (v) => RAIN_DAY(v) }, dry: { label: "연속 무강수일(0.1mm 미만)", test: (v) => !RAIN_DAY(v) } };
+// [fromDn, toDn] 안의 연속 구간. 자료 없는 날에서 끊는다. cut: 구간 경계(기간 시작·끝)에서 잘린 경우 표시
+export function runsIn(store, kind, fromDn, toDn) {
+  const k = RUN_KINDS[kind];
+  if (!k) throw new StatsError("연속 종류는 wet·dry 중 하나입니다");
+  const out = [];
+  let cur = null;
+  const close = (endDn, reason) => {
+    if (cur) out.push({ start: dnToYmd(cur.s), end: dnToYmd(endDn), len: endDn - cur.s + 1, cutStart: cur.cut, endReason: reason });
+    cur = null;
+  };
+  for (let dn = fromDn; dn <= toDn; dn++) {
+    const v = dayValue(store, "rain", dn);
+    if (!Number.isFinite(v)) {
+      close(dn - 1, "missing");
+      continue;
+    }
+    if (k.test(v)) {
+      if (!cur) cur = { s: dn, cut: dn === fromDn };
+    } else close(dn - 1, "end");
+  }
+  close(toDn, "range");
+  return out;
+}
+export function longestRunYear(store, kind, p, year, asOf) {
+  const r = resolvePeriod(p, year);
+  if (!r) return { year, status: "nodate", len: null };
+  const base = { year, start: r.start, end: r.end, days: r.days };
+  if (r.start > asOf) return { ...base, status: "future", len: null, obs: 0 };
+  const end = r.end > asOf ? asOf : r.end;
+  const ag = aggregate(store, "rain_total", { start: r.start, end });
+  const runs = runsIn(store, kind, ymdToDn(r.start), ymdToDn(end));
+  const best = runs.reduce((a, b) => (!a || b.len > a.len ? b : a), null);
+  const status = r.end > asOf ? "ongoing" : !store.n || r.end < store.firstDate ? "none" : ag.complete ? "complete" : ag.obs ? "partial" : "none";
+  const val = status === "complete" ? (best ? best.len : 0) : null;
+  return { ...base, status, obs: ag.obs, len: val, partialLen: status !== "complete" && best ? best.len : null, runStart: best ? best.start : null, runEnd: best ? best.end : null, until: status === "ongoing" ? asOf : undefined };
+}
+export function streaks(store, kind, p, { fromYear, toYear, asOf, top = 10 }) {
+  const rows = [];
+  for (let y = fromYear; y <= toYear; y++) rows.push(longestRunYear(store, kind, p, y, asOf));
+  // 보유 전체 기간의 최장 기록(기간 경계로 자르지 않음, 결측일에서만 끊김)
+  const all = store.n ? runsIn(store, kind, store.base, Math.min(store.base + store.n - 1, ymdToDn(asOf))) : [];
+  all.sort((a, b) => b.len - a.len || a.start.localeCompare(b.start));
+  const topList = [];
+  for (const x of all) {
+    if (topList.length >= top && x.len < topList[topList.length - 1].len) break;
+    topList.push({ ...x, rank: 1 + all.filter((y) => y.len > x.len).length });
+  }
+  const ok = rows.filter((r) => r.status === "complete");
+  const allRows = [];
+  for (let y = Math.min(BASELINE.from, fromYear); y <= Math.max(toYear, +asOf.slice(0, 4)); y++) {
+    const r = longestRunYear(store, kind, p, y, asOf);
+    allRows.push({ year: y, status: r.status, raw: r.len });
+  }
+  const delta = decadeDelta({ digits: 1, agg: "mean", group: "days", unit: "일" }, allRows);
+  const summary = { completeYears: ok.length, longest: ok.length ? ok.reduce((a, b) => (b.len > a.len ? b : a)) : null, incomplete: rows.filter((r) => r.status === "partial" || r.status === "none").map((r) => ({ year: r.year, obs: r.obs, days: r.days })) };
+  return { kind, kindLabel: RUN_KINDS[kind].label, period: { key: p.key, label: periodLabel(p) }, fromYear, toYear, asOf, rows, top: topList.slice(0, Math.max(top, topList.length)), summary, delta, record: { from: store.firstDate, to: asOf } };
+}
+
+// ---------------------------------------------------------------- 주말·평일 강수 비율(분모 = 유효 관측일)
+export const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
+export function weekdayShare(store, p, { fromYear, toYear, asOf }) {
+  const dow = Array.from({ length: 7 }, (_, i) => ({ dow: i, label: DOW_KO[i], valid: 0, hit: 0, missing: 0 }));
+  const perYear = [];
+  for (let y = fromYear; y <= toYear; y++) {
+    const r = resolvePeriod(p, y);
+    if (!r || r.start > asOf) continue;
+    const end = r.end > asOf ? asOf : r.end;
+    const g = { year: y, wdValid: 0, wdHit: 0, weValid: 0, weHit: 0, ongoing: r.end > asOf };
+    for (let dn = ymdToDn(r.start); dn <= ymdToDn(end); dn++) {
+      const wd = new Date(dn * DAY_MS).getUTCDay();
+      const v = dayValue(store, "rain", dn);
+      if (!Number.isFinite(v)) {
+        dow[wd].missing++;
+        continue;
+      }
+      const hit = RAIN_DAY(v) ? 1 : 0;
+      dow[wd].valid++;
+      dow[wd].hit += hit;
+      if (wd === 0 || wd === 6) {
+        g.weValid++;
+        g.weHit += hit;
+      } else {
+        g.wdValid++;
+        g.wdHit += hit;
+      }
+    }
+    if (g.wdValid + g.weValid) perYear.push({ ...g, wdShare: g.wdValid ? round((g.wdHit / g.wdValid) * 100, 1) : null, weShare: g.weValid ? round((g.weHit / g.weValid) * 100, 1) : null });
+  }
+  for (const d of dow) d.share = d.valid ? round((d.hit / d.valid) * 100, 1) : null;
+  const sum = (list, k) => list.reduce((a, x) => a + x[k], 0);
+  const wdList = dow.filter((d) => d.dow >= 1 && d.dow <= 5);
+  const weList = dow.filter((d) => d.dow === 0 || d.dow === 6);
+  const grp = (list) => {
+    const valid = sum(list, "valid");
+    const hit = sum(list, "hit");
+    return { valid, hit, missing: sum(list, "missing"), share: valid ? round((hit / valid) * 100, 1) : null, raw: valid ? (hit / valid) * 100 : NaN };
+  };
+  const weekday = grp(wdList);
+  const weekend = grp(weList);
+  const diff = Number.isFinite(weekday.raw) && Number.isFinite(weekend.raw) ? round(weekend.raw - weekday.raw, 1) : null;
+  delete weekday.raw;
+  delete weekend.raw;
+  const text = [];
+  if (diff != null) text.push(`${fromYear}~${toYear}년 ${periodLabel(p)}: 주말(토·일) ${weekend.share}% (${weekend.valid.toLocaleString("ko-KR")}일 중 ${weekend.hit.toLocaleString("ko-KR")}일), 평일(월~금) ${weekday.share}% (${weekday.valid.toLocaleString("ko-KR")}일 중 ${weekday.hit.toLocaleString("ko-KR")}일) — 차이 ${diff > 0 ? "+" : diff < 0 ? "−" : "±"}${Math.abs(diff)}%p.`);
+  else text.push("비교할 유효 관측일이 없습니다.");
+  return { period: { key: p.key, label: periodLabel(p) }, fromYear, toYear, asOf, dow, weekday, weekend, diff, perYear, text };
+}
+
+// ---------------------------------------------------------------- 기념일·생일: 매년 같은 월·일의 날씨(과거 관측, 확률·예보 아님)
+export function sameDayHistory(store, md, { fromYear, toYear, asOf }) {
+  const p = parsePeriod(`range:${md}:${md}`);
+  const rows = [];
+  for (let y = fromYear; y <= toYear; y++) {
+    const r = resolvePeriod(p, y);
+    if (!r) {
+      rows.push({ year: y, date: null, status: "nodate" });
+      continue;
+    }
+    if (r.start > asOf) {
+      rows.push({ year: y, date: r.start, status: "future" });
+      continue;
+    }
+    const dn = ymdToDn(r.start);
+    const v = (f) => {
+      const x = dayValue(store, f, dn);
+      return Number.isFinite(x) ? round(x, 1) : null;
+    };
+    const rain = v("rain");
+    const i = dn - store.base;
+    const blank = i >= 0 && i < store.n && store.rainBlank[i] === 1;
+    const present = i >= 0 && i < store.n && store.present[i] === 1;
+    rows.push({ year: y, date: r.start, weekday: DOW_KO[new Date(dn * DAY_MS).getUTCDay()], status: present ? "ok" : "none", avg: v("avg"), max: v("max"), min: v("min"), rain, rainBlank: blank, rainy: rain == null ? null : RAIN_DAY(rain), snow: v("nsnow") });
+  }
+  const valid = rows.filter((r) => r.status === "ok" && r.rainy != null);
+  const rainy = valid.filter((r) => r.rainy);
+  const tv = rows.filter((r) => r.status === "ok" && r.max != null && r.min != null);
+  const pick = (list, k, dir) => (list.length ? list.reduce((a, b) => (dir > 0 ? (b[k] > a[k] ? b : a) : b[k] < a[k] ? b : a)) : null);
+  const summary = {
+    validYears: valid.length,
+    rainyYears: rainy.length,
+    share: valid.length ? round((rainy.length / valid.length) * 100, 0) : null,
+    meanMax: tv.length ? round(meanOf(tv.map((r) => r.max)), 1) : null,
+    meanMin: tv.length ? round(meanOf(tv.map((r) => r.min)), 1) : null,
+    hottest: pick(tv, "max", 1),
+    coldest: pick(tv, "min", -1),
+    wettest: pick(rainy, "rain", 1),
+    noDateYears: rows.filter((r) => r.status === "nodate").length,
+  };
+  const label = periodLabel(p);
+  const text = [];
+  if (valid.length) text.push(`${fromYear}~${toYear}년 중 자료가 있는 ${valid.length}개 해 가운데 ${label}에 강수(0.1mm 이상)가 있었던 해는 ${rainy.length}개(${summary.share}%)였습니다. 과거 관측 결과이며 앞으로의 강수확률이 아닙니다.`);
+  else text.push("자료가 있는 해가 없습니다.");
+  if (summary.noDateYears) text.push(`2월 29일은 윤년에만 있어 ${valid.length}개 해(윤년)만 셉니다.`);
+  return { md: p.key.split(":")[1], label, fromYear, toYear, asOf, rows, summary, text };
+}
+
+// ---------------------------------------------------------------- 날씨 기록: 보유 관측기간의 순위(공식 일자료)
+export const RECORDS = [
+  { id: "max_high", label: "가장 높은 일최고기온", field: "max", dir: -1, unit: "℃" },
+  { id: "min_low", label: "가장 낮은 일최저기온", field: "min", dir: 1, unit: "℃" },
+  { id: "rain_high", label: "가장 많은 일강수량", field: "rain", dir: -1, unit: "mm", positive: true },
+  { id: "min_high", label: "가장 높은 일최저기온", field: "min", dir: -1, unit: "℃", note: "하루 최저기온 기준(열대야 판정과 다름)" },
+  { id: "max_low", label: "가장 낮은 일최고기온", field: "max", dir: 1, unit: "℃" },
+  { id: "range_high", label: "가장 큰 일교차", field: "range", dir: -1, unit: "℃" },
+  { id: "snow_new_high", label: "가장 많은 일 최심신적설", field: "nsnow", dir: -1, unit: "cm", positive: true, note: "신적설 관측 방식·보유 상태에 따라 연도 간 비교에 한계" },
+  { id: "snow_depth_high", label: "가장 깊은 최심적설", field: "sdep", dir: -1, unit: "cm", positive: true },
+];
+export function recordList(store, rec, p, { asOf, n = 10 }) {
+  const days = [];
+  let total = 0;
+  let missing = 0;
+  const visit = (a, b) => {
+    for (let dn = a; dn <= b; dn++) {
+      total++;
+      const v = dayValue(store, rec.field, dn);
+      if (!Number.isFinite(v)) {
+        missing++;
+        continue;
+      }
+      if (rec.positive && !(v > 0)) continue;
+      days.push([v, dn]);
+    }
+  };
+  if (!store.n) return { ...rec, items: [], total: 0, missing: 0 };
+  const lastDn = Math.min(store.base + store.n - 1, ymdToDn(asOf));
+  if (!p) visit(store.base, lastDn);
+  else {
+    for (let y = +store.firstDate.slice(0, 4); y <= +asOf.slice(0, 4); y++) {
+      const r = resolvePeriod(p, y);
+      if (!r) continue;
+      const a = Math.max(ymdToDn(r.start), store.base);
+      const b = Math.min(ymdToDn(r.end), lastDn);
+      if (a <= b) visit(a, b);
+    }
+  }
+  days.sort((x, y) => (rec.dir < 0 ? y[0] - x[0] : x[0] - y[0]) || x[1] - y[1]);
+  const items = [];
+  for (const [v, dn] of days) {
+    const val = round(v, 1);
+    if (items.length >= n && val !== items[items.length - 1].value) break;
+    const rank = items.length && items[items.length - 1].value === val ? items[items.length - 1].rank : items.length + 1;
+    items.push({ rank, value: val, date: dnToYmd(dn) });
+  }
+  return { id: rec.id, label: rec.label, unit: rec.unit, note: rec.note || null, items, total, missing, observed: total - missing };
+}
+export function records(store, p, { asOf, n = 10 }) {
+  return { period: p ? { key: p.key, label: periodLabel(p) } : { key: "all", label: "보유 기간 전체" }, from: store.firstDate, to: asOf, lists: RECORDS.map((rec) => recordList(store, rec, p, { asOf, n })) };
+}
+
+// ================================================================ 시간자료(정시 관측) 기반 통계 — 화면에 '시간자료 집계'로 표시
+// 저장소: 1990-01-01 00시부터 시각 번호(시간 단위). 값은 Float32(NaN = 자료 없음). 시각은 기상청 정시(Asia/Seoul 벽시계) 문자열 그대로.
+// 결측 규칙: 행이 없으면 모든 항목 없음. 기온은 NULL 이거나 ta_qcflg=9 면 없음.
+// 강수: rn_qcflg=9 면 '자료 없음', 공란이고 플래그가 없으면 무강수(0). 같은 시각이 HH:MM / HH:MM:SS 두 형식이면 19자 쪽을 쓴다.
+export const HOURLY_FROM = "1990-01-01";
+// 값은 0.1 단위 정수(Int16, 자료 없음 = -32768)로 저장한다 — 기상청 시간자료가 0.1 단위라 정확하고(Float32 의 24.9 → 24.8999… 문제 없음) 메모리도 작다.
+const H_NA = -32768;
+export function hval(arr, i) {
+  const v = arr[i];
+  return v === H_NA || v === undefined ? NaN : v / 10;
+}
+const henc = (v) => (Number.isFinite(v) ? Math.max(-32767, Math.min(32767, Math.round(v * 10))) : H_NA);
+export function createHourlyStore(stationId, untilYear) {
+  const base = ymdToDn(HOURLY_FROM);
+  const n = (ymdToDn(`${untilYear}-12-31`) - base + 1) * 24;
+  const f = () => new Int16Array(n).fill(H_NA);
+  return { stationId: String(stationId), base, n, ta: f(), rn: f(), ws: f(), hm: f(), src: new Uint8Array(n), firstIdx: -1, lastIdx: -1, rows: 0 };
+}
+const HOUR_RE = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})/;
+export function addHourlyRows(hs, rows) {
+  const num = (v) => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? NaN : Number(v));
+  let added = 0;
+  for (const r of rows) {
+    const s = String(r.observation_datetime ?? "");
+    const m = HOUR_RE.exec(s);
+    if (!m || m[3] !== "00") continue;
+    const hh = +m[2];
+    if (hh > 23) continue;
+    const i = (ymdToDn(m[1]) - hs.base) * 24 + hh;
+    if (!(i >= 0 && i < hs.n)) continue;
+    const kind = s.length >= 19 ? 2 : 1;
+    if (hs.src[i] === 2 && kind === 1) continue; // 이미 19자 형식이 있음
+    if (!hs.src[i]) hs.rows++;
+    hs.src[i] = kind;
+    const ta = num(r.temperature);
+    hs.ta[i] = henc(String(r.ta_qcflg ?? "") === "9" ? NaN : ta);
+    const rn = num(r.precipitation);
+    hs.rn[i] = henc(String(r.rn_qcflg ?? "") === "9" ? NaN : Number.isFinite(rn) ? rn : 0);
+    hs.ws[i] = henc(num(r.wind_speed));
+    hs.hm[i] = henc(num(r.humidity));
+    if (hs.firstIdx < 0 || i < hs.firstIdx) hs.firstIdx = i;
+    if (i > hs.lastIdx) hs.lastIdx = i;
+    added++;
+  }
+  return added;
+}
+export const hourIdx = (hs, ymdStr, hh) => (ymdToDn(ymdStr) - hs.base) * 24 + hh;
+// 시간자료가 끝까지(23시) 있는 마지막 날
+export function hourlyLastDay(hs) {
+  if (hs.lastIdx < 0) return null;
+  const dn = hs.base + Math.floor(hs.lastIdx / 24);
+  return hs.lastIdx % 24 === 23 ? dnToYmd(dn) : dnToYmd(dn - 1);
+}
+export const RAIN_HOUR = (v) => v >= 0.1; // 시간 강수 있음 = 1시간 강수량 0.1mm 이상
+
+// ---------------------------------------------------------------- 산책·러닝: 사용자가 정한 조건을 만족한 정시 관측 비율(월별)
+export const OUTDOOR_DEFAULT = { tmin: 10, tmax: 25, dry: true, wind: 5, h1: 6, h2: 9, hum: null };
+export function parseOutdoor(q) {
+  const g = (k, d) => (q[k] === undefined || q[k] === null || q[k] === "" ? d : Number(q[k]));
+  const c = {
+    tmin: g("tmin", OUTDOOR_DEFAULT.tmin),
+    tmax: g("tmax", OUTDOOR_DEFAULT.tmax),
+    dry: q.dry === undefined || q.dry === null || q.dry === "" ? OUTDOOR_DEFAULT.dry : q.dry === "1" || q.dry === true,
+    wind: q.wind === "" || q.wind === "off" ? null : g("wind", OUTDOOR_DEFAULT.wind),
+    h1: g("h1", OUTDOOR_DEFAULT.h1),
+    h2: g("h2", OUTDOOR_DEFAULT.h2),
+    hum: q.hum === undefined || q.hum === null || q.hum === "" || q.hum === "off" ? null : Number(q.hum),
+  };
+  const bad = (m) => {
+    throw new StatsError(m);
+  };
+  if (!Number.isFinite(c.tmin) || !Number.isFinite(c.tmax) || c.tmin < -30 || c.tmax > 45 || c.tmin > c.tmax) bad("기온 범위는 -30~45℃ 사이에서 낮은 값 ≤ 높은 값으로 고르세요");
+  if (c.wind !== null && (!Number.isFinite(c.wind) || c.wind < 0 || c.wind > 30)) bad("최대 풍속은 0~30m/s 사이입니다");
+  if (c.hum !== null && (!Number.isFinite(c.hum) || c.hum < 0 || c.hum > 100)) bad("최대 습도는 0~100% 사이입니다");
+  if (![c.h1, c.h2].every((h) => Number.isInteger(h) && h >= 0 && h <= 23) || c.h1 > c.h2) bad("시간대는 0~23시, 시작 ≤ 끝으로 고르세요");
+  return c;
+}
+export function outdoorLabel(c) {
+  const parts = [`기온 ${c.tmin}~${c.tmax}℃`];
+  if (c.dry) parts.push("강수 없음(1시간 0.1mm 미만)");
+  if (c.wind !== null) parts.push(`풍속 ${c.wind}m/s 이하`);
+  if (c.hum !== null) parts.push(`습도 ${c.hum}% 이하`);
+  parts.push(`${c.h1}~${c.h2}시 정시 관측`);
+  return parts.join(" · ");
+}
+// 한 시각이 조건 판정에 쓸 수 있는가(필요한 항목이 모두 있음) / 조건을 만족하는가
+export function outdoorJudge(hs, i, c) {
+  if (!hs.src[i]) return null;
+  const ta = hval(hs.ta, i);
+  if (!Number.isFinite(ta)) return null;
+  if (c.dry && !Number.isFinite(hval(hs.rn, i))) return null;
+  if (c.wind !== null && !Number.isFinite(hval(hs.ws, i))) return null;
+  if (c.hum !== null && !Number.isFinite(hval(hs.hm, i))) return null;
+  return ta >= c.tmin && ta <= c.tmax && (!c.dry || !RAIN_HOUR(hval(hs.rn, i))) && (c.wind === null || hval(hs.ws, i) <= c.wind) && (c.hum === null || hval(hs.hm, i) <= c.hum);
+}
+function hourWalk(hs, fromYear, toYear, lastDay, fn) {
+  const a = Math.max(ymdToDn(`${fromYear}-01-01`), hs.base);
+  const b = Math.min(ymdToDn(`${toYear}-12-31`), ymdToDn(lastDay));
+  for (let dn = a; dn <= b; dn++) {
+    const ymdStr = dnToYmd(dn);
+    fn(dn, ymdStr, +ymdStr.slice(5, 7), (dn - hs.base) * 24);
+  }
+}
+export function outdoorShare(hs, c, { fromYear, toYear, asOf }) {
+  const lastDay = minYmd(hourlyLastDay(hs), asOf);
+  const months = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, slots: 0, valid: 0, ok: 0 }));
+  const eras = { base: { from: BASELINE.from, to: BASELINE.to }, recent: null };
+  const lastFullYear = lastDay ? (lastDay.slice(5) === "12-31" ? +lastDay.slice(0, 4) : +lastDay.slice(0, 4) - 1) : null;
+  if (lastFullYear) eras.recent = { from: lastFullYear - RECENT.years + 1, to: lastFullYear };
+  const eraMonths = { base: months.map((m) => ({ month: m.month, valid: 0, ok: 0 })), recent: months.map((m) => ({ month: m.month, valid: 0, ok: 0 })) };
+  if (lastDay) {
+    hourWalk(hs, Math.min(fromYear, BASELINE.from), Math.max(toYear, lastFullYear || toYear), lastDay, (dn, ymdStr, mo, i0) => {
+      const y = +ymdStr.slice(0, 4);
+      const inRange = y >= fromYear && y <= toYear;
+      const era = y >= eras.base.from && y <= eras.base.to ? "base" : eras.recent && y >= eras.recent.from && y <= eras.recent.to && eras.recent.from > BASELINE.to ? "recent" : null;
+      for (let h = c.h1; h <= c.h2; h++) {
+        const j = outdoorJudge(hs, i0 + h, c);
+        if (inRange) {
+          months[mo - 1].slots++;
+          if (j !== null) {
+            months[mo - 1].valid++;
+            if (j) months[mo - 1].ok++;
+          }
+        }
+        if (era && j !== null) {
+          eraMonths[era][mo - 1].valid++;
+          if (j) eraMonths[era][mo - 1].ok++;
+        }
+      }
+    });
+  }
+  const pct = (o) => (o.valid ? round((o.ok / o.valid) * 100, 1) : null);
+  for (const m of months) {
+    m.share = pct(m);
+    m.excluded = m.slots - m.valid;
+  }
+  for (const k of ["base", "recent"]) for (const m of eraMonths[k]) m.share = pct(m);
+  const okMonths = months.filter((m) => m.share != null);
+  const best = okMonths.length ? okMonths.reduce((a, b) => (b.share > a.share ? b : a)) : null;
+  const worst = okMonths.length ? okMonths.reduce((a, b) => (b.share < a.share ? b : a)) : null;
+  const total = { valid: months.reduce((a, m) => a + m.valid, 0), ok: months.reduce((a, m) => a + m.ok, 0), slots: months.reduce((a, m) => a + m.slots, 0) };
+  total.share = pct(total);
+  const text = [];
+  if (best) text.push(`${fromYear}~${toYear}년 정시 관측 중 조건(${outdoorLabel(c)})을 만족한 비율은 ${best.month}월이 ${best.share}%로 가장 높고, ${worst.month}월이 ${worst.share}%로 가장 낮았습니다.`);
+  else text.push("조건을 판정할 수 있는 관측이 없습니다.");
+  if (total.slots && total.slots - total.valid > 0) text.push(`필요한 항목이 없는 ${(total.slots - total.valid).toLocaleString("ko-KR")}개 시각(전체 ${total.slots.toLocaleString("ko-KR")}개 중)은 분모에서 뺐습니다.`);
+  if (c.hum !== null) text.push("1990년대 습도는 3시간 간격으로만 있어 그 시기는 판정 가능한 시각이 적습니다.");
+  return { cond: c, condLabel: outdoorLabel(c), fromYear, toYear, asOf: lastDay, months, total, eras, eraMonths, best, worst, text };
+}
+function minYmd(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  return a < b ? a : b;
+}
+
+// ---------------------------------------------------------------- 출퇴근 시간 강수: 사용자가 정한 오전·저녁 시간대의 강수 관측 비율
+export function parseHours(s, def) {
+  const m = /^(\d{1,2})-(\d{1,2})$/.exec(String(s ?? ""));
+  if (!s) return def;
+  if (!m || +m[1] > +m[2] || +m[2] > 23) throw new StatsError("시간대는 '7-9'처럼 시작-끝(0~23시)으로 고르세요");
+  return [+m[1], +m[2]];
+}
+export function commuteShare(hs, { am = [7, 9], pm = [17, 19], weekdays = true }, { fromYear, toYear, asOf }) {
+  const lastDay = minYmd(hourlyLastDay(hs), asOf);
+  const mk = () => Array.from({ length: 12 }, (_, i) => ({ month: i + 1, hValid: 0, hRain: 0, dValid: 0, dRain: 0 }));
+  const win = { am: mk(), pm: mk(), all: mk() };
+  const ranges = { am, pm, all: [0, 23] };
+  let days = 0;
+  if (lastDay) {
+    hourWalk(hs, fromYear, toYear, lastDay, (dn, ymdStr, mo, i0) => {
+      const wd = new Date(dn * DAY_MS).getUTCDay();
+      if (weekdays && (wd === 0 || wd === 6)) return;
+      let any = false;
+      for (let h = 0; h < 24 && !any; h++) any = hs.src[i0 + h] > 0;
+      if (!any) return; // 그날 시간자료가 하나도 없으면 날 수에서도 뺌
+      days++;
+      for (const k of ["am", "pm", "all"]) {
+        const [a, b] = ranges[k];
+        let allValid = true;
+        let any = false;
+        for (let h = a; h <= b; h++) {
+          const i = i0 + h;
+          const v = hs.src[i] ? hval(hs.rn, i) : NaN;
+          if (!Number.isFinite(v)) {
+            allValid = false;
+            continue;
+          }
+          win[k][mo - 1].hValid++;
+          if (RAIN_HOUR(v)) {
+            win[k][mo - 1].hRain++;
+            any = true;
+          }
+        }
+        if (allValid) {
+          win[k][mo - 1].dValid++;
+          if (any) win[k][mo - 1].dRain++;
+        }
+      }
+    });
+  }
+  const pct = (a, b) => (b ? round((a / b) * 100, 1) : null);
+  const out = {};
+  for (const k of ["am", "pm", "all"]) {
+    const ms = win[k].map((m) => ({ ...m, hShare: pct(m.hRain, m.hValid), dShare: pct(m.dRain, m.dValid) }));
+    const t = ms.reduce((a, m) => ({ hValid: a.hValid + m.hValid, hRain: a.hRain + m.hRain, dValid: a.dValid + m.dValid, dRain: a.dRain + m.dRain }), { hValid: 0, hRain: 0, dValid: 0, dRain: 0 });
+    out[k] = { range: ranges[k], months: ms, total: { ...t, hShare: pct(t.hRain, t.hValid), dShare: pct(t.dRain, t.dValid) } };
+  }
+  const text = [];
+  if (out.am.total.hValid) {
+    text.push(`${fromYear}~${toYear}년 ${weekdays ? "평일(월~금)" : "모든 날"} 기준: 출근 시간(${am[0]}~${am[1]}시) 정시 관측의 ${out.am.total.hShare}%, 퇴근 시간(${pm[0]}~${pm[1]}시)의 ${out.pm.total.hShare}%에서 강수(1시간 0.1mm 이상)가 관측됐습니다. 하루 전체 시각은 ${out.all.total.hShare}%입니다.`);
+    text.push(`출근 시간대에 한 번이라도 강수가 관측된 날은 ${out.am.total.dShare}%, 퇴근 시간대는 ${out.pm.total.dShare}%입니다(그 시간대 시각이 모두 있는 날만 분모).`);
+  } else text.push("판정할 수 있는 시간자료가 없습니다.");
+  return { am, pm, weekdays, fromYear, toYear, asOf: lastDay, days, windows: out, text };
+}
+
+// ---------------------------------------------------------------- 열대야(추정): 그날 18:01~다음 날 09:00 의 정시 기온(19~09시, 15개) 최저가 25℃ 이상
+// 공식 열대야는 분 단위 밤 최저기온 기준이다. 정시 관측의 최솟값은 실제 최저보다 높을 수 있어 '추정치'로만 쓴다. 15개 중 하나라도 없으면 그 밤은 판정하지 않는다.
+export const NIGHT = { hours: [19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33], threshold: 25 };
+export function nightMin(hs, ymdStr) {
+  const i0 = hourIdx(hs, ymdStr, 0);
+  let min = Infinity;
+  for (const h of NIGHT.hours) {
+    const i = i0 + h;
+    if (i < 0 || i >= hs.n || !hs.src[i]) return null;
+    const v = hval(hs.ta, i);
+    if (!Number.isFinite(v)) return null;
+    if (v < min) min = v;
+  }
+  return min;
+}
+export function tropicalYear(hs, p, year, lastDay) {
+  const r = resolvePeriod(p, year);
+  if (!r) return { year, status: "nodate", value: null };
+  const base = { year, start: r.start, end: r.end, days: r.days };
+  // 밤 D 는 D+1 09시까지 필요 → 판정 가능한 마지막 밤 = lastDay 의 전날
+  const lastNight = lastDay ? dnToYmd(ymdToDn(lastDay) - 1) : null;
+  if (!lastNight || r.start > lastNight) return { ...base, status: "future", value: null, obs: 0 };
+  const end = r.end > lastNight ? lastNight : r.end;
+  let valid = 0;
+  let cnt = 0;
+  let maxMin = -Infinity;
+  let maxDate = null;
+  for (let dn = ymdToDn(r.start); dn <= ymdToDn(end); dn++) {
+    const d = dnToYmd(dn);
+    const m = nightMin(hs, d);
+    if (m === null) continue;
+    valid++;
+    if (m >= NIGHT.threshold) cnt++;
+    if (m > maxMin) {
+      maxMin = m;
+      maxDate = d;
+    }
+  }
+  const nights = ymdToDn(end) - ymdToDn(r.start) + 1;
+  const status = r.end > lastNight ? "ongoing" : valid === r.days ? "complete" : valid ? "partial" : "none";
+  return { ...base, status, obs: valid, nights, value: status === "complete" ? cnt : null, countValid: cnt, warmestNight: maxDate ? { date: maxDate, min: round(maxMin, 1) } : null, until: status === "ongoing" ? end : undefined, raw: status === "complete" ? cnt : null };
+}
+export function tropicalNights(hs, p, { fromYear, toYear, asOf }) {
+  const lastDay = minYmd(hourlyLastDay(hs), asOf);
+  const rows = [];
+  for (let y = fromYear; y <= toYear; y++) rows.push(tropicalYear(hs, p, y, lastDay));
+  const all = [];
+  for (let y = Math.min(BASELINE.from, fromYear); y <= Math.max(toYear, lastDay ? +lastDay.slice(0, 4) : toYear); y++) all.push(tropicalYear(hs, p, y, lastDay));
+  const delta = decadeDelta({ digits: 0, agg: "count", group: "days", unit: "일" }, all);
+  const ok = rows.filter((r) => r.status === "complete");
+  const summary = {
+    completeYears: ok.length,
+    highest: ok.length ? { value: Math.max(...ok.map((r) => r.value)), years: ok.filter((r) => r.value === Math.max(...ok.map((x) => x.value))).map((r) => r.year) } : null,
+    latest: ok.length ? { year: ok[ok.length - 1].year, value: ok[ok.length - 1].value, rank: rankOf(ok.map((r) => r.value), ok[ok.length - 1].value) } : null,
+    incomplete: rows.filter((r) => r.status === "partial" || r.status === "none").map((r) => ({ year: r.year, obs: r.obs, days: r.days, countValid: r.countValid })),
+  };
+  const text = [];
+  if (summary.latest) text.push(`${summary.latest.year}년 ${periodLabel(p)} 열대야(추정): ${summary.latest.value}일 — 모든 밤을 판정할 수 있었던 ${summary.latest.rank.of}개 연도 중 많은 순 ${summary.latest.rank.high}위입니다.`);
+  else text.push("모든 밤의 정시 기온이 갖춰진 연도가 없어 연도 값을 내지 않습니다.");
+  text.push(delta.available ? `최근 ${delta.recent.from}~${delta.recent.to}년 평균 ${delta.recent.mean}일, ${delta.baseline.from}~${delta.baseline.to}년 평균 ${delta.baseline.mean}일(차이 ${delta.delta > 0 ? "+" : delta.delta < 0 ? "−" : "±"}${Math.abs(delta.delta)}일).` : `1990년대 대비: ${delta.reason}`);
+  return { period: { key: p.key, label: periodLabel(p) }, fromYear, toYear, asOf: lastDay, rows: rows.map(({ raw, ...r }) => r), summary, delta, text, estimate: true };
+}
+
+// ---------------------------------------------------------------- 생활 속 날씨 계산 기준(화면 '계산 기준'에 그대로)
+export const LIFE_RULES = {
+  heat: ["'최고기온 30℃ 이상'은 이 서비스의 기준이며 여름 시작·폭염특보 기준이 아닙니다.", "첫날·마지막 날은 그해 구간에 빠진 날이 없을 때만 확정합니다. 그런 날이 없었던 해는 날짜 평균에서 뺍니다.", "날짜 평균은 평년 달력 위치(1/1=1일)로 계산하고 월/일로 바꿔 보여 줍니다."],
+  streaks: ["연속 강수일 = 일강수량 0.1mm 이상인 날이 이어진 날 수, 연속 무강수일 = 자료가 있고 0.1mm 미만인 날이 이어진 날 수.", "자료 없는 날이 끼면 그 앞뒤를 잇지 않습니다(결측일을 건너뛰지 않음).", "연도별 값은 그 해 구간 안에서만 셉니다(구간 밖으로 이어진 날은 자름). '보유 기간 최장 기록'은 구간과 상관없이 셉니다."],
+  weekend: ["주말 = 토·일, 평일 = 월~금(공휴일은 따로 구분하지 않음).", "비율 = 강수일(0.1mm 이상) ÷ 공식 일자료가 있는 날(유효 관측일). 주말과 평일의 일수가 달라 단순 일수가 아닌 비율로 비교합니다.", "비율 차이는 %p 로 표시합니다."],
+  day: ["매년 같은 월·일의 공식 일자료입니다. 2월 29일은 윤년에만 있습니다.", "'강수가 있었던 해의 비율' = 그날 0.1mm 이상 강수가 있었던 해 ÷ 자료가 있는 해. 과거 관측이며 앞으로의 강수확률·예보가 아닙니다."],
+  outdoor: ["조건은 사용자가 정한 값이며 공식 건강·안전 기준이 아닙니다.", "시간자료(정시 관측) 집계: 고른 시간대의 정시 관측 중 조건을 모두 만족한 시각의 비율. 필요한 항목이 없는 시각은 분모에서 뺍니다.", "강수 없음 = 1시간 강수량 0.1mm 미만(공란은 무강수, 품질 플래그 9 는 자료 없음)."],
+  commute: ["시간자료(정시 관측) 집계: 고른 시간대 정시 관측 중 1시간 강수량 0.1mm 이상인 시각의 비율.", "'강수가 관측된 날'은 그 시간대 정시 관측이 모두 있는 날만 분모로 셉니다.", "평일 = 월~금(공휴일 미반영). 정시 관측만 쓰므로 시각 사이의 짧은 비는 빠질 수 있습니다."],
+  tropical: ["추정치: 공식 열대야는 18:01~다음 날 09:00 의 밤 최저기온 25℃ 이상인 날입니다. 공식 밤 최저기온 자료가 없어 정시 기온(19~09시, 15개)의 최솟값으로 셉니다. 실제 최저는 정시 사이에 더 낮을 수 있어 실제보다 많게 셀 수 있습니다.", "15개 정시 중 하나라도 없으면 그 밤은 판정하지 않고, 판정 못 한 밤이 있는 해는 순위·증감에서 뺍니다.", "밤은 시작한 날짜(그날 저녁)로 셉니다."],
+  records: ["보유 관측기간(1990년~)의 공식 일자료 순위입니다. 같은 값은 같은 순위이며, 10위와 같은 값이면 함께 보여 줍니다.", "강수량·적설 순위는 0보다 큰 날만 셉니다. '자료 없음'인 날은 빠지며 그 수를 함께 표시합니다.", "관측지점 한 곳의 기록이며 그 지역 전체의 기록이 아닙니다."],
+  snow: ["눈 통계는 공식 일자료의 최심신적설(그날 새로 쌓인 눈의 가장 깊은 값)·최심적설(가장 깊이 쌓인 눈)만 씁니다. 적설을 더해 강설량을 만들지 않습니다.", "눈이 내렸어도 쌓이지 않으면 0 입니다. 일자료 행이 있는데 적설이 비어 있으면 '쌓인 눈 없음'으로 봅니다.", "적설 관측 방식 변화(자동 관측 전환 등)로 연도 간 비교에 한계가 있을 수 있습니다."],
+};

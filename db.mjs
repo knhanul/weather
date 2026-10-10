@@ -315,11 +315,28 @@ export async function dailySeriesPg(stationId, fromDate, toDate) {
 export async function statsDailyRows(stationId) {
   if (my) return my.statsDailyRows(...arguments);
   const r = await pool.query(
-    `SELECT observation_date::text AS observation_date, avg_temperature, max_temperature, min_temperature, precipitation, avg_humidity, avg_wind_speed
+    `SELECT observation_date::text AS observation_date, avg_temperature, max_temperature, min_temperature, precipitation, avg_humidity, avg_wind_speed, max_new_snow, max_snow_depth
      FROM observations_daily WHERE station_id = $1 AND source_kind = 'OFFICIAL' ORDER BY observation_date`,
     [stationId],
   );
   return r.rows;
+}
+// 날씨 통계(시간자료 기반): [from, to) 정시 자료(통계용 항목만)
+export async function statsHourlyRows(stationId, from, to) {
+  if (my) return my.statsHourlyRows(...arguments);
+  const r = await pool.query(
+    `SELECT observation_datetime, temperature, precipitation, humidity, wind_speed, rn_qcflg, ta_qcflg
+     FROM observations_hourly WHERE station_id = $1 AND observation_datetime >= $2 AND observation_datetime < $3 AND provider = 'KMA' AND dataset = 'ASOS_HOURLY'`,
+    [stationId, from, to],
+  );
+  return r.rows;
+}
+// 날씨 기록 '그날의 날씨': 공식 일자료 한 행
+export async function statsDayRow(stationId, date) {
+  if (my) return my.statsDayRow(...arguments);
+  const cols = "observation_date, avg_temperature, max_temperature, max_temperature_time, min_temperature, min_temperature_time, precipitation, precip_duration, max_precip_1h, avg_humidity, min_humidity, avg_wind_speed, max_wind_speed, max_inst_wind_speed, sunshine, avg_total_cloud, max_new_snow, max_snow_depth, weather_phenomena".replace("observation_date", "observation_date::text AS observation_date");
+  const r = await pool.query(`SELECT ${cols} FROM observations_daily WHERE station_id = $1 AND observation_date = $2 AND source_kind = 'OFFICIAL' LIMIT 1`, [stationId, date]);
+  return r.rows[0] || null;
 }
 
 export async function seriesPg(stationId, from16, to16) {

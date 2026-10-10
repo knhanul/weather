@@ -547,10 +547,26 @@ export async function dailySeriesPg(stationId, fromDate, toDate) {
 // 날씨 통계: 지점 하나의 공식 일자료 전체(통계용 항목만). 기본 키 (station_id, observation_date) 범위 읽기
 export async function statsDailyRows(stationId) {
   return q(
-    `SELECT observation_date, avg_temperature, max_temperature, min_temperature, precipitation, avg_humidity, avg_wind_speed
+    `SELECT observation_date, avg_temperature, max_temperature, min_temperature, precipitation, avg_humidity, avg_wind_speed, max_new_snow, max_snow_depth
      FROM observations_daily WHERE station_id = ? AND source_kind = 'OFFICIAL' ORDER BY observation_date`,
     [stationId],
   );
+}
+// 날씨 통계(시간자료 기반): 지점 하나의 [from, to) 정시 자료(통계용 항목만). 기본 키 (station_id, observation_datetime …) 범위 읽기 — 한 해 약 0.25초
+export async function statsHourlyRows(stationId, from, to) {
+  return q(
+    `SELECT observation_datetime, temperature, precipitation, humidity, wind_speed, rn_qcflg, ta_qcflg
+     FROM observations_hourly WHERE station_id = ? AND observation_datetime >= ? AND observation_datetime < ? AND provider = 'KMA' AND dataset = 'ASOS_HOURLY'`,
+    [stationId, from, to],
+  );
+}
+// 날씨 기록 '그날의 날씨': 공식 일자료 한 행(기본 키 읽기)
+export async function statsDayRow(stationId, date) {
+  const rows = await q(
+    `SELECT observation_date, avg_temperature, max_temperature, max_temperature_time, min_temperature, min_temperature_time, precipitation, precip_duration, max_precip_1h, avg_humidity, min_humidity, avg_wind_speed, max_wind_speed, max_inst_wind_speed, sunshine, avg_total_cloud, max_new_snow, max_snow_depth, weather_phenomena FROM observations_daily WHERE station_id = ? AND observation_date = ? AND source_kind = 'OFFICIAL' LIMIT 1`,
+    [stationId, date],
+  );
+  return rows[0] || null;
 }
 
 export async function seriesPg(stationId, from16, to16) {

@@ -15,6 +15,7 @@ import { createPgStore, createMysqlStore, createJsonStore } from "./auth-store.m
 import { handleLayouts, createPgLayoutStore, createMysqlLayoutStore, createJsonLayoutStore } from "./layouts.mjs";
 import { createStatsData } from "./stats-data.mjs";
 import { createStatsApi } from "./stats-api.mjs";
+import { createStatsHourly } from "./stats-hourly.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(__dirname, "data");
@@ -115,6 +116,11 @@ function seedIfEmpty() {
 }
 
 async function upsert(rows) {
+  const out = await upsertHourlyStore(rows);
+  statsHourly.invalidateRows(rows); // 날씨 통계(시간자료 기반)가 오래된 값을 쓰지 않게 — 저장한 지점의 그 날짜부터 다시 읽음
+  return out;
+}
+async function upsertHourlyStore(rows) {
   if (db.usingPg()) return db.upsertHourly(rows);
   rows = rows.map(withoutExtras);
   const all = loadJson(OBS_FILE, []);
@@ -1053,7 +1059,24 @@ const statsData = createStatsData({
   ttlMs: Number(process.env.STATS_CACHE_MS) || 30 * 60 * 1000,
   log: (line) => console.log(line),
 });
-const handleStats = createStatsApi({ statsData, stations, officialDate: () => latestOfficialHour().slice(0, 10), json });
+// 시간자료 기반 통계(산책·출퇴근·열대야 추정): 지점별 정시 자료를 한 해씩 읽어 메모리에 둔다. 저장(upsert)하면 그 날짜부터 다시 읽음.
+const statsHourly = createStatsHourly({
+  loadRange: async (id, from, to) =>
+    db.usingPg()
+      ? db.statsHourlyRows(id, from, to)
+      : loadJson(OBS_FILE, []).filter((r) => String(r.station_id) === String(id) && String(r.observation_datetime) >= from && String(r.observation_datetime) < to),
+  ttlMs: Number(process.env.STATS_CACHE_MS) || 30 * 60 * 1000,
+  log: (line) => console.log(line),
+});
+const handleStats = createStatsApi({
+  statsData,
+  statsHourly,
+  dayRow: async (id, date) =>
+    db.usingPg() ? db.statsDayRow(id, date) : loadJson(DAILY_FILE, []).find((r) => String(r.station_id) === String(id) && String(r.observation_date).slice(0, 10) === date && r.source_kind !== "DERIVED") || null,
+  stations,
+  officialDate: () => latestOfficialHour().slice(0, 10),
+  json,
+});
 
 // 카카오 로그인(관리 기능 보호). 서버 시작 시 DB 연결 뒤에 만든다. 키가 없으면 꺼진 상태(기존과 동일).
 let auth = createAuth({ env: {} });
@@ -1336,7 +1359,10 @@ const ready = (async () => {
     // 날씨 통계 첫 요청이 기다리지 않게 사용 중인 지점의 일자료를 뒤에서 한 지점씩 읽어 둔다
     if (process.env.STATS_WARM !== "0") {
       (async () => {
-        for (const s of (await stations()).filter((x) => x.enabled)) await statsData.get(s.station_id).catch(() => {});
+        const on = (await stations()).filter((x) => x.enabled);
+        for (const s of on) await statsData.get(s.station_id).catch(() => {});
+        // 시간자료는 지점당 약 10초 — 일자료 다음에 한 지점씩
+        if (process.env.STATS_WARM_HOURLY !== "0") for (const s of on) await statsHourly.get(s.station_id).catch((e) => console.log(`stats hourly warm failed station=${s.station_id} ${e?.code || e?.message}`));
       })().catch(() => {});
     }
   });
