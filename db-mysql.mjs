@@ -696,7 +696,7 @@ async function refreshDailyStats(stationIds) {
     await q("INSERT INTO daily_station_stats (station_id, n_rows) VALUES (?, ?) ON DUPLICATE KEY UPDATE n_rows = VALUES(n_rows)", [id, n], { retry: false });
   }
 }
-// 처음 한 번: 지점마다 원본을 한 번 훑어 월별로 채운다(지점당 수 초, 사이트는 그동안 예전 집계로 답함)
+// 처음 한 번: 지점마다 원본을 한 번 훑어 월별로 채운다(사이트는 그동안 예전 집계로 답함)
 export async function rebuildStats() {
   const t0 = Date.now();
   const ids = (await q("SELECT DISTINCT station_id FROM observations_hourly")).map((r) => r.station_id);
@@ -710,14 +710,14 @@ export async function rebuildStats() {
       `SELECT LEFT(observation_datetime,7) AS ym, COUNT(DISTINCT LEFT(observation_datetime,16)) AS h FROM observations_hourly WHERE station_id = ? GROUP BY ym`,
       [id],
     )).map((r) => [r.ym, r.h]));
-    const byYm = new Map();
-    for (const r of perDs) {
-      if (!byYm.has(r.ym)) byYm.set(r.ym, []);
-      byYm.get(r.ym).push(r);
-    }
+    // 한 지점 = DELETE 1번 + 여러 행 INSERT 몇 번(NAS 왕복이 ~90ms 라 월마다 쓰면 지점당 1분 넘게 걸린다)
+    const vals = perDs.map((r) => [id, r.ym, r.dataset, r.n, hours.get(r.ym) ?? 0, r.f, r.l]);
     await tx(async (run) => {
       await run("DELETE FROM hourly_month_stats WHERE station_id = ?", [id]);
-      for (const [ym, list] of byYm) await writeMonthStats(run, id, ym, list, hours.get(ym) ?? 0);
+      for (let i = 0; i < vals.length; i += 500) {
+        const part = vals.slice(i, i + 500);
+        await run(`INSERT INTO hourly_month_stats (station_id, ym, dataset, n_rows, hours, first_dt, last_dt) VALUES ${part.map(() => "(?,?,?,?,?,?,?)").join(",")}`, part.flat());
+      }
     });
   }
   // 지점이 원본에서 사라진 경우(직접 지운 경우)
