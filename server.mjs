@@ -10,8 +10,8 @@ import {
   formatCsvRow,
 } from "./kma-fields.mjs";
 import { createAuth, authConfigured } from "./auth.mjs";
-import { createPgStore, createJsonStore } from "./auth-store.mjs";
-import { handleLayouts, createPgLayoutStore, createJsonLayoutStore } from "./layouts.mjs";
+import { createPgStore, createMysqlStore, createJsonStore } from "./auth-store.mjs";
+import { handleLayouts, createPgLayoutStore, createMysqlLayoutStore, createJsonLayoutStore } from "./layouts.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(__dirname, "data");
@@ -943,7 +943,7 @@ async function gaps(params) {
       latestOfficialHour: official,
       from: startMs == null ? null : kind === "daily" ? msToYmd(startMs) : `${msToH13(Math.max(startMs, minStart))}:00`,
       to: kind === "daily" ? msToYmd(endMs) : `${msToH13(endMs)}:00`,
-      storage: db.usingPg() ? "postgresql" : "json",
+      storage: db.storageKind(),
       max_days: GAP_MAX_DAYS,
       max_intervals: GAP_MAX_INTERVALS,
       stations: out,
@@ -968,7 +968,7 @@ async function dashboard() {
       latestOfficialHour: latestOfficialHour(),
       keyRegistered: Boolean(key),
       keyHint: hint(key),
-      storage: "postgresql",
+      storage: db.storageKind(),
       hourlyRecords,
       dailyRecords,
       coverage,
@@ -1110,7 +1110,7 @@ const server = http.createServer(async (req, res) => {
       const dailyList = getExportCatalog("daily", { fullFields: full });
       return json(res, {
         ok: true,
-        storage: db.usingPg() ? "postgresql" : "json",
+        storage: db.storageKind(),
         fullFields: full,
         hourly: {
           catalog: hourlyList,
@@ -1207,10 +1207,21 @@ const server = http.createServer(async (req, res) => {
         latestOfficialHour: latestOfficialHour(),
         keyRegistered: Boolean(key),
         keyHint: hint(key),
-        storage: db.usingPg() ? "postgresql" : "json",
+        storage: db.storageKind(),
         hourlyRecords,
         lastJob: jobs[0] || null,
       }));
+    }
+    if (req.method === "GET" && url.pathname === "/api/health") {
+      // DB 연결 상태(개인정보·비밀 없음). DB 가 응답하지 않으면 503.
+      const storage = db.storageKind();
+      if (storage === "json") return json(res, { ok: true, storage, db: "none" });
+      try {
+        const ms = await db.pingDb();
+        return json(res, { ok: true, storage, db: "ok", db_ms: ms });
+      } catch (err) {
+        return json(res, { ok: false, storage, db: "down", message: err?.code || "DB 응답 없음" }, 503);
+      }
     }
     if (req.method === "GET" && url.pathname === "/api/jobs") {
       return json(res, await listJobs());
@@ -1279,16 +1290,22 @@ const ready = (async () => {
     const ok = await db.initDb();
     if (ok) {
       const imported = await db.importJsonIfEmpty(DATA);
-      console.log(`postgresql connected imported=${imported.imported}`);
+      console.log(`${db.storageKind()} connected imported=${imported.imported}`);
     } else {
       console.log("postgresql off · json fallback");
     }
   } catch (err) {
+    // MySQL(NAS) 모드에서는 JSON 대체 모드로 내려가지 않는다(빈 화면·엉뚱한 곳에 저장 방지). 종료하면 docker 가 다시 띄워 재시도한다.
+    if (db.dbDriver() === "mysql") {
+      console.error("mysql init failed — exiting for restart", err instanceof Error ? err.message : err);
+      process.exit(1);
+    }
     console.error("postgresql init failed, json fallback", err);
   }
   // AUTH_PROVIDER=kakao(기본): 카카오 키가 있을 때 / nuni-id: 누니 ID 클라이언트 설정이 있을 때만 저장소를 만든다
   const authKeys = authConfigured(process.env);
-  const store = authKeys ? (db.usingPg() ? createPgStore(db.getPool()) : createJsonStore(AUTH_FILE)) : null;
+  const kind = db.storageKind();
+  const store = authKeys ? (kind === "mysql" ? createMysqlStore(db.getPool()) : kind === "postgresql" ? createPgStore(db.getPool()) : createJsonStore(AUTH_FILE)) : null;
   if (store) {
     // 로그인 기능이 켜질 때만 app_users/app_sessions 생성(IF NOT EXISTS). 실패해도 관리 기능은 잠긴 채로 둔다(fail closed).
     try {
@@ -1298,7 +1315,7 @@ const ready = (async () => {
     }
   }
   auth = createAuth({ env: process.env, store });
-  layoutStore = db.usingPg() ? createPgLayoutStore(db.getPool()) : createJsonLayoutStore(LAYOUT_FILE);
+  layoutStore = kind === "mysql" ? createMysqlLayoutStore(db.getPool()) : kind === "postgresql" ? createPgLayoutStore(db.getPool()) : createJsonLayoutStore(LAYOUT_FILE);
   console.log(auth.startupLine);
   if (auth.enabled) {
     const n = await auth.cleanup();
@@ -1306,7 +1323,7 @@ const ready = (async () => {
     setInterval(() => auth.cleanup(), 3600000).unref();
   }
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`weather-hub ${PORT} latest=${latestOfficialHour()} pg=${db.usingPg()}`);
+    console.log(`weather-hub ${PORT} latest=${latestOfficialHour()} storage=${db.storageKind()}`);
   });
 })();
 await ready;

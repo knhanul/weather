@@ -1779,7 +1779,7 @@
       const chips = [];
       const md = (v) => String(v || "").slice(5, 16); // 'YYYY-MM-DD HH:MM' → 'MM-DD HH:MM'
       if (d.latestOfficialHour) chips.push(`<li><span class="chip" title="기상청 공식 자료가 나오는 최신 시각 (${esc(d.timezone || "Asia/Seoul")})"><i></i><span><span class="wide">공식 </span>최신 ${esc(md(d.latestOfficialHour))}</span></span></li>`);
-      const pg = d.storage === "postgresql";
+      const pg = d.storage === "postgresql" || d.storage === "mysql"; // 이름은 예전 그대로: DB 연결 여부
       chips.push(`<li${pg ? ` class="opt"` : ""}><span class="chip ${pg ? "c-ok" : "c-warn"}" title="저장소: ${esc(d.storage || "json")}"><i></i>${pg ? "DB 연결됨" : "JSON 모드"}</span></li>`);
       chips.push(`<li><a class="chip ${d.keyRegistered ? "c-ok" : "c-bad"}" href="#/provider" title="공공데이터포털 인증키 ${d.keyRegistered ? "등록됨 " + esc(d.keyHint || "") : "미등록"}"><i></i>인증키 ${d.keyRegistered ? "등록됨" : "없음"}</a></li>`);
       const j = d.lastJob;
@@ -2125,7 +2125,7 @@
             dlState.catalogs = await res.json();
             const badge = $("dlStorageBadge");
             if (badge) {
-              badge.textContent = dlState.catalogs.storage === "pg" ? "PostgreSQL 연결됨" : "로컬 JSON 파일 저장소";
+              badge.textContent = dlState.catalogs.storage === "mysql" ? "MySQL(NAS) 연결됨" : dlState.catalogs.storage === "postgresql" ? "PostgreSQL 연결됨" : "로컬 JSON 파일 저장소";
             }
           }
         } catch (e) {

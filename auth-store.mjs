@@ -80,6 +80,65 @@ export function createPgStore(pool) {
   };
 }
 
+// MySQL(NAS, DB_DRIVER=mysql) — db-mysql.mjs 의 handle(query/read/tx). 테이블은 migrations/mysql/0001_init.sql 에서 만든다.
+// 시각은 UTC DATETIME(6), 연결 time_zone=+00:00 이라 NOW(6) 와 Date 값이 pg timestamptz 와 같은 순간을 뜻한다.
+export function createMysqlStore(h) {
+  const one = async (kakaoId) => (await h.read("SELECT * FROM app_users WHERE kakao_id = ?", [kakaoId]))[0];
+  return {
+    kind: "mysql",
+    async ensureSchema() {
+      await h.read("SELECT 1 FROM app_users LIMIT 1");
+      await h.read("SELECT 1 FROM app_sessions LIMIT 1");
+    },
+    async upsertLogin({ kakaoId, nickname, profileImage }) {
+      await h.query(
+        `INSERT INTO app_users (kakao_id, nickname, profile_image, status, created_at, last_login_at)
+         VALUES (?, ?, ?, 'pending', NOW(6), NOW(6))
+         ON DUPLICATE KEY UPDATE nickname = VALUES(nickname), profile_image = VALUES(profile_image), last_login_at = NOW(6)`,
+        [kakaoId, nickname ?? null, profileImage ?? null],
+      );
+      return userOut(await one(kakaoId));
+    },
+    async getUser(kakaoId) {
+      return userOut(await one(kakaoId));
+    },
+    async listUsers() {
+      const r = await h.read(
+        "SELECT * FROM app_users ORDER BY (status = 'pending') DESC, (last_login_at IS NULL) ASC, last_login_at DESC, created_at DESC",
+      );
+      return r.map(userOut);
+    },
+    async setStatus(kakaoId, status, by) {
+      if (!STATUSES.includes(status)) throw new Error("bad status");
+      await h.query("UPDATE app_users SET status = ?, status_changed_at = NOW(6), status_changed_by = ? WHERE kakao_id = ?", [status, by || null, kakaoId]);
+      const u = await one(kakaoId);
+      if (u && status === "blocked") await h.query("DELETE FROM app_sessions WHERE kakao_id = ?", [kakaoId]);
+      return userOut(u);
+    },
+    async createSession({ idHash, kakaoId, expiresAt, userAgent }) {
+      await h.query("INSERT INTO app_sessions (id_hash, kakao_id, expires_at, user_agent) VALUES (?, ?, ?, ?)", [
+        idHash, kakaoId, expiresAt instanceof Date ? expiresAt : new Date(expiresAt), userAgent || null,
+      ]);
+    },
+    async getSession(idHash) {
+      const r = await h.read(
+        `SELECT s.expires_at, u.* FROM app_sessions s JOIN app_users u ON u.kakao_id = s.kakao_id
+         WHERE s.id_hash = ? AND s.expires_at > NOW(6)`,
+        [idHash],
+      );
+      const row = r[0];
+      return row ? { expires_at: iso(row.expires_at), user: userOut(row) } : null;
+    },
+    async deleteSession(idHash) {
+      await h.query("DELETE FROM app_sessions WHERE id_hash = ?", [idHash]);
+    },
+    async deleteExpired() {
+      const r = await h.query("DELETE FROM app_sessions WHERE expires_at <= NOW(6)");
+      return r.affectedRows || 0;
+    },
+  };
+}
+
 // 로컬 개발용(DATABASE_URL 없음). 파일 권한 600, 임시 파일에 쓴 뒤 교체.
 export function createJsonStore(file) {
   const load = () => {

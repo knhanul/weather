@@ -10,12 +10,22 @@ const ID_RE = /^lay_[A-Za-z0-9_-]{8,40}$/;
 export const LAYOUT_PATH = "/api/export/layouts";
 export const isLayoutPath = (p) => p === LAYOUT_PATH || p.startsWith(`${LAYOUT_PATH}/`);
 
+// MySQL 은 columns 를 JSON 문자열(LONGTEXT)로 돌려준다
+function parseCols(v) {
+  if (typeof v !== "string") return [];
+  try {
+    const a = JSON.parse(v);
+    return Array.isArray(a) ? a : [];
+  } catch {
+    return [];
+  }
+}
 const newId = () => `lay_${crypto.randomBytes(12).toString("base64url")}`;
 const out = (r) => ({
   id: r.id,
   kind: r.kind,
   name: r.name,
-  columns: Array.isArray(r.columns) ? r.columns : [],
+  columns: Array.isArray(r.columns) ? r.columns : parseCols(r.columns),
   isDefault: Boolean(r.is_default),
   createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
   updatedAt: r.updated_at instanceof Date ? r.updated_at.toISOString() : r.updated_at,
@@ -79,6 +89,53 @@ export function createPgLayoutStore(pool) {
     },
     async remove(owner, id) {
       return (await pool.query("DELETE FROM export_layouts WHERE id = $1 AND owner_id = $2", [id, owner])).rowCount > 0;
+    },
+  };
+}
+
+// MySQL(NAS, DB_DRIVER=mysql) — db-mysql.mjs 의 handle. 5.6 에는 부분 유일 인덱스가 없어 default_marker(기본이면 1, 아니면 NULL)
+// + UNIQUE(owner_id, kind, default_marker) 로 "종류별 기본 1개" 를 지킨다. 한 UPDATE 안에서 MySQL 은 왼쪽 대입 값을 오른쪽에서 본다.
+export function createMysqlLayoutStore(h) {
+  const SEL = "SELECT id, owner_id, kind, name, columns, is_default, created_at, updated_at FROM export_layouts";
+  return {
+    kind: "mysql",
+    async list(owner) {
+      return (await h.read(`${SEL} WHERE owner_id = ? ORDER BY kind, created_at, id`, [owner])).map(out);
+    },
+    async count(owner) {
+      return Number((await h.read("SELECT COUNT(*) AS n FROM export_layouts WHERE owner_id = ?", [owner]))[0].n);
+    },
+    async get(owner, id) {
+      const r = await h.read(`${SEL} WHERE id = ? AND owner_id = ?`, [id, owner]);
+      return r[0] ? out(r[0]) : null;
+    },
+    async create(owner, { kind, name, columns, isDefault }) {
+      return h.tx(async (run) => {
+        if (isDefault) await run("UPDATE export_layouts SET is_default = 0, default_marker = NULL, updated_at = NOW(6) WHERE owner_id = ? AND kind = ? AND is_default = 1", [owner, kind]);
+        const id = newId();
+        await run(
+          "INSERT INTO export_layouts (id, owner_id, kind, name, columns, is_default, default_marker, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(6), NOW(6))",
+          [id, owner, kind, name, JSON.stringify(columns), isDefault ? 1 : 0, isDefault ? 1 : null],
+        );
+        return out((await run(`${SEL} WHERE id = ?`, [id]))[0]);
+      });
+    },
+    async update(owner, id, { name, columns, isDefault }) {
+      return h.tx(async (run) => {
+        const cur = (await run(`${SEL} WHERE id = ? AND owner_id = ? FOR UPDATE`, [id, owner]))[0];
+        if (!cur) return null;
+        if (isDefault === true) await run("UPDATE export_layouts SET is_default = 0, default_marker = NULL, updated_at = NOW(6) WHERE owner_id = ? AND kind = ? AND is_default = 1 AND id <> ?", [owner, cur.kind, id]);
+        await run(
+          `UPDATE export_layouts SET name = COALESCE(?, name), columns = COALESCE(?, columns),
+             is_default = COALESCE(?, is_default), default_marker = IF(is_default = 1, 1, NULL), updated_at = NOW(6)
+           WHERE id = ? AND owner_id = ?`,
+          [name ?? null, columns ? JSON.stringify(columns) : null, typeof isDefault === "boolean" ? (isDefault ? 1 : 0) : null, id, owner],
+        );
+        return out((await run(`${SEL} WHERE id = ? AND owner_id = ?`, [id, owner]))[0]);
+      });
+    },
+    async remove(owner, id) {
+      return (await h.query("DELETE FROM export_layouts WHERE id = ? AND owner_id = ?", [id, owner])).affectedRows > 0;
     },
   };
 }

@@ -398,3 +398,27 @@ sed -i '/^AUTH_PROVIDER=/d' /etc/weather-hub.env && systemctl restart weather-hu
   로그인한 상태로 다운로드 화면을 처음 열면 그 브라우저의 레이아웃을 내 계정으로 한 번 옮기고(같은 이름·종류·컬럼이면 건너뜀),
   원본은 `nuni_weather_export_layouts_moved` 로 백업만 남긴다.
 - 자료수집: 지점을 바꿔도 시작·종료는 그대로. 기본 구간은 처음 열 때와 '기본값' 버튼에서만 채운다.
+
+## 12) 저장소를 MySQL(NAS)로 — `DB_DRIVER=mysql` (2026-10-10)
+
+- 환경변수: `DB_DRIVER=mysql` + `MYSQL_URL=mysql://<user>:<pw>@<host>:3306/<db>` 이면 MySQL(5.6 이상), 없거나 `pg` 면 예전처럼 `DATABASE_URL`(PostgreSQL).
+  두 드라이버(`pg`, `mysql2`)가 모두 이미지에 들어 있어 **env 만 바꾸고 재시작하면 되돌릴 수 있다**. 선택 사항: `MYSQL_POOL_MAX`(기본 6), `MYSQL_QUERY_TIMEOUT_MS`(기본 120000).
+- 스키마: `migrations/mysql/*.sql` (앱 시작 시 적용, `hub_migrations` 에 `mysql/0001_init.sql` 처럼 기록). PostgreSQL 의 schema.sql + hub 0003·0004 + auth-schema 와 같은 표·열.
+  키 열은 VARCHAR + `utf8mb4_bin`(pg C 정렬과 같은 바이트 순서), jsonb → LONGTEXT(JSON 문자열), timestamptz → DATETIME(6) UTC(연결 `time_zone=+00:00`).
+  시간자료 기본키는 `(station_id, observation_datetime, provider, dataset)` 순(지점·기간 조회가 범위 읽기), 개수·최소·최대용 좁은 보조 인덱스 하나.
+  레이아웃 "종류별 기본 1개" 는 `default_marker`(1/NULL) + 유일 인덱스로 지킨다(5.6 에 부분 인덱스 없음).
+- 코드: `db-mysql.mjs` 가 `db.mjs` 의 모든 조회·저장 함수와 같은 이름·같은 결과를 낸다(각 함수 첫 줄에서 넘김). 5.6 에 없는 기능 대신:
+  DISTINCT ON → 정렬 후 JS 로 긴 형식 고르기, generate_series·row_number(미적재 구간) → 일자별 시각 수를 보고 덜 찬 날만 시각을 받아 JS 로 구간 계산(`db-common.mjs`),
+  unnest/ANY → IN·UNION ALL, RETURNING/xmax → 미리 있는 키 조회 + 여러 행 INSERT … ON DUPLICATE KEY UPDATE(1MB 패킷 제한 안으로 묶음).
+- 전체 표 집계(시간자료 개수·coverage·지점 요약)는 NAS 에서 수 초 걸려 앱이 기억해 둔다. 이 앱이 시간·일자료를 저장하면 비우고 바로 다시 계산,
+  밖에서 DB 를 직접 고친 경우를 위해 최대 30분(`MYSQL_AGG_CACHE_MS`, 0 이면 끔).
+- PostgreSQL 과 결과가 다를 수 있는 곳: `/api/daily` 의 시간자료 집계 평균기온이 정확히 x.x5 인 날은 더하는 순서(pg 는 디스크에 저장된 순서, MySQL 은 시각 순)에 따라
+  0.1 차이가 날 수 있다(2026-10-10 전체 19,775일 중 18일). 나머지 공개 API 는 바이트 단위로 같다(storage 값 제외).
+- 장애 시: 시작할 때 MySQL 에 못 붙으면 JSON 모드로 내려가지 않고 종료(도커가 다시 띄움). 실행 중 끊기면 해당 요청만 500, 읽기는 연결 오류 때 1번 재시도.
+  `GET /api/health` → `{"ok":true,"storage":"mysql","db":"ok","db_ms":…}`, DB 응답 없으면 503 `db:"down"`(도커 healthcheck 가 이것을 씀).
+- 화면: "DB 연결됨" 표시는 mysql 도 연결로 본다. 저장소 카드·`storage` 값은 `mysql`. 다운로드 화면 배지는 "MySQL(NAS) 연결됨"(예전엔 항상 "로컬 JSON" 으로 잘못 나왔음).
+- 자료 옮기기·검증: `node scripts/pg-to-mysql.mjs copy|verify [--tables a,b]` (DATABASE_URL·MYSQL_URL 필요, 다시 실행해도 안전, verify 는 표·지점별 행 수 + SHA-256),
+  `node scripts/compare-drivers.mjs` (같은 입력으로 두 저장소 함수 결과 비교 — 관리자 전용 미적재·수집 이력 포함),
+  `node scripts/mysql-integration.mjs` (이름이 `_test` 로 끝나는 빈 DB 에서만: 쓰기 경로·로그인·레이아웃 점검).
+- 알려진 기존 버그(이번 변경과 무관, 그대로 둠): 일자료 다운로드·미리보기에서 시간자료로 보충할 날이 있으면 `cols is not defined` 500 (`db-common.mjs` mergeDailyExport 주석).
+- `scripts/approve-user.mjs` 는 PostgreSQL 전용(예전 그대로). MySQL 모드에서는 관리 화면에서 승인한다.
