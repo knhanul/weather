@@ -159,18 +159,16 @@
     .card h2 { margin:0; font-size:18px; }
     .card strong.big { font-size:20px; font-variant-numeric:tabular-nums; }
     .card .muted { margin:4px 0 0; }
-    .st-grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(165px,1fr)); }
-    .st-card { padding:12px 14px; }
-    .st-card .muted { font-size:12px; }
-    .st-card { cursor:pointer; transition:border-color .15s, box-shadow .15s; }
-    .st-card:hover { border-color:#9cc4f7; box-shadow:0 8px 20px rgba(0,80,224,.08); }
-    .st-card:focus-visible { outline:2px solid var(--pri); outline-offset:2px; }
-    .st-card.sel { border-color:var(--pri); box-shadow:inset 0 0 0 1px var(--pri); }
-    .st-card.stale { background:#fffaf0; border-color:#f5dfb5; }
     .st-top { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:4px 8px; }
     .st-top strong { font-size:16px; }
-    .st-vals { display:flex; flex-wrap:wrap; gap:2px 12px; margin-top:6px; font-size:12px; color:var(--muted); }
-    .st-vals b { color:var(--fg); font-size:16px; font-variant-numeric:tabular-nums; }
+    /* 대시보드 지점 버튼: 24시간 넘게 뒤처진 지점(지연)·자료 없는 지점 표시 */
+    .seg button .late-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:#dc2626; margin-left:6px; vertical-align:middle; }
+    .seg button .st-flag { margin-left:5px; font-size:11px; font-weight:700; color:#b91c1c; }
+    .seg button.on .st-flag { color:#fff; }
+    .seg button .st-none { margin-left:5px; font-size:11px; font-weight:500; }
+    .stats .late-note { color:#b91c1c; font-weight:600; }
+    .stats .late-note .st-link { margin-left:4px; }
+    .dash-note { margin:0 0 12px; }
     .badge { display:inline-block; font-size:11px; line-height:1.4; padding:2px 8px; border-radius:999px; white-space:nowrap; font-weight:600; }
     .badge.ok { background:var(--ok-bg); color:var(--ok); }
     .badge.bad { background:var(--bad-bg); color:var(--bad); font-weight:700; }
@@ -429,8 +427,7 @@
       <main>
         <p class="login-note" id="loginNote" role="status" hidden><span id="loginNoteText"></span><button type="button" id="loginNoteClose">닫기</button></p>
         <section class="page" id="dash">
-          <p class="sec-title">즐겨찾기 지점 상태 <span id="stRef"></span> · <a class="st-link" href="#/gaps">지점별 미적재 현황 ›</a></p>
-          <div class="st-grid" id="stCards"></div>
+          <p class="muted dash-note" id="dashNote" hidden></p>
           <div class="card">
             <div class="chart-head">
               <div>
@@ -452,7 +449,7 @@
             </div>
             <div class="legend" id="chartLegend"></div>
           </div>
-          <p class="sec-title">시스템</p>
+          <p class="sec-title">시스템 <span id="stRef"></span> · <a class="st-link" href="#/gaps">지점별 미적재 현황 ›</a></p>
           <div class="grid4" id="dashCards"></div>
         </section>
         <section class="page" id="hourly">
@@ -728,14 +725,14 @@
     }
     // 대시보드 자료: 느리거나 실패해도 화면이 비지 않게(불러오는 중 → 실패 안내·다시 시도). 실패하면 false, 던지지 않는다.
     let dashLoading = null;
-    function dashNote(html) { if (!dashCache && $("stCards")) $("stCards").innerHTML = html; }
+    function dashNote(html) { const el = $("dashNote"); if (!el || dashCache) return; el.innerHTML = html; el.hidden = !html; }
     function loadDash() {
       if (dashLoading) return dashLoading;
       dashLoading = loadDashOnce().finally(() => { dashLoading = null; });
       return dashLoading;
     }
     async function loadDashOnce() {
-      dashNote('<p class="muted">지점 상태를 불러오는 중…</p>');
+      dashNote('지점 상태를 불러오는 중…');
       let d;
       try {
         const ctl = new AbortController();
@@ -745,11 +742,12 @@
         d = await res.json();
         if (!d || typeof d !== "object" || !d.latestOfficialHour) throw new Error("응답 형식");
       } catch (e) {
-        dashNote('<p class="bad">지점 상태를 불러오지 못했습니다' + (e && e.name === "AbortError" ? "(응답이 늦음)" : "") + '. <button type="button" id="dashRetry">다시 시도</button></p>');
+        dashNote('<span class="bad">지점 상태를 불러오지 못했습니다' + (e && e.name === "AbortError" ? "(응답이 늦음)" : "") + '.</span> <button type="button" id="dashRetry">다시 시도</button>');
         if ($("dashRetry")) $("dashRetry").onclick = () => loadDash().then((ok) => ok && route());
         return false;
       }
       dashCache = d;
+      if ($("dashNote")) { $("dashNote").hidden = true; $("dashNote").innerHTML = ""; }
       seriesCache = new Map();
       renderHeadChips();
       renderDash();
@@ -862,36 +860,22 @@
       dashState.from = f; dashState.to = t;
       syncHash(); renderDashControls(); loadSeries();
     }
-    function renderStationCards() {
+    function renderStRef() {
       const d = dashCache || {};
-      $("stRef").textContent = d.latestOfficialHour ? `· 공식 최신 ${d.latestOfficialHour.slice(0, 16)} 기준, 24시간 넘게 뒤처지면 경고` : "";
-      const list = dashStations();
-      $("stCards").innerHTML = list.map((s) => {
-        const m = s.summary;
-        const badge = !m ? `<span class="badge bad">자료 없음</span>`
-          : m.stale ? `<span class="badge bad" title="공식 최신 시각보다 ${m.lag_hours}시간 늦음">⚠ 수집 중단 · ${lagText(m.lag_hours)} 지연</span>`
-          : `<span class="badge ok">정상</span>`;
-        const body = m ? `
-            <p class="muted">마지막 관측 ${esc(m.last_observation)}${m.stale ? ` · <a class="st-link" href="#/collect?station=${encodeURIComponent(s.id)}&kind=hourly">빈 구간 수집 ›</a> · <a class="st-link" href="#/gaps?station=${encodeURIComponent(s.id)}&kind=hourly">미적재 현황 ›</a>` : ""}</p>
-            <div class="st-vals"><span>기온 <b>${nf(m.temperature, "°C")}</b></span><span>습도 <b>${nf(m.humidity, "%")}</b></span><span>강수 <b>${nf(m.precipitation, "mm")}</b></span></div>
-            <p class="muted" title="관측 시각 ${nf(m.hours)}개 · ${esc(m.first_observation)}부터">${nf(m.rows)}건${m.duplicates ? ` · <span title="같은 시각이 'HH:MM'과 'HH:MM:SS' 두 형식으로 중복 저장됨">중복 ${nf(m.duplicates)}</span>` : ""}${s.enabled === false ? ` · <span class="badge off">사용 중지</span>` : ""}</p>`
-          : `<p class="muted">이 지점의 시간자료가 아직 없습니다.</p>`;
-        return `<div class="card st-card${s.id === dashState.station ? " sel" : ""}${m?.stale || !m ? " stale" : ""}" role="button" tabindex="0" data-st="${esc(s.id)}" aria-pressed="${s.id === dashState.station}">
-            <div class="st-top"><strong>${esc(s.id)} ${esc(s.name)}</strong>${badge}</div>${body}
-          </div>`;
-      }).join("") || `<div class="card muted">즐겨찾기 지점이 없습니다. 관측지점 메뉴에서 ★를 눌러 추가하세요.</div>`;
+      $("stRef").textContent = d.latestOfficialHour ? `· 공식 최신 ${d.latestOfficialHour.slice(0, 16)} 기준, 24시간 넘게 뒤처진 지점은 빨간 점(지연)` : "";
     }
     function renderDashControls() {
       const list = dashStations();
-      $("stSel").innerHTML = list.map((s) => `<button type="button" class="${s.id === dashState.station ? "on" : ""}" data-st="${esc(s.id)}"${s.summary ? "" : " disabled title=\"자료 없음\""}>${esc(s.id)} ${esc(s.name)}</button>`).join("");
+      $("stSel").innerHTML = list.map((s) => {
+        const m = s.summary;
+        const tip = !m ? "자료 없음" : m.stale ? `마지막 관측 ${m.last_observation} · 공식 최신보다 ${lagText(m.lag_hours)} 지연` : `마지막 관측 ${m.last_observation}`;
+        const mark = !m ? `<span class="st-none">자료 없음</span>` : m.stale ? `<span class="late-dot" aria-hidden="true"></span><span class="st-flag">지연</span>` : "";
+        return `<button type="button" class="${s.id === dashState.station ? "on" : ""}" data-st="${esc(s.id)}" title="${esc(tip)}" aria-label="${esc(`${s.id} ${s.name} · ${tip}`)}"${m ? "" : " disabled"}>${esc(s.id)} ${esc(s.name)}${mark}</button>`;
+      }).join("");
       $("periodSel").innerHTML = PERIODS.map(([h, label]) => `<button type="button" class="${h === dashState.hours && !dashCustom() ? "on" : ""}" data-h="${h}">${label}</button>`).join("");
       const latest = String(dashCache?.latestOfficialHour || "").slice(0, 10);
       if (latest) { $("chFrom").max = latest; $("chTo").max = latest; }
       if (dashCustom()) { $("chFrom").value = dashState.from; $("chTo").value = dashState.to; }
-      document.querySelectorAll("#stCards .st-card").forEach((el) => {
-        const on = el.dataset.st === dashState.station;
-        el.classList.toggle("sel", on); el.setAttribute("aria-pressed", String(on));
-      });
     }
     function renderSysCards() {
       const d = dashCache || {};
@@ -902,7 +886,7 @@
     }
     function renderDash() {
       pickDefaultStation();
-      renderStationCards();
+      renderStRef();
       renderDashControls();
       renderSysCards();
       loadSeries();
@@ -947,6 +931,19 @@
       const f = String(r.range_from || r.from || "").slice(0, 10), t = String(r.range_to || r.to || "").slice(0, 10);
       return `<a class="st-link" href="#/gaps?kind=hourly&station=${sid}&from=${f}&to=${t}">미적재 현황 ›</a> · <a class="st-link" href="#/collect?station=${sid}&kind=hourly&from=${encodeURIComponent(`${f} 00:00`)}&to=${encodeURIComponent(`${t} 23:00`)}">자료수집 ›</a>`;
     }
+    // 선택 지점의 마지막 관측(대시보드 요약): 습도·1시간 강수와 그 시각. 지연된 지점은 경고와 바로가기.
+    function latestObsStats() {
+      const st = dashStations().find((s) => s.id === dashState.station);
+      const m = st?.summary;
+      if (!m) return "";
+      const at = m.last_observation ? `<small>${esc(shortT(wallMs(m.last_observation)))}</small>` : "";
+      const sid = encodeURIComponent(st.id);
+      const late = m.stale
+        ? `<span class="late-note">⚠ ${esc(lagText(m.lag_hours))} 지연${canAdmin() ? ` <a class="st-link" href="#/collect?station=${sid}&kind=hourly">빈 구간 수집 ›</a>` : ""} <a class="st-link" href="#/gaps?station=${sid}&kind=hourly">미적재 현황 ›</a></span>`
+        : "";
+      return `<span>습도 <b>${nf(m.humidity, "%")}</b> ${at}</span>
+        <span>1시간 강수 <b>${nf(m.precipitation, "mm")}</b> ${at}</span>${late}`;
+    }
     function renderChartMeta(r) {
       const pts = r.points || [];
       const custom = r.mode === "range";
@@ -988,6 +985,7 @@
         <span>${daily ? "일 최저" : "최저"} <b class="lo">${nf(lo ? loV(lo) : null, "°C")}</b> ${tt(lo)}</span>
         <span>${daily ? "최근 일평균" : "최근"} <b>${nf(last?.temperature, "°C")}</b> ${tt(last)}</span>
         <span>강수 합계 <b>${rainN ? nf(Math.round(rainSum * 10) / 10, "mm") : "—"}</b> ${rainN ? `<small>(강수 값 있는 ${rainN}${u})</small>` : "<small>(강수 값 없음)</small>"}</span>
+        ${latestObsStats()}
         ${missing > 0 ? `<span title="관측이 없거나 기온이 NULL인 ${u}은 선을 끊어 표시합니다">기온 결측 <b>${nf(missing)}</b><small>${u}</small></span>` : ""}`;
     }
     function niceStep(raw) {
@@ -1186,8 +1184,6 @@
     $("periodSel").addEventListener("click", (e) => { const b = e.target.closest("button[data-h]"); if (b) selectPeriod(Number(b.dataset.h)); });
     $("chApply").onclick = applyDashRange;
     ["chFrom", "chTo"].forEach((id) => $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") applyDashRange(); }));
-    $("stCards").addEventListener("click", (e) => { if (e.target.closest("a")) return; const c = e.target.closest(".st-card[data-st]"); if (c) selectStation(c.dataset.st); });
-    $("stCards").addEventListener("keydown", (e) => { if (e.key !== "Enter" && e.key !== " ") return; const c = e.target.closest(".st-card[data-st]"); if (c) { e.preventDefault(); selectStation(c.dataset.st); } });
     if (window.ResizeObserver) new ResizeObserver(() => requestAnimationFrame(() => drawChart(false))).observe($("chart"));
     else window.addEventListener("resize", () => drawChart(false));
     // ---------- 자료수집 ----------
@@ -2024,7 +2020,7 @@
         // 주소의 ?station=&hours= 를 반영(직접 입력·뒤로가기)
         const before = dashKey();
         pickDefaultStation();
-        if (dashKey() !== before) { renderStationCards(); renderDashControls(); loadSeries(); }
+        if (dashKey() !== before) { renderDashControls(); loadSeries(); }
         else drawChart(false);
       }
     }
