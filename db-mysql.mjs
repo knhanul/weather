@@ -130,15 +130,31 @@ export function createAggCache({ ttlMs, refreshMs }) {
   return {
     get(key, fn) {
       const hit = cache.get(key);
-      if (hit && (Date.now() - hit.at < ttlMs() || (hit.settled && (timer || refreshing)))) return hit.p;
+      if (hit && Date.now() - hit.at < ttlMs()) return hit.p;
+      // 만료됐어도 이미 값이 있으면 그 값을 바로 주고 뒤에서 한 번만 다시 계산(요청이 느린 집계를 기다리지 않게)
+      if (hit && hit.settled) {
+        if (!timer && !refreshing) {
+          timer = setTimeout(() => refresh().catch(() => {}), 0);
+          timer.unref?.();
+        }
+        return hit.p;
+      }
+      if (hit) return hit.p; // 같은 집계가 이미 계산 중이면 그걸 같이 기다림(동시 요청이 몰려도 한 번)
       const entry = { at: Date.now(), fn, settled: false };
       entry.p = fn();
       entry.p.then(() => (entry.settled = true), () => cache.get(key) === entry && cache.delete(key));
       cache.set(key, entry);
       return entry.p;
     },
-    invalidate() {
-      const ms = refreshMs();
+    invalidate(override) {
+      const ms = override ?? refreshMs();
+      if (override === 0 && ttlMs() > 0) {
+        for (const e of cache.values()) e.at = 0;
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => refresh().catch(() => {}), 0);
+        timer.unref?.();
+        return;
+      }
       if (ttlMs() <= 0 || ms <= 0) return cache.clear();
       for (const e of cache.values()) e.at = 0; // 만료 표시. 다시 계산될 때까지 직전 값을 준다
       if (!timer) {
@@ -154,7 +170,7 @@ const agg = createAggCache({
   refreshMs: () => Number(process.env.MYSQL_AGG_REFRESH_MS ?? 2 * 60000),
 });
 const cachedAgg = (key, fn) => agg.get(key, fn);
-const invalidateAgg = () => agg.invalidate();
+const invalidateAgg = (ms) => agg.invalidate(ms);
 export async function warmAggregates() {
   await Promise.all([countHourly(), countDaily(), coverageHourly(), stationSummariesPg()]);
 }
@@ -196,6 +212,16 @@ export async function applyMysqlMigrations(dir = MYSQL_MIGRATIONS_DIR) {
   return applied;
 }
 
+// MySQL 5.6 에는 ADD INDEX IF NOT EXISTS 가 없어 여기서 확인 후 만든다(온라인 DDL: 표를 잠그지 않음).
+// observations_daily_date: 일자료 COUNT(*) 가 넓은 기본 키 대신 좁은 이 색인을 훑게(NAS 3.3초 → 0.1초).
+async function ensureIndex(table, name, cols) {
+  const r = await q("SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? LIMIT 1", [table, name]);
+  if (r.length) return false;
+  await q(`ALTER TABLE ${table} ADD INDEX ${name} ${cols}, ALGORITHM=INPLACE, LOCK=NONE`, [], { retry: false });
+  console.log(`mysql index added: ${table}.${name}`);
+  return true;
+}
+
 export async function hasFullFieldColumns() {
   const need = [
     ...HOURLY_EXTRA.map((f) => ["observations_hourly", f.col]),
@@ -217,8 +243,16 @@ export async function init(url) {
   const applied = await applyMysqlMigrations();
   if (applied.length) console.log(`mysql migrations applied: ${applied.join(", ")}`);
   fullFields = await hasFullFieldColumns();
-  // 첫 화면이 기다리지 않게 전체 집계를 미리 계산(뒤에서)
-  if (Number(process.env.MYSQL_AGG_CACHE_MS ?? 1) > 0) warmAggregates().catch((e) => console.error("mysql warm aggregates failed", e?.code || e?.message));
+  await ensureIndex("observations_daily", "observations_daily_date", "(observation_date)");
+  statsReady = await loadStatsReady();
+  // 요약표가 없으면 뒤에서 지점별로 채운다(그동안은 예전 전체 집계). 다 되면 집계를 다시 계산.
+  if (!statsReady && process.env.MYSQL_STATS_BUILD !== "0") {
+    statsQueue(rebuildStats)
+      .then(() => { invalidateAgg(0); return warmAggregates(); })
+      .catch((e) => console.error("mysql stats build failed", e?.code || e?.message));
+  }
+  // 첫 화면이 기다리지 않게 전체 집계를 미리 계산(뒤에서). 요약표가 준비됐을 때만(아니면 위에서 만든 뒤에)
+  if (statsReady && Number(process.env.MYSQL_AGG_CACHE_MS ?? 1) > 0) warmAggregates().catch((e) => console.error("mysql warm aggregates failed", e?.code || e?.message));
   return true;
 }
 
@@ -355,6 +389,7 @@ export async function upsertHourly(rows) {
   try {
     res = await upsertRows({ table: "observations_hourly", keyCols: ["station_id", "observation_datetime", "provider", "dataset"], update: HOURLY_UPDATE, shapedRows });
   } finally {
+    await statsQueue(() => refreshHourlyStats(touchedMonths(rows))).catch((e) => markStatsStale(e));
     invalidateAgg();
   }
   // total 은 집계 캐시 값(다시 계산 전이면 직전 값). 매번 전체 COUNT(*) 를 하지 않는다.
@@ -388,6 +423,7 @@ export async function upsertDaily(rows) {
   try {
     return await upsertRows({ table: "observations_daily", keyCols: ["station_id", "observation_date"], update: DAILY_UPDATE, shapedRows });
   } finally {
+    await statsQueue(() => refreshDailyStats([...new Set(rows.map((r) => String(r.station_id)))])).catch((e) => markStatsStale(e));
     invalidateAgg();
   }
 }
@@ -447,16 +483,25 @@ export async function queryHourlyExportPg({ stationId, from, to, columns, limit 
   return q(sql, params);
 }
 
+// 요약표(hourly_month_stats 등)가 준비됐으면 거기서(수천 행), 아니면 예전처럼 원본 전체 집계. 값은 같다(scripts/check-stats.mjs).
 export function countHourly() {
-  return cachedAgg("countHourly", async () => (await q("SELECT COUNT(*) AS n FROM observations_hourly"))[0].n);
+  return cachedAgg("countHourly", async () =>
+    statsReady
+      ? (await q("SELECT CAST(COALESCE(SUM(n_rows),0) AS SIGNED) AS n FROM hourly_month_stats"))[0].n
+      : (await q("SELECT COUNT(*) AS n FROM observations_hourly"))[0].n,
+  );
 }
 
 export function coverageHourly() {
-  return cachedAgg("coverageHourly", () => q(
-    `SELECT dataset, COUNT(*) AS records, COUNT(DISTINCT station_id) AS stations,
-            MIN(observation_datetime) AS first, MAX(observation_datetime) AS last
-     FROM observations_hourly GROUP BY dataset`,
-  ));
+  return cachedAgg("coverageHourly", () =>
+    statsReady
+      ? q(`SELECT dataset, CAST(SUM(n_rows) AS SIGNED) AS records, COUNT(DISTINCT station_id) AS stations,
+                  MIN(first_dt) AS first, MAX(last_dt) AS last
+           FROM hourly_month_stats GROUP BY dataset`)
+      : q(`SELECT dataset, COUNT(*) AS records, COUNT(DISTINCT station_id) AS stations,
+                  MIN(observation_datetime) AS first, MAX(observation_datetime) AS last
+           FROM observations_hourly GROUP BY dataset`),
+  );
 }
 
 export async function seriesSeoul() {
@@ -506,9 +551,15 @@ export function stationSummariesPg() {
 }
 async function stationSummariesQuery() {
   const agg = await q(
-    `SELECT station_id, COUNT(*) AS n_rows, COUNT(DISTINCT LEFT(observation_datetime,16)) AS hours,
-            LEFT(MIN(observation_datetime),16) AS first_observation, LEFT(MAX(observation_datetime),16) AS last_observation
-     FROM observations_hourly GROUP BY station_id ORDER BY station_id`,
+    statsReady
+      ? `SELECT station_id, CAST(SUM(n_rows) AS SIGNED) AS n_rows, CAST(SUM(h) AS SIGNED) AS hours,
+                LEFT(MIN(f),16) AS first_observation, LEFT(MAX(l),16) AS last_observation
+         FROM (SELECT station_id, ym, SUM(n_rows) AS n_rows, MAX(hours) AS h, MIN(first_dt) AS f, MAX(last_dt) AS l
+               FROM hourly_month_stats GROUP BY station_id, ym) x
+         GROUP BY station_id ORDER BY station_id`
+      : `SELECT station_id, COUNT(*) AS n_rows, COUNT(DISTINCT LEFT(observation_datetime,16)) AS hours,
+                LEFT(MIN(observation_datetime),16) AS first_observation, LEFT(MAX(observation_datetime),16) AS last_observation
+         FROM observations_hourly GROUP BY station_id ORDER BY station_id`,
   );
   if (!agg.length) return [];
   const where = agg.map(() => "(station_id = ? AND observation_datetime >= ? AND observation_datetime <= ?)").join(" OR ");
@@ -578,8 +629,107 @@ export async function queryDailyExportPg({ stationId, from, to, columns, limit =
 }
 
 export function countDaily() {
-  return cachedAgg("countDaily", async () => (await q("SELECT COUNT(*) AS n FROM observations_daily"))[0].n);
+  return cachedAgg("countDaily", async () =>
+    statsReady
+      ? (await q("SELECT CAST(COALESCE(SUM(n_rows),0) AS SIGNED) AS n FROM daily_station_stats"))[0].n
+      : (await q("SELECT COUNT(*) AS n FROM observations_daily"))[0].n,
+  );
 }
+
+// ---- 요약표 유지 ----
+let statsReady = false;
+let statsChain = Promise.resolve();
+// 요약표 쓰기는 이 프로세스 안에서 한 줄로(같은 지점·월을 두 저장이 동시에 다시 세서 옛 값으로 덮지 않게)
+function statsQueue(fn) {
+  const p = statsChain.then(fn);
+  statsChain = p.catch(() => {});
+  return p;
+}
+async function loadStatsReady() {
+  const r = await q("SELECT name FROM hub_stats_meta WHERE name = 'obs_stats_v1'");
+  return r.length > 0;
+}
+// 요약표 갱신이 실패하면 값이 틀릴 수 있으니 원본 집계로 돌아가고 다음 시작 때 다시 만든다
+function markStatsStale(e) {
+  console.error("mysql stats refresh failed — falling back to full aggregates", e?.code || e?.message);
+  statsReady = false;
+  q("DELETE FROM hub_stats_meta WHERE name = 'obs_stats_v1'", [], { retry: false }).catch(() => {});
+}
+export function touchedMonths(rows) {
+  const m = new Map();
+  for (const r of rows) {
+    const st = String(r.station_id);
+    const ym = String(r.observation_datetime).slice(0, 7);
+    if (!m.has(st)) m.set(st, new Set());
+    m.get(st).add(ym);
+  }
+  return [...m].flatMap(([st, set]) => [...set].sort().map((ym) => [st, ym]));
+}
+async function writeMonthStats(run, stationId, ym, perDs, hours) {
+  await run("DELETE FROM hourly_month_stats WHERE station_id = ? AND ym = ?", [stationId, ym]);
+  if (perDs.length) {
+    await run(
+      `INSERT INTO hourly_month_stats (station_id, ym, dataset, n_rows, hours, first_dt, last_dt) VALUES ${perDs.map(() => "(?,?,?,?,?,?,?)").join(",")}`,
+      perDs.flatMap((d) => [stationId, ym, d.dataset, d.n, hours, d.f, d.l]),
+    );
+  }
+}
+async function refreshHourlyStats(pairs) {
+  for (const [stationId, ym] of pairs) {
+    const range = [stationId, ym, prefixUpper(ym)];
+    const perDs = await q(
+      `SELECT dataset, COUNT(*) AS n, MIN(observation_datetime) AS f, MAX(observation_datetime) AS l FROM observations_hourly
+       WHERE station_id = ? AND observation_datetime >= ? AND observation_datetime < ? GROUP BY dataset`,
+      range,
+    );
+    const h = await q(
+      `SELECT COUNT(DISTINCT LEFT(observation_datetime,16)) AS h FROM observations_hourly
+       WHERE station_id = ? AND observation_datetime >= ? AND observation_datetime < ?`,
+      range,
+    );
+    await tx((run) => writeMonthStats(run, stationId, ym, perDs, h[0].h));
+  }
+}
+async function refreshDailyStats(stationIds) {
+  for (const id of stationIds) {
+    const n = (await q("SELECT COUNT(*) AS n FROM observations_daily WHERE station_id = ?", [id]))[0].n;
+    await q("INSERT INTO daily_station_stats (station_id, n_rows) VALUES (?, ?) ON DUPLICATE KEY UPDATE n_rows = VALUES(n_rows)", [id, n], { retry: false });
+  }
+}
+// 처음 한 번: 지점마다 원본을 한 번 훑어 월별로 채운다(지점당 수 초, 사이트는 그동안 예전 집계로 답함)
+export async function rebuildStats() {
+  const t0 = Date.now();
+  const ids = (await q("SELECT DISTINCT station_id FROM observations_hourly")).map((r) => r.station_id);
+  for (const id of ids) {
+    const perDs = await q(
+      `SELECT LEFT(observation_datetime,7) AS ym, dataset, COUNT(*) AS n, MIN(observation_datetime) AS f, MAX(observation_datetime) AS l
+       FROM observations_hourly WHERE station_id = ? GROUP BY ym, dataset`,
+      [id],
+    );
+    const hours = new Map((await q(
+      `SELECT LEFT(observation_datetime,7) AS ym, COUNT(DISTINCT LEFT(observation_datetime,16)) AS h FROM observations_hourly WHERE station_id = ? GROUP BY ym`,
+      [id],
+    )).map((r) => [r.ym, r.h]));
+    const byYm = new Map();
+    for (const r of perDs) {
+      if (!byYm.has(r.ym)) byYm.set(r.ym, []);
+      byYm.get(r.ym).push(r);
+    }
+    await tx(async (run) => {
+      await run("DELETE FROM hourly_month_stats WHERE station_id = ?", [id]);
+      for (const [ym, list] of byYm) await writeMonthStats(run, id, ym, list, hours.get(ym) ?? 0);
+    });
+  }
+  // 지점이 원본에서 사라진 경우(직접 지운 경우)
+  if (ids.length) await q(`DELETE FROM hourly_month_stats WHERE station_id NOT IN (${ids.map(() => "?").join(",")})`, ids, { retry: false });
+  else await q("DELETE FROM hourly_month_stats", [], { retry: false });
+  await q("DELETE FROM daily_station_stats", [], { retry: false });
+  await q("INSERT INTO daily_station_stats (station_id, n_rows) SELECT station_id, COUNT(*) FROM observations_daily GROUP BY station_id", [], { retry: false });
+  await q("REPLACE INTO hub_stats_meta (name, built_at) VALUES ('obs_stats_v1', NOW(6))", [], { retry: false });
+  statsReady = true;
+  console.log(`mysql stats built: ${ids.length} stations in ${Math.round((Date.now() - t0) / 1000)}s`);
+}
+export const statsState = () => ({ ready: statsReady });
 
 // ---- 수집 이력·지점·설정 ----
 export async function insertJob(job) {

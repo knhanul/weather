@@ -726,9 +726,30 @@
       const list = (dashCache?.stations || []).filter((s) => s.enabled);
       sel.innerHTML = list.map((s) => `<option value="${s.station_id}">${s.station_id} ${s.station_name}</option>`).join("");
     }
-    async function loadDash() {
-      dashCache = await (await fetch("/api/dashboard")).json();
-      const d = dashCache;
+    // 대시보드 자료: 느리거나 실패해도 화면이 비지 않게(불러오는 중 → 실패 안내·다시 시도). 실패하면 false, 던지지 않는다.
+    let dashLoading = null;
+    function dashNote(html) { if (!dashCache && $("stCards")) $("stCards").innerHTML = html; }
+    function loadDash() {
+      if (dashLoading) return dashLoading;
+      dashLoading = loadDashOnce().finally(() => { dashLoading = null; });
+      return dashLoading;
+    }
+    async function loadDashOnce() {
+      dashNote('<p class="muted">지점 상태를 불러오는 중…</p>');
+      let d;
+      try {
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), 30000);
+        const res = await fetch("/api/dashboard", { signal: ctl.signal }).finally(() => clearTimeout(timer));
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        d = await res.json();
+        if (!d || typeof d !== "object" || !d.latestOfficialHour) throw new Error("응답 형식");
+      } catch (e) {
+        dashNote('<p class="bad">지점 상태를 불러오지 못했습니다' + (e && e.name === "AbortError" ? "(응답이 늦음)" : "") + '. <button type="button" id="dashRetry">다시 시도</button></p>');
+        if ($("dashRetry")) $("dashRetry").onclick = () => loadDash().then((ok) => ok && route());
+        return false;
+      }
+      dashCache = d;
       seriesCache = new Map();
       renderHeadChips();
       renderDash();
@@ -743,6 +764,7 @@
       if ($("xToDaily")) $("xToDaily").value = $("dTo").value;
       $("pStatus").textContent = `저장 ${d.storage||"json"} · 키 ${d.keyRegistered ? "등록됨 " + (d.keyHint||"") : "미등록"} · 공식 최신 ${d.latestOfficialHour}`;
       refreshCollectForm();
+      return true;
     }
     // ---------- 대시보드 ----------
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -2820,7 +2842,8 @@
     window.addEventListener("hashchange", route);
     setPageHead(({ "/hourly": "hourly", "/daily": "daily", "/download": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider" })[location.hash.replace("#", "").split("?")[0]] || "dash");
     showLoginNote();
-    Promise.all([loadMe(), loadDash()]).then(route);
+    // 대시보드 자료가 늦거나 실패해도 다른 화면은 그대로 뜨게
+    Promise.allSettled([loadMe(), loadDash()]).then(route);
   </script>
 </body>
 </html>

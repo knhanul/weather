@@ -149,3 +149,45 @@ test("createAggCache: 저장 뒤에는 직전 값을 주다가 refreshMs 뒤 한
   off.invalidate();
   assert.equal(await off.get("x", fn), 7, "refreshMs=0 이면 바로 비움");
 });
+
+test("createAggCache: 만료된 값은 바로 주고 뒤에서 한 번만 다시 계산, 처음 계산은 동시 요청이 함께 기다림", async () => {
+  const { createAggCache } = await import("../db-mysql.mjs");
+  let ttl = 60000;
+  let calls = 0;
+  let n = 1;
+  let release;
+  const slow = () => new Promise((r) => { calls++; release = () => r(n); });
+  const c = createAggCache({ ttlMs: () => ttl, refreshMs: () => 60000 });
+  const a = c.get("k", slow);
+  const b = c.get("k", slow);
+  assert.equal(calls, 1, "처음 계산은 한 번");
+  release();
+  assert.deepEqual([await a, await b], [1, 1]);
+  ttl = 0.0001; // 만료
+  await new Promise((r) => setTimeout(r, 5));
+  n = 2;
+  const t0 = Date.now();
+  assert.equal(await c.get("k", slow), 1, "만료돼도 직전 값을 바로");
+  assert.ok(Date.now() - t0 < 50);
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(calls, 2, "뒤에서 다시 계산 시작");
+  assert.equal(await c.get("k", slow), 1, "계산 중에도 직전 값");
+  assert.equal(calls, 2);
+  ttl = 60000;
+  release();
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(await c.get("k", slow), 2);
+});
+
+test("touchedMonths: 저장한 행의 지점·월 목록", async () => {
+  const { touchedMonths } = await import("../db-mysql.mjs");
+  assert.deepEqual(
+    touchedMonths([
+      { station_id: "108", observation_datetime: "2026-10-31 23:00:00" },
+      { station_id: "108", observation_datetime: "2026-11-01 00:00:00" },
+      { station_id: "108", observation_datetime: "2026-10-01 00:00" },
+      { station_id: 112, observation_datetime: "1990-01-01 00:00:00" },
+    ]),
+    [["108", "2026-10"], ["108", "2026-11"], ["112", "1990-01"]],
+  );
+});
