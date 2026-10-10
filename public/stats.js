@@ -251,20 +251,42 @@
   function chart(host, cfg) {
     host.__cfg = cfg;
     charts.add(host);
+    if (window.ChartFull) {
+      // 크게 보기: 같은 cfg 로 겹친 화면 크기에 맞춰 다시 그림(그림 확대 아님)
+      const card = host.closest(".card");
+      const h2 = card && card.querySelector("h2");
+      const mainTitle = h2 ? [...h2.childNodes].filter((x) => x.nodeType === 3 || (x.tagName !== "SMALL" && !x.classList?.contains("sx-badge"))).map((x) => x.textContent).join("").trim() : "";
+      const badges = h2 ? [...h2.querySelectorAll(".sx-badge")].map((b) => b.textContent).join(" · ") : "";
+      const small = h2 && h2.querySelector("small");
+      window.ChartFull.register(host, {
+        hostClass: "sx-chart",
+        title: () => (cfg.aria && mainTitle && !mainTitle.includes(cfg.aria) ? `${mainTitle} — ${cfg.aria}` : mainTitle || cfg.aria || "그래프"),
+        sub: () => [badges, small ? small.textContent.trim() : "", cfg.unit ? `단위 ${cfg.unit}` : ""].filter(Boolean).join(" · "),
+        legend: () => {
+          const lg = host.nextElementSibling;
+          return lg && lg.classList.contains("sx-legend") ? lg.cloneNode(true) : null;
+        },
+        source: () => cfg.source || "자료: 기상청 ASOS · 시간대 Asia/Seoul",
+        render: (el, size) => {
+          el.__cfg = cfg;
+          drawChart(el, { W: size.width, H: size.height, full: true });
+        },
+      });
+    }
     drawChart(host);
   }
-  function drawChart(host) {
+  function drawChart(host, opt = {}) {
     const cfg = host.__cfg;
     if (!cfg || !host.isConnected) {
       charts.delete(host);
       return;
     }
-    const W = Math.round(host.clientWidth);
+    const W = Math.round(opt.W || host.clientWidth);
     if (!W) return;
-    if (host.__w === W && host.querySelector("svg")) return;
+    if (!opt.full && host.__w === W && host.querySelector("svg")) return;
     host.__w = W;
     const narrow = W < 560;
-    const H = narrow ? 230 : 290;
+    const H = opt.H ? Math.round(opt.H) : narrow ? 230 : 290;
     const n = cfg.labels.length;
     const ml = 50, mr = 12, mt = 16, mb = 32;
     const iw = W - ml - mr, ih = H - mt - mb;
@@ -336,14 +358,17 @@
         g += `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}`;
       });
     }
-    g += `<line class="hv" id="${host.id}Hv" x1="0" x2="0" y1="${mt}" y2="${mt + ih}" visibility="hidden"/>`;
-    host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${E(cfg.aria || "")}">${g}<rect x="${ml}" y="${mt}" width="${iw}" height="${ih}" fill="transparent" data-hit="1"/></svg><div class="tip"></div>`;
+    g += `<line class="hv" x1="0" x2="0" y1="${mt}" y2="${mt + ih}" visibility="hidden"/>`;
+    const btn = !opt.full && window.ChartFull ? window.ChartFull.button() : "";
+    host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${E(cfg.aria || "")}">${g}<rect x="${ml}" y="${mt}" width="${iw}" height="${ih}" fill="transparent" data-hit="1"/></svg><div class="tip"></div>${btn}`;
     const svg = host.querySelector("svg");
     const tip = host.querySelector(".tip");
-    const hv = svg.querySelector(`#${CSS.escape(host.id)}Hv`);
+    const hv = svg.querySelector("line.hv");
+    // 포인터 → 그래프 안 가로 위치. 돌린 '크게 보기' 화면에서도 맞게(ChartFull.frac)
+    const fracOf = (ev) => (window.ChartFull ? window.ChartFull.frac(ev, host) : (ev.clientX - host.getBoundingClientRect().left) / host.clientWidth);
     const move = (ev) => {
-      const box = svg.getBoundingClientRect();
-      const x = ((ev.clientX - box.left) / box.width) * W;
+      const box = { width: host.clientWidth };
+      const x = fracOf(ev) * W;
       const i = Math.floor((x - ml) / bw);
       if (i < 0 || i >= n) return hide();
       const html = cfg.tip ? cfg.tip(i) : "";

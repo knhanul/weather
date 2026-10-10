@@ -13,6 +13,7 @@
   <link rel="icon" href="/brand/favicon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
   <link rel="manifest" href="/brand/site.webmanifest" />
+  <script src="/chart-full.js?v=1"></script>
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="누니날씨" />
   <meta property="og:title" content="누니날씨 · nuni weather" />
@@ -189,23 +190,23 @@
     .stats small { font-size:12px; }
     .stats .hi { color:#c2410c; } .stats .lo { color:var(--pri-dark); }
     .chart-box { position:relative; min-height:120px; }
-    #chart svg { display:block; width:100%; height:auto; touch-action:pan-y; user-select:none; }
-    #chart .grid { stroke:var(--line); stroke-width:1; }
-    #chart .grid-day { stroke:#c3d3ea; stroke-width:1; }
-    #chart .ax { fill:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
-    #chart .ax-rain { fill:#5b43d6; }
-    #chart .ax-day { fill:var(--fg); font-weight:600; }
-    #chart .tline { fill:none; stroke:var(--pri); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
-    #chart .tdot { fill:var(--pri); }
-    #chart .rain { fill:#7c5cfa; opacity:.5; }
-    #chart .hv { stroke:var(--fg); stroke-width:1; stroke-dasharray:3 3; opacity:.55; }
-    #chart .hvdot { fill:var(--surface); stroke:var(--pri); stroke-width:2; }
+    .dchart svg { display:block; width:100%; height:auto; touch-action:pan-y; user-select:none; }
+    .dchart .grid { stroke:var(--line); stroke-width:1; }
+    .dchart .grid-day { stroke:#c3d3ea; stroke-width:1; }
+    .dchart .ax { fill:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+    .dchart .ax-rain { fill:#5b43d6; }
+    .dchart .ax-day { fill:var(--fg); font-weight:600; }
+    .dchart .tline { fill:none; stroke:var(--pri); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
+    .dchart .tdot { fill:var(--pri); }
+    .dchart .rain { fill:#7c5cfa; opacity:.5; }
+    .dchart .hv { stroke:var(--fg); stroke-width:1; stroke-dasharray:3 3; opacity:.55; }
+    .dchart .hvdot { fill:var(--surface); stroke:var(--pri); stroke-width:2; }
     .legend { display:flex; flex-wrap:wrap; gap:4px 16px; font-size:12px; color:var(--muted); margin-top:4px; }
     .legend i { display:inline-block; width:14px; height:3px; background:var(--pri); vertical-align:middle; margin-right:5px; border-radius:2px; }
     .legend i.r { height:10px; width:8px; background:#7c5cfa; opacity:.6; }
     .legend i.b { height:10px; background:var(--pri-light); opacity:.3; }
-    #chart .tband { fill:var(--pri-light); opacity:.2; }
-    #chart .tband-l { stroke:var(--pri-light); stroke-width:3; opacity:.4; }
+    .dchart .tband { fill:var(--pri-light); opacity:.2; }
+    .dchart .tband-l { stroke:var(--pri-light); stroke-width:3; opacity:.4; }
     .ch-range input { height:34px; min-width:0; flex:1 1 128px; max-width:170px; }
     .ch-range .tilde { margin:0 -2px; color:var(--muted); }
     .ch-range button { height:34px; padding:0 14px; }
@@ -502,6 +503,7 @@
     .col-count-badge { display:inline-flex; align-items:center; height:26px; padding:0 10px; background:var(--soft); color:var(--pri-dark); font-size:12px; font-weight:700; border-radius:999px; }
     .sm-btn { height:30px; padding:0 10px; font-size:12px; }
   </style>
+  <link rel="stylesheet" href="/chart-full.css?v=1" />
 </head>
 <body>
   <div class="layout">
@@ -572,7 +574,7 @@
             <p class="bad g-err" id="chErr" role="alert" hidden></p>
             <div class="stats" id="chartStats"></div>
             <div class="chart-box">
-              <div id="chart"></div>
+              <div id="chart" class="dchart"></div>
               <div class="tip" id="chartTip"></div>
             </div>
             <div class="legend" id="chartLegend"></div>
@@ -1157,26 +1159,38 @@
       const n = raw / pow;
       return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * pow;
     }
-    function drawChart(force) {
-      const box = $("chart");
+    // 크게 보기(chart-full.js): 같은 그리기 함수를 겹친 화면 크기로 다시 부른다
+    if (window.ChartFull) window.ChartFull.register($("chart"), {
+      hostClass: "dchart",
+      title: () => `${$("chartTitle").textContent}${currentSeries ? ` · ${currentSeries.station_id} ${currentSeries.station_name || ""}` : ""}`,
+      sub: () => `${$("chartRange").textContent} · 단위 °C${currentSeries && (currentSeries.points || []).some((p) => p.precipitation > 0) ? " / mm" : ""}`,
+      legend: () => { const l = $("chartLegend").cloneNode(true); l.removeAttribute("id"); return l; },
+      source: () => "자료: 기상청 ASOS · 시간대 Asia/Seoul(KST)",
+      render: (el, size) => drawChart(true, { box: el, W: size.width, H: size.height, full: true }),
+    });
+    function drawChart(force, opt = {}) {
+      const box = opt.box || $("chart");
+      const main = !opt.box;
       const r = currentSeries;
-      const W = Math.round(box.clientWidth);
+      const W = Math.round(opt.W || box.clientWidth);
       if (!r || !W) return;
-      if (!force && chartGeo && Math.abs(chartGeo.W - W) < 4) return;
-      hideTip();
+      const geo0 = box.__geo;
+      if (!force && geo0 && Math.abs(geo0.W - W) < 4) return;
+      hideTip(box);
       const pts = r.points || [];
       const daily = r.resolution === "day";
       const unit = daily ? 24 * HOUR : HOUR;
       if (!pts.length) {
-        chartGeo = null;
+        box.__geo = null;
+        if (main) chartGeo = null;
         box.innerHTML = r.mode === "range"
           ? `<div class="ch-empty"><p><b>이 기간에는 자료가 없습니다.</b></p><p class="muted">${esc(r.station_id)} ${esc(r.station_name || "")} · ${esc(String(r.range_from).slice(0, 10))} ~ ${esc(String(r.range_to).slice(0, 10))}</p><p>${rangeGapLinks(r)}</p></div>`
           : `<p class="muted ch-none">이 지점·기간에 표시할 관측 자료가 없습니다.</p>`;
-        $("chartLegend").innerHTML = "";
+        if (main) $("chartLegend").innerHTML = "";
         return;
       }
       const narrow = W < 560;
-      const H = narrow ? 240 : 290;
+      const H = opt.H ? Math.round(opt.H) : narrow ? 240 : 290;
       const t0 = wallMs(r.from), t1 = wallMs(r.to);
       const span = Math.max(t1 - t0, unit);
       const times = pts.map((p) => wallMs(p.t));
@@ -1285,39 +1299,43 @@
           ${g}${rainSvg}${band}
           <line class="grid-day" x1="${ml}" x2="${ml + iw}" y1="${mt + ih}" y2="${mt + ih}"/>
           <path class="tline" d="${path}"/>${dots}
-          <line class="hv" id="hvLine" x1="0" x2="0" y1="${mt}" y2="${mt + ih}" visibility="hidden"/>
-          <circle class="hvdot" id="hvDot" r="4" cx="0" cy="0" visibility="hidden"/>
-          <rect x="${ml}" y="${mt}" width="${iw}" height="${ih}" fill="transparent" id="hvHit"/>
-        </svg>`;
-      chartGeo = { W, H, ml, mt, iw, ih, t0, span, times, pts, X, Y, daily };
-      $("chartLegend").innerHTML = daily
+          <line class="hv" x1="0" x2="0" y1="${mt}" y2="${mt + ih}" visibility="hidden"/>
+          <circle class="hvdot" r="4" cx="0" cy="0" visibility="hidden"/>
+          <rect x="${ml}" y="${mt}" width="${iw}" height="${ih}" fill="transparent" data-hit="1"/>
+        </svg>${main ? (window.ChartFull ? window.ChartFull.button() : "") : '<div class="tip"></div>'}`;
+      box.__geo = { W, H, ml, mt, iw, ih, t0, span, times, pts, X, Y, daily };
+      if (main) chartGeo = box.__geo;
+      if (main) $("chartLegend").innerHTML = daily
         ? `<span><i></i>일평균 기온(°C, 왼쪽 축)</span><span><i class="b"></i>일 최고~최저</span>${hasRain ? `<span><i class="r"></i>일 강수 합계(mm, 오른쪽 축)</span>` : ""}<span>기상청 공식 일자료(평균·최고·최저·강수) · 빈 곳 = 공식 일자료 없음(시간자료로 메우지 않음)</span>`
         : `<span><i></i>기온(°C, 왼쪽 축)</span>${hasRain ? `<span><i class="r"></i>강수(mm, 오른쪽 축)</span>` : ""}<span>빈 구간 = 관측 없음/NULL (0으로 채우지 않음)</span>`;
       const svg = box.querySelector("svg");
       let raf = 0, lastEv = null;
-      const onMove = (e) => { lastEv = e; if (!raf) raf = requestAnimationFrame(() => { raf = 0; showTip(lastEv, svg); }); };
+      const onMove = (e) => { lastEv = e; if (!raf) raf = requestAnimationFrame(() => { raf = 0; showTip(lastEv, svg, box); }); };
       svg.addEventListener("pointermove", onMove);
       svg.addEventListener("pointerdown", onMove);
-      svg.addEventListener("pointerleave", hideTip);
+      svg.addEventListener("pointerleave", () => hideTip(box));
     }
-    function showTip(e, svg) {
-      const g = chartGeo;
+    const tipOf = (box) => (box === $("chart") ? $("chartTip") : box.querySelector(".tip"));
+    function showTip(e, svg, box = $("chart")) {
+      const g = box.__geo;
       if (!g || !e) return;
-      const rect = svg.getBoundingClientRect();
-      const scale = g.W / rect.width;
-      const px = (e.clientX - rect.left) * scale;
-      if (px < g.ml - 8 || px > g.ml + g.iw + 8) return hideTip();
+      // 레이아웃 폭 기준(돌린 '크게 보기' 화면에서도 같은 값). 포인터 위치는 ChartFull.frac 이 돌림을 고려해 바꿔 준다
+      const cssW = box.clientWidth || 1;
+      const scale = g.W / cssW;
+      const fr = window.ChartFull ? window.ChartFull.frac(e, box) : (e.clientX - box.getBoundingClientRect().left) / cssW;
+      const px = fr * g.W;
+      if (px < g.ml - 8 || px > g.ml + g.iw + 8) return hideTip(box);
       const ms = g.t0 + ((px - g.ml) / g.iw) * g.span;
       let a = 0, b = g.times.length - 1;
       while (b - a > 1) { const m = (a + b) >> 1; if (g.times[m] < ms) a = m; else b = m; }
       const i = Math.abs(g.times[a] - ms) <= Math.abs(g.times[b] - ms) ? a : b;
       const p = g.pts[i];
       const x = g.X(g.times[i]);
-      const line = svg.querySelector("#hvLine"), dot = svg.querySelector("#hvDot");
+      const line = svg.querySelector("line.hv"), dot = svg.querySelector("circle.hvdot");
       line.setAttribute("x1", x); line.setAttribute("x2", x); line.setAttribute("visibility", "visible");
       if (p.temperature != null) { dot.setAttribute("cx", x); dot.setAttribute("cy", g.Y(p.temperature)); dot.setAttribute("visibility", "visible"); }
       else dot.setAttribute("visibility", "hidden");
-      const tip = $("chartTip");
+      const tip = tipOf(box);
       if (g.daily) {
         const d = new Date(g.times[i]);
         tip.innerHTML = `<b>${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())} (${WD[d.getUTCDay()]})</b> <span class="tip-sub">공식 일자료</span><br>
@@ -1331,17 +1349,17 @@
         <span class="k">습도</span> ${nf(p.humidity, "%")}<br>
         <span class="k">풍속</span> ${nf(p.wind_speed, "m/s")}`;
       tip.style.display = "block";
-      const cssX = x / scale, cssW = rect.width;
+      const cssX = x / scale;
       const tw = tip.offsetWidth;
       let left = cssX + 12;
       if (left + tw > cssW) left = cssX - tw - 12;
       tip.style.left = `${Math.max(0, left)}px`;
       tip.style.top = `${Math.max(0, (g.mt + 4) / scale)}px`;
     }
-    function hideTip() {
-      const tip = $("chartTip"); if (tip) tip.style.display = "none";
-      const svg = $("chart").querySelector("svg");
-      if (svg) { svg.querySelector("#hvLine")?.setAttribute("visibility", "hidden"); svg.querySelector("#hvDot")?.setAttribute("visibility", "hidden"); }
+    function hideTip(box = $("chart")) {
+      const tip = tipOf(box); if (tip) tip.style.display = "none";
+      const svg = box.querySelector("svg");
+      if (svg) { svg.querySelector("line.hv")?.setAttribute("visibility", "hidden"); svg.querySelector("circle.hvdot")?.setAttribute("visibility", "hidden"); }
     }
     $("stSel").addEventListener("click", (e) => { const b = e.target.closest("button[data-st]"); if (b && !b.disabled) selectStation(b.dataset.st); });
     $("periodSel").addEventListener("click", (e) => {
@@ -3010,6 +3028,6 @@
     // 대시보드 자료가 늦거나 실패해도 다른 화면은 그대로 뜨게
     Promise.allSettled([loadMe(), loadDash()]).then(route);
   </script>
-  <script src="/stats.js?v=2"></script>
+  <script src="/stats.js?v=3"></script>
 </body>
 </html>
