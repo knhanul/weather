@@ -105,21 +105,56 @@ async function tx(fn) {
 // ---- 전체 표 집계 캐시 ----
 // NAS(저사양 CPU, 버퍼 풀 128MB)에서 49만 행 전체 집계(개수·coverage·지점 요약)는 수 초 걸린다. 쓰기는 이 앱만 하므로
 // 결과를 기억해 두고, 시간자료·일자료를 저장하면 비운 뒤 뒤에서 다시 계산한다. 밖에서 DB 를 고친 경우를 위해 최대 30분.
-const AGG_TTL_MS = Number(process.env.MYSQL_AGG_CACHE_MS ?? 30 * 60000);
-const aggCache = new Map();
-function cachedAgg(key, fn) {
-  const hit = aggCache.get(key);
-  if (hit && Date.now() - hit.at < AGG_TTL_MS) return hit.p;
-  const p = fn();
-  aggCache.set(key, { at: Date.now(), p });
-  p.catch(() => aggCache.delete(key));
-  return p;
+// 저장 뒤 다시 계산은 모아서 한 번(기본 2분 뒤, MYSQL_AGG_REFRESH_MS). 그동안은 직전 값을 그대로 보여 준다(대량 수집 중 NAS 가 집계만 돌지 않게).
+export function createAggCache({ ttlMs, refreshMs }) {
+  const cache = new Map();
+  let timer = null;
+  let refreshing = false;
+  async function refresh() {
+    timer = null;
+    refreshing = true;
+    try {
+      for (const [key, e] of [...cache]) {
+        try {
+          const p = e.fn();
+          await p;
+          cache.set(key, { at: Date.now(), fn: e.fn, settled: true, p });
+        } catch {
+          cache.delete(key); // 다음 요청 때 다시
+        }
+      }
+    } finally {
+      refreshing = false;
+    }
+  }
+  return {
+    get(key, fn) {
+      const hit = cache.get(key);
+      if (hit && (Date.now() - hit.at < ttlMs() || (hit.settled && (timer || refreshing)))) return hit.p;
+      const entry = { at: Date.now(), fn, settled: false };
+      entry.p = fn();
+      entry.p.then(() => (entry.settled = true), () => cache.get(key) === entry && cache.delete(key));
+      cache.set(key, entry);
+      return entry.p;
+    },
+    invalidate() {
+      const ms = refreshMs();
+      if (ttlMs() <= 0 || ms <= 0) return cache.clear();
+      for (const e of cache.values()) e.at = 0; // 만료 표시. 다시 계산될 때까지 직전 값을 준다
+      if (!timer) {
+        timer = setTimeout(() => refresh().catch(() => {}), ms);
+        timer.unref?.();
+      }
+    },
+    clear: () => cache.clear(),
+  };
 }
-function invalidateAgg() {
-  aggCache.clear();
-  // 다음 화면 요청이 기다리지 않게 바로 다시 계산(실패해도 무시 — 요청 때 다시 시도)
-  if (AGG_TTL_MS > 0) setTimeout(() => warmAggregates().catch(() => {}), 0).unref?.();
-}
+const agg = createAggCache({
+  ttlMs: () => Number(process.env.MYSQL_AGG_CACHE_MS ?? 30 * 60000),
+  refreshMs: () => Number(process.env.MYSQL_AGG_REFRESH_MS ?? 2 * 60000),
+});
+const cachedAgg = (key, fn) => agg.get(key, fn);
+const invalidateAgg = () => agg.invalidate();
 export async function warmAggregates() {
   await Promise.all([countHourly(), countDaily(), coverageHourly(), stationSummariesPg()]);
 }
@@ -183,7 +218,7 @@ export async function init(url) {
   if (applied.length) console.log(`mysql migrations applied: ${applied.join(", ")}`);
   fullFields = await hasFullFieldColumns();
   // 첫 화면이 기다리지 않게 전체 집계를 미리 계산(뒤에서)
-  if (AGG_TTL_MS > 0) warmAggregates().catch((e) => console.error("mysql warm aggregates failed", e?.code || e?.message));
+  if (Number(process.env.MYSQL_AGG_CACHE_MS ?? 1) > 0) warmAggregates().catch((e) => console.error("mysql warm aggregates failed", e?.code || e?.message));
   return true;
 }
 
@@ -320,10 +355,10 @@ export async function upsertHourly(rows) {
   try {
     res = await upsertRows({ table: "observations_hourly", keyCols: ["station_id", "observation_datetime", "provider", "dataset"], update: HOURLY_UPDATE, shapedRows });
   } finally {
-    aggCache.clear();
+    invalidateAgg();
   }
+  // total 은 집계 캐시 값(다시 계산 전이면 직전 값). 매번 전체 COUNT(*) 를 하지 않는다.
   const total = await countHourly();
-  if (AGG_TTL_MS > 0) setTimeout(() => warmAggregates().catch(() => {}), 0).unref?.();
   return { ...res, total };
 }
 

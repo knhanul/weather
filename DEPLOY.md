@@ -428,3 +428,4 @@ sed -i '/^AUTH_PROVIDER=/d' /etc/weather-hub.env && systemctl restart weather-hu
 - 공공데이터포털이 미등록 키에 주는 `HTTP 403` + `OpenAPI_ServiceResponse.cmmMsgHeader.errMsg=SERVICE_KEY_IS_NOT_REGISTERED_ERROR` 를 이제 **FAILED** 로 기록한다(예전: 0건 COMPLETED). 시간·일자료 공통 `kmaResponseError` (kma-fields.mjs).
 - 시간자료 수집 구간을 7일 → 41일(984행, 기상청 호출 1번)로. 같은 기간에 호출 수가 약 1/6.
 - 일자료(AsosDalyInfoService)는 현재 키로 403 — 공공데이터포털에서 "기상청_지상(종관, ASOS) 일자료 조회서비스" 활용신청 필요.
+- MySQL 집계 캐시(개수·coverage·지점 요약): 저장할 때마다 바로 다시 계산하지 않고 모아서 한 번(기본 2분 뒤, `MYSQL_AGG_REFRESH_MS`; 0 이면 예전처럼 바로 비움). 그동안 화면은 직전 값. 시간자료 저장마다 하던 전체 `COUNT(*)` 도 캐시 값으로.

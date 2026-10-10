@@ -128,3 +128,24 @@ test("mergeDailyExport: 공식 일자료가 없는 날은 시간자료로 보충
   ]);
   assert.equal(mergeDailyExport({ stationId: "108", cols: ["observation_date"], officialRows: [], hourlyRows, limit: 1 }).length, 1);
 });
+
+test("createAggCache: 저장 뒤에는 직전 값을 주다가 refreshMs 뒤 한 번만 다시 계산", async () => {
+  const { createAggCache } = await import("../db-mysql.mjs");
+  let n = 0;
+  let calls = 0;
+  const fn = async () => (calls++, n);
+  const c = createAggCache({ ttlMs: () => 60000, refreshMs: () => 40 });
+  assert.equal(await c.get("count", fn), 0);
+  n = 5;
+  for (let i = 0; i < 10; i++) c.invalidate(); // 대량 수집: 여러 번 저장
+  assert.equal(await c.get("count", fn), 0, "다시 계산 전에는 직전 값");
+  assert.equal(calls, 1);
+  await new Promise((r) => setTimeout(r, 120));
+  assert.equal(await c.get("count", fn), 5);
+  assert.equal(calls, 2, "모아서 한 번만");
+  const off = createAggCache({ ttlMs: () => 60000, refreshMs: () => 0 });
+  assert.equal(await off.get("x", fn), 5);
+  n = 7;
+  off.invalidate();
+  assert.equal(await off.get("x", fn), 7, "refreshMs=0 이면 바로 비움");
+});

@@ -12,6 +12,7 @@ if (!/_test$/.test(url.pathname)) {
   console.error("시험용 DB(이름이 _test 로 끝남)에서만 실행합니다");
   process.exit(2);
 }
+process.env.MYSQL_AGG_REFRESH_MS = "0"; // 저장 직후 개수를 바로 확인
 await my.init(process.env.MYSQL_URL);
 const h = my.getHandle();
 const step = (s) => console.log(`ok  ${s}`);
