@@ -333,6 +333,98 @@
       .ch-range { flex:1 1 100%; flex-wrap:nowrap; }
       .ch-range input { flex:1 1 0; width:0; max-width:none; padding:0 6px; }
     }
+    /* 날씨 통계: 탭·질문 카드·통계 화면(stats.js) */
+    .st-tabs { display:flex; gap:4px; overflow-x:auto; scrollbar-width:none; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:5px; box-shadow:var(--shadow-sm); }
+    .st-tabs a { flex:none; padding:8px 14px; border-radius:10px; text-decoration:none; color:var(--fg); font-weight:600; font-size:14px; white-space:nowrap; }
+    .st-tabs a:hover { background:var(--soft); color:var(--pri-dark); }
+    .st-tabs a.on { background:var(--pri); color:#fff; }
+    .st-panel { display:grid; gap:16px; min-width:0; }
+    .st-panel[hidden] { display:none; }
+    .q-cards { display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); margin-top:12px; }
+    a.q-card { display:flex; flex-direction:column; gap:6px; padding:12px 14px; border:1px solid var(--line); border-radius:12px; background:#fbfdff; text-decoration:none; color:var(--fg); transition:border-color .15s, box-shadow .15s; }
+    a.q-card:hover { border-color:var(--pri); box-shadow:var(--shadow-sm); color:var(--fg); }
+    .q-card .q { font-weight:700; font-size:14.5px; }
+    .q-card .v { font-size:20px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--pri-dark); }
+    .q-card .v.up { color:#c2410c; } .q-card .v.down { color:#0369a1; } .q-card .v.na { font-size:13px; font-weight:600; color:var(--muted); }
+    .q-card small { color:var(--muted); font-size:12px; }
+    .q-card .go { margin-top:auto; font-size:12.5px; color:var(--pri); font-weight:600; }
+    .sx-ctl { display:flex; flex-wrap:wrap; gap:10px 16px; align-items:flex-end; }
+    .sx-ctl > div { display:flex; flex-direction:column; gap:4px; min-width:0; }
+    .sx-ctl label { margin:0; }
+    .sx-ctl select, .sx-ctl input { height:36px; }
+    .sx-ctl .seg { display:flex; flex-wrap:wrap; gap:4px; }
+    .sx-inline { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+    .sx-inline .tilde { color:var(--muted); }
+    .sx-q { margin:0; font-size:18px; line-height:1.4; }
+    .sx-q small { display:block; font-size:13px; font-weight:500; color:var(--muted); margin-top:2px; }
+    .sx-key { display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); margin:12px 0 4px; }
+    .sx-key > div { background:#f7faff; border:1px solid var(--line); border-radius:12px; padding:10px 12px; min-width:0; }
+    .sx-key span { display:block; font-size:12px; color:var(--muted); }
+    .sx-key b { display:block; font-size:19px; font-variant-numeric:tabular-nums; margin-top:1px; }
+    .sx-key small { display:block; font-size:12px; color:var(--muted); }
+    .sx-key .up { color:#c2410c; } .sx-key .down { color:#0369a1; }
+    .sx-text { margin:8px 0 0; padding-left:18px; font-size:14px; }
+    .sx-text li + li { margin-top:3px; }
+    .sx-state { padding:22px 8px; text-align:center; color:var(--muted); font-size:14px; }
+    .sx-state.err { color:var(--bad); }
+    .sx-state button { margin-left:8px; height:32px; }
+    .sx-warn { background:var(--warn-bg); color:var(--warn); border-radius:10px; padding:8px 12px; font-size:13px; margin:8px 0 0; }
+    .sx-chart { position:relative; margin-top:10px; }
+    .sx-chart svg { display:block; width:100%; height:auto; touch-action:pan-y; user-select:none; }
+    .sx-chart .grid { stroke:var(--line); stroke-width:1; }
+    .sx-chart .ax { fill:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+    .sx-chart .ax-t { fill:var(--fg); font-size:11px; font-weight:600; }
+    .sx-chart .miss { fill:#e9eef6; }
+    .sx-chart .miss-t { fill:#8a97ad; font-size:10px; }
+    .sx-chart .ref { stroke-width:2; stroke-dasharray:5 4; fill:none; }
+    .sx-chart .hv { stroke:var(--fg); stroke-width:1; stroke-dasharray:3 3; opacity:.5; }
+    .sx-legend { display:flex; flex-wrap:wrap; gap:4px 16px; font-size:12px; color:var(--muted); margin-top:6px; }
+    .sx-legend i { display:inline-block; width:14px; height:4px; border-radius:2px; vertical-align:middle; margin-right:5px; }
+    .sx-legend i.bar { height:10px; width:9px; }
+    .sx-legend i.dash { height:0; border-top:2px dashed currentColor; }
+    .sx-legend i.box { height:10px; width:12px; background:#e9eef6; }
+    .sx-tools { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; justify-content:space-between; margin-top:12px; }
+    .sx-tools a.dl-chip-btn { display:inline-flex; align-items:center; text-decoration:none; }
+    details.sx-table { margin-top:10px; }
+    details.sx-table summary { cursor:pointer; font-size:13.5px; font-weight:600; color:var(--pri-dark); }
+    .sx-table-wrap { overflow:auto; max-height:420px; margin-top:8px; border:1px solid var(--line); border-radius:10px; }
+    .sx-table-wrap th { position:sticky; top:0; white-space:nowrap; }
+    .sx-table-wrap td { white-space:nowrap; }
+    .sx-table-wrap td.num { text-align:right; }
+    .sx-table-wrap tr.dim td { color:var(--muted); }
+    details.sx-rules { font-size:13px; color:var(--muted); }
+    details.sx-rules summary { cursor:pointer; font-weight:600; color:var(--fg); font-size:13.5px; }
+    details.sx-rules ul { margin:6px 0 0; padding-left:18px; }
+    details.sx-rules li + li { margin-top:3px; }
+    .sx-st { display:flex; flex-wrap:wrap; gap:6px; }
+    .sx-st button { height:34px; padding:0 12px; background:var(--soft); color:var(--fg); font-size:13.5px; font-weight:500; border-radius:999px; }
+    .sx-st button.on { background:var(--pri); color:#fff; font-weight:700; }
+    .sx-st button small { opacity:.75; font-size:11.5px; margin-left:3px; }
+    .sx-yrs { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+    .sx-yr { display:inline-flex; align-items:center; gap:4px; height:30px; padding:0 4px 0 10px; border-radius:999px; font-size:13px; font-weight:700; color:#fff; }
+    .sx-yr button { height:22px; width:22px; padding:0; border-radius:50%; background:rgba(255,255,255,.25); font-size:12px; }
+    .sx-bars { display:grid; gap:14px; margin-top:10px; }
+    .sx-bar-h { font-size:13.5px; font-weight:700; margin:0 0 4px; }
+    .sx-bar-h small { font-weight:500; color:var(--muted); margin-left:6px; }
+    .sx-bar-row { display:grid; grid-template-columns:minmax(80px,120px) 1fr minmax(64px,auto) minmax(90px,auto); gap:8px; align-items:center; font-size:13px; font-variant-numeric:tabular-nums; }
+    .sx-bar-row + .sx-bar-row { margin-top:4px; }
+    .sx-bar-track { height:14px; background:#eef3fa; border-radius:4px; overflow:hidden; }
+    .sx-bar-track i { display:block; height:100%; border-radius:4px; }
+    .sx-bar-row .d { color:var(--muted); font-size:12px; }
+    .sx-bar-row .d.up { color:#c2410c; } .sx-bar-row .d.down { color:#0369a1; }
+    .sx-soon ul { margin:8px 0 0; padding-left:18px; font-size:14px; }
+    .sx-soon li + li { margin-top:4px; }
+    .sx-badge { display:inline-block; font-size:11px; font-weight:700; padding:1px 7px; border-radius:999px; background:var(--soft); color:var(--pri-dark); margin-left:6px; vertical-align:2px; }
+    @media (max-width:560px) {
+      .st-tabs a { padding:7px 10px; font-size:13.5px; }
+      .sx-q { font-size:16px; }
+      .sx-key { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .sx-key b { font-size:17px; }
+      .sx-bar-row { grid-template-columns:72px 1fr auto; }
+      .sx-bar-row .d { grid-column:2 / 4; }
+      .sx-ctl > div { flex:1 1 140px; }
+      .sx-ctl select { width:100%; }
+    }
     /* 다운로드 화면 스타일 */
     .dl-quick-ranges { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
     .dl-quick-ranges span { font-size:12px; color:var(--muted); font-weight:600; }
@@ -389,7 +481,7 @@
   <div class="layout">
     <aside>
       <div class="aside-in">
-      <a class="brand" href="#/" aria-label="누니날씨 (nuni weather) 대시보드">
+      <a class="brand" href="#/" aria-label="누니날씨 (nuni weather) 날씨 통계">
         <img class="brand-icon" src="/brand/icon.svg" alt="" width="38" height="38" />
         <span class="brand-text">
           <span class="brand-ko"><img src="/brand/logo-ko.svg" alt="누니" width="45" height="26" /><b>날씨</b></span>
@@ -399,7 +491,7 @@
       <nav>
         <div class="nav-group" role="group" aria-labelledby="navLookup">
           <p class="nav-label" id="navLookup">조회</p>
-          <a href="#/" data-page="dash">대시보드</a>
+          <a href="#/" data-page="dash">날씨 통계</a>
           <a href="#/hourly" data-page="hourly">시간자료</a>
           <a href="#/daily" data-page="daily">일자료</a>
           <a href="#/download" data-page="download">다운로드</a>
@@ -420,8 +512,8 @@
       <header class="ph">
         <div class="ph-main">
           <p class="ph-group" id="phGroup">조회</p>
-          <h1 id="phTitle">대시보드</h1>
-          <p class="ph-desc" id="phDesc">관측지점 상태와 기온·강수 추이</p>
+          <h1 id="phTitle">날씨 통계</h1>
+          <p class="ph-desc" id="phDesc">1990년부터 쌓인 관측 자료로 보는 우리 동네 날씨</p>
         </div>
         <div class="ph-auth" id="phAuth" hidden></div>
         <ul class="ph-chips" id="phChips" aria-label="시스템 상태"></ul>
@@ -429,6 +521,14 @@
       <main>
         <p class="login-note" id="loginNote" role="status" hidden><span id="loginNoteText"></span><button type="button" id="loginNoteClose">닫기</button></p>
         <section class="page" id="dash">
+          <nav class="st-tabs" id="stTabs" aria-label="날씨 통계 메뉴">
+            <a href="#/" data-tab="overview">한눈에 보기</a>
+            <a href="#/stats/yearly" data-tab="yearly">연도별 비교</a>
+            <a href="#/stats/region" data-tab="region">지역별 비교</a>
+            <a href="#/stats/life" data-tab="life">생활 속 날씨</a>
+            <a href="#/stats/records" data-tab="records">날씨 기록</a>
+          </nav>
+          <div class="st-panel" id="tabOverview">
           <p class="muted dash-note" id="dashNote" hidden></p>
           <div class="card">
             <div class="chart-head">
@@ -451,8 +551,17 @@
             </div>
             <div class="legend" id="chartLegend"></div>
           </div>
+          <div class="card q-wrap">
+            <div class="chart-head"><div><h2>질문으로 보는 날씨 통계</h2><p class="muted" id="qCardsNote">선택한 지점의 1990~1999년 평균과 최근 완료된 10개 연도 평균을 비교합니다.</p></div></div>
+            <div class="q-cards" id="qCards"></div>
+          </div>
           <p class="sec-title">시스템 <span id="stRef"></span> · <a class="st-link" href="#/gaps">지점별 미적재 현황 ›</a></p>
           <div class="grid4" id="dashCards"></div>
+          </div>
+          <div class="st-panel" id="tabYearly" hidden></div>
+          <div class="st-panel" id="tabRegion" hidden></div>
+          <div class="st-panel" id="tabLife" hidden></div>
+          <div class="st-panel" id="tabRecords" hidden></div>
         </section>
         <section class="page" id="hourly">
           <div class="card">
@@ -674,7 +783,7 @@
         </section>
         <section class="page" id="stations">
           <div class="card">
-            <p class="muted">버튼을 눌러 사용 여부와 즐겨찾기(대시보드 상태 카드 표시)를 바꿉니다. 사용 중인 지점만 조회·수집 목록에 나옵니다.</p>
+            <p class="muted">버튼을 눌러 사용 여부와 즐겨찾기(날씨 통계 지점 버튼에 표시)를 바꿉니다. 사용 중인 지점만 조회·수집 목록에 나옵니다.</p>
             <div style="overflow:auto"><table><thead><tr><th>지점</th><th>이름</th><th>지역</th><th>사용</th><th>즐겨찾기</th></tr></thead><tbody id="sBody"></tbody></table></div>
           </div>
         </section>
@@ -859,6 +968,7 @@
     function selectStation(id) {
       if (!id || id === dashState.station) return;
       dashState.station = id; syncHash(); renderDashControls(); loadSeries();
+      if (window.Stats) window.Stats.onStation(id);
     }
     function selectPeriod(h) {
       if (h === dashState.hours && !dashCustom() && !dashState.months) return;
@@ -1805,7 +1915,7 @@
     }
     // ---------- 상단 띠: 화면 이름·설명, 상태 칩 ----------
     const PAGE_HEAD = {
-      dash: ["조회", "대시보드", "관측지점 상태와 기온·강수 추이"],
+      dash: ["조회", "날씨 통계", "1990년부터 쌓인 관측 자료로 보는 우리 동네 날씨"],
       hourly: ["조회", "시간자료", "지점·기간별 시간 단위 관측값 조회"],
       daily: ["조회", "일자료", "하루 단위 기온·강수 요약 조회"],
       download: ["조회", "다운로드", "관측 자료를 CSV 파일로 내려받기"],
@@ -1921,30 +2031,30 @@
       let html;
       if (isNuni() && me.misconfigured) {
         html = `${ico}<h2>로그인 설정이 완료되지 않았습니다</h2><p class="muted">로그인 연동 설정이 빠져 있어 ${esc(t)} 화면을 잠갔습니다. 서버 관리자에게 알려 주세요.</p>
-          <div class="lock-actions"><a class="lock-alt" href="#/">대시보드로 가기</a></div>`;
+          <div class="lock-actions"><a class="lock-alt" href="#/">날씨 통계로 가기</a></div>`;
       } else if (isNuni() && !me.loggedIn) {
         html = `${ico}<h2>관리자 로그인이 필요합니다</h2>
           <p class="muted">${esc(t)} 화면은 관리 권한이 있는 카카오 계정으로 로그인해야 쓸 수 있습니다.</p>
-          <p class="muted">대시보드·시간자료·일자료·다운로드는 로그인하지 않아도 이용할 수 있습니다.</p>
-          <div class="lock-actions">${kakaoBtn("lg")}<a class="lock-alt" href="#/">대시보드로 가기</a></div>`;
+          <p class="muted">날씨 통계·시간자료·일자료·다운로드는 로그인하지 않아도 이용할 수 있습니다.</p>
+          <div class="lock-actions">${kakaoBtn("lg")}<a class="lock-alt" href="#/">날씨 통계로 가기</a></div>`;
       } else if (isNuni() && me.role !== "blocked") {
         html = `${ico}<h2>관리 권한이 없습니다</h2>
           <p class="muted">카카오 로그인은 완료되었지만, 이 계정에는 관리 권한이 없어 ${esc(t)} 화면은 쓸 수 없습니다. 조회 화면은 그대로 이용할 수 있습니다.</p>
           <p class="muted">관리자에게 요청하세요. 요청할 때 아래 회원 ID를 알려 주세요.</p><span class="lock-id">회원 ID <b>${esc(me.nuniUserId || "")}</b></span>
-          <div class="lock-actions"><button type="button" class="sec" id="lockRelogin">권한 다시 확인</button><a class="lock-alt" href="#/">대시보드로 가기</a></div>`;
+          <div class="lock-actions"><button type="button" class="sec" id="lockRelogin">권한 다시 확인</button><a class="lock-alt" href="#/">날씨 통계로 가기</a></div>`;
       } else if (!me.loggedIn) {
         html = `${ico}<h2>관리자 로그인이 필요합니다</h2>
           <p class="muted">${esc(t)} 화면은 승인된 카카오 계정으로 로그인한 관리자만 쓸 수 있습니다.</p>
-          <p class="muted">대시보드·시간자료·일자료·다운로드는 로그인하지 않아도 이용할 수 있습니다.</p>
-          <div class="lock-actions">${kakaoBtn("lg")}<a class="lock-alt" href="#/">대시보드로 가기</a></div>`;
+          <p class="muted">날씨 통계·시간자료·일자료·다운로드는 로그인하지 않아도 이용할 수 있습니다.</p>
+          <div class="lock-actions">${kakaoBtn("lg")}<a class="lock-alt" href="#/">날씨 통계로 가기</a></div>`;
       } else if (me.role === "blocked") {
         html = `${ico}<h2>사용이 차단된 계정입니다</h2><p class="muted">${esc(me.nickname || "")}님 계정은 관리 기능을 쓸 수 없습니다. 필요하면 관리자에게 문의하세요.</p>
-          <div class="lock-actions"><a class="lock-alt" href="#/">대시보드로 가기</a></div>`;
+          <div class="lock-actions"><a class="lock-alt" href="#/">날씨 통계로 가기</a></div>`;
       } else {
         html = `${ico}<h2>관리자 승인 대기 중입니다</h2>
           <p class="muted">${esc(me.nickname || "카카오 사용자")}님, 카카오 로그인은 완료되었습니다. 관리자가 승인하면 ${esc(t)} 화면을 쓸 수 있습니다.</p>
           <p class="muted">승인을 요청할 때 아래 회원번호를 알려 주세요.</p><span class="lock-id">카카오 회원번호 <b>${esc(me.kakaoId || "")}</b></span>
-          <div class="lock-actions"><button type="button" class="sec" id="lockRecheck">승인 여부 다시 확인</button><a class="lock-alt" href="#/">대시보드로 가기</a></div>`;
+          <div class="lock-actions"><button type="button" class="sec" id="lockRecheck">승인 여부 다시 확인</button><a class="lock-alt" href="#/">날씨 통계로 가기</a></div>`;
       }
       $("lockCard").innerHTML = html;
       // 권한은 로그인할 때 받아오므로 다시 로그인(통합 로그인 세션이 있으면 카카오 화면 없이 바로 돌아옴)
@@ -2022,7 +2132,8 @@
     }
     function route() {
       const h = location.hash.replace("#", "").split("?")[0] || "/";
-      const map = { "/": "dash", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/users": "users" };
+      const statsTab = { "/": "overview", "/stats/yearly": "yearly", "/stats/region": "region", "/stats/life": "life", "/stats/records": "records" }[h] || (h.startsWith("/stats/") ? "overview" : null);
+      const map = { "/": "dash", "/stats/yearly": "dash", "/stats/region": "dash", "/stats/life": "dash", "/stats/records": "dash", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/users": "users" };
       let name = map[h] || "dash";
       if (name === "users" && !me.authEnabled) name = "dash";
       show(name);
@@ -2047,7 +2158,8 @@
         renderCollectHint();
       }
       if (name === "gaps" && dashCache) routeGaps();
-      if (name === "dash" && dashCache) {
+      if (name === "dash" && window.Stats) window.Stats.route(statsTab || "overview");
+      if (name === "dash" && dashCache && (statsTab || "overview") === "overview") {
         // 주소의 ?station=&hours= 를 반영(직접 입력·뒤로가기)
         const before = dashKey();
         pickDefaultStation();
@@ -2872,5 +2984,6 @@
     // 대시보드 자료가 늦거나 실패해도 다른 화면은 그대로 뜨게
     Promise.allSettled([loadMe(), loadDash()]).then(route);
   </script>
+  <script src="/stats.js?v=1"></script>
 </body>
 </html>
