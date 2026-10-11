@@ -13,6 +13,7 @@ import {
 import { createAuth, authConfigured } from "./auth.mjs";
 import { createPgStore, createMysqlStore, createJsonStore } from "./auth-store.mjs";
 import { handleLayouts, createPgLayoutStore, createMysqlLayoutStore, createJsonLayoutStore } from "./layouts.mjs";
+import { withCoords } from "./station-coords.mjs";
 import { handlePrefs, createPgPrefsStore, createMysqlPrefsStore, createJsonPrefsStore } from "./view-prefs.mjs";
 import { createStatsData } from "./stats-data.mjs";
 import { createStatsApi } from "./stats-api.mjs";
@@ -1169,7 +1170,7 @@ const server = http.createServer(async (req, res) => {
     if (denied) return json(res, denied.body, denied.status);
     if (await auth.handle(req, res, url)) return;
     if (await handleLayouts(req, res, url, { store: layoutStore, ownerOf: (r) => auth.ownerOf(r), allowedKeys: layoutKeys, readBody, json })) return;
-    if (await handlePrefs(req, res, url, { store: prefsStore, layoutStore, ownerOf: (r) => auth.ownerOf(r), presetIds: presetIdsOf, readBody, json })) return;
+    if (await handlePrefs(req, res, url, { store: prefsStore, layoutStore, ownerOf: (r) => auth.ownerOf(r), presetIds: presetIdsOf, readBody, json, knownStation: async (id) => (await stations()).some((x) => String(x.station_id) === id) })) return;
     if (req.method === "GET" && url.pathname === "/api/view") {
       try {
         return json(res, await getViewData(url.searchParams));
@@ -1201,7 +1202,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, { timezone: "Asia/Seoul", station_id: stationId, from, to, data: await deriveDaily(stationId, from, to) });
     }
     if (req.method === "GET" && url.pathname === "/api/stations") {
-      return json(res, { data: await stations() });
+      return json(res, { data: withCoords(await stations()) });
     }
     if (req.method === "POST" && url.pathname === "/api/stations/toggle") {
       const body = await readBody(req);

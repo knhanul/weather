@@ -4,11 +4,13 @@
 import fs from "node:fs";
 
 export const PREFS_PATH = "/api/view-prefs";
-export const isPrefsPath = (p) => p === PREFS_PATH;
+export const STATION_PREF_PATH = "/api/station-pref"; // 기본 관측지점(지점 번호만 — 위치·좌표는 받지도 저장하지도 않음)
+export const isPrefsPath = (p) => p === PREFS_PATH || p === STATION_PREF_PATH;
 export const VIEW_MODES = new Set(["grid", "card"]);
 const KINDS = ["hourly", "daily"];
 
 const rowOut = (r) => ({ view: VIEW_MODES.has(r.view_mode) ? r.view_mode : "grid", layout: r.layout_ref || null, updatedAt: r.updated_at instanceof Date ? r.updated_at.toISOString() : r.updated_at || null });
+const stationOut = (r) => ({ station: String(r.station_id), updatedAt: r.updated_at instanceof Date ? r.updated_at.toISOString() : r.updated_at || null });
 const toPrefs = (rows) => {
   const out = {};
   for (const k of KINDS) out[k] = null;
@@ -30,6 +32,14 @@ export function createPgPrefsStore(pool) {
       );
       return (await this.get(owner))[kind];
     },
+    async getStation(owner) {
+      const r = (await pool.query("SELECT station_id, updated_at FROM station_prefs WHERE owner_id = $1", [owner])).rows[0];
+      return r ? stationOut(r) : null;
+    },
+    async putStation(owner, id) {
+      await pool.query("INSERT INTO station_prefs (owner_id, station_id, updated_at) VALUES ($1, $2, now()) ON CONFLICT (owner_id) DO UPDATE SET station_id = $2, updated_at = now()", [owner, id]);
+      return this.getStation(owner);
+    },
   };
 }
 export function createMysqlPrefsStore(h) {
@@ -44,6 +54,14 @@ export function createMysqlPrefsStore(h) {
         [owner, kind, view ?? "grid", layout ?? null, view ?? null, layout !== undefined ? 1 : 0],
       );
       return (await this.get(owner))[kind];
+    },
+    async getStation(owner) {
+      const r = (await h.read("SELECT station_id, updated_at FROM station_prefs WHERE owner_id = ?", [owner]))[0];
+      return r ? stationOut(r) : null;
+    },
+    async putStation(owner, id) {
+      await h.query("INSERT INTO station_prefs (owner_id, station_id, updated_at) VALUES (?, ?, NOW(6)) ON DUPLICATE KEY UPDATE station_id = VALUES(station_id), updated_at = NOW(6)", [owner, id]);
+      return this.getStation(owner);
     },
   };
 }
@@ -69,12 +87,26 @@ export function createJsonPrefsStore(file) {
       fs.writeFileSync(file, JSON.stringify(all, null, 2));
       return rowOut(r);
     },
+    async getStation(owner) {
+      const r = load().find((x) => x.owner_id === owner && x.kind === "station");
+      return r ? stationOut(r) : null;
+    },
+    async putStation(owner, id) {
+      const all = load();
+      let r = all.find((x) => x.owner_id === owner && x.kind === "station");
+      if (!r) all.push((r = { owner_id: owner, kind: "station" }));
+      r.station_id = id;
+      r.updated_at = new Date().toISOString();
+      fs.writeFileSync(file, JSON.stringify(all, null, 2));
+      return stationOut(r);
+    },
   };
 }
 
 // presetIds(kind) → Set of preset ids; layoutStore.get(owner, id) → 본인 레이아웃 또는 null
-export async function handlePrefs(req, res, url, { store, layoutStore, ownerOf, presetIds, readBody, json }) {
+export async function handlePrefs(req, res, url, { store, layoutStore, ownerOf, presetIds, readBody, json, knownStation }) {
   if (!isPrefsPath(url.pathname)) return false;
+  if (url.pathname === STATION_PREF_PATH) return handleStationPref(req, res, { store, ownerOf, readBody, json, knownStation });
   const owner = await ownerOf(req);
   if (!owner) return json(res, { ok: false, auth: "login", message: "로그인하면 보기 설정이 내 계정에 저장됩니다." }, 401), true;
   if (!store) return json(res, { ok: false, message: "보기 설정 저장소를 쓸 수 없습니다." }, 503), true;
@@ -103,4 +135,17 @@ export async function handlePrefs(req, res, url, { store, layoutStore, ownerOf, 
   }
   if (!("view" in patch) && !("layout" in patch)) return json(res, { ok: false, message: "바꿀 값(view, layout)이 없습니다." }, 400), true;
   return json(res, { ok: true, kind, pref: await store.put(owner, kind, patch) }), true;
+}
+
+// GET → { station: "119" | null }, PUT { station: "119" } (알려진 지점 번호만). 비로그인 401(화면은 localStorage).
+async function handleStationPref(req, res, { store, ownerOf, readBody, json, knownStation }) {
+  const owner = await ownerOf(req);
+  if (!owner) return json(res, { ok: false, auth: "login", message: "로그인하면 기본 관측지점이 내 계정에 저장됩니다." }, 401), true;
+  if (!store || !store.getStation) return json(res, { ok: false, message: "설정 저장소를 쓸 수 없습니다." }, 503), true;
+  if (req.method === "GET") return json(res, { ok: true, pref: await store.getStation(owner) }), true;
+  if (req.method !== "PUT" && req.method !== "POST") return json(res, { ok: false, message: "허용되지 않는 요청입니다." }, 405), true;
+  const body = await readBody(req);
+  const id = String(body.station ?? "");
+  if (!/^\d{1,6}$/.test(id) || !(await knownStation(id))) return json(res, { ok: false, message: "알 수 없는 관측지점입니다." }, 400), true;
+  return json(res, { ok: true, pref: await store.putStation(owner, id) }), true;
 }

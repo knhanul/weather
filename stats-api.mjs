@@ -7,6 +7,9 @@ import {
   commuteShare, tropicalNights, LIFE_RULES, posToMd, isLeap,
 } from "./stats-engine.mjs";
 
+// 지금 달(Asia/Seoul) — now 를 넘기면 그 시각 기준(테스트용)
+export const seoulMonth = (now = new Date()) => +new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", month: "2-digit" }).format(now);
+
 const STATUS_KO = { complete: "온전", partial: "자료 부족", none: "자료 없음", ongoing: "진행 중", future: "아직 없음", nodate: "그 해엔 없는 날짜" };
 const SOURCE = "기상청 ASOS 공식 일자료";
 const ymdRe = /^\d{4}-\d{2}-\d{2}$/;
@@ -190,7 +193,7 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
   // 첫 화면 질문 카드: 질문 → 핵심 결과(1990년대 대비 변화) → 연결할 화면
   const CARDS = [
     { id: "warmer", q: "예전보다 더워졌을까?", period: "year", metric: "avg_temp" },
-    { id: "may", q: "우리 동네 5월은 얼마나 더워졌을까?", period: "month:5", metric: "avg_temp" },
+    { id: "month", q: "우리 동네 {m}월은 얼마나 더워졌을까?", period: "month:{m}", metric: "avg_temp" }, // {m} = 지금 달(Asia/Seoul)
     { id: "heat", q: "여름 폭염일은 늘었을까?", period: "season:summer", metric: "heatwave_days" },
     { id: "winter", q: "겨울이 덜 추워졌을까?", period: "season:winter", metric: "frost_days" },
     { id: "rainy", q: "비가 더 자주 올까?", period: "year", metric: "rain_days" },
@@ -217,7 +220,9 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
     const asOf = asOfFor([store]);
     if (!asOf || !store.n) throw new StatsError("이 지점에는 공식 일자료가 없습니다", 404);
     const asOfYear = +asOf.slice(0, 4);
-    const cards = (url.searchParams.get("set") === "life" ? LIFE_CARDS : CARDS).map((c) => {
+    const m = seoulMonth();
+    const cards = (url.searchParams.get("set") === "life" ? LIFE_CARDS : CARDS).map((c0) => {
+      const c = c0.period.includes("{m}") ? { ...c0, q: c0.q.replace("{m}", String(m)), period: c0.period.replace("{m}", String(m)) } : c0;
       const p = parsePeriod(c.period);
       const m = getMetric(c.metric);
       const d = decadeDelta(m, yearRows(store, m, p, BASELINE.from, asOfYear, asOf));
