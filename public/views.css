@@ -49,3 +49,8 @@
 .dl-login p { margin: 0; flex: 1 1 260px; }
 #download.dl-readonly .dl-field-label { cursor: default; opacity: .8; }
 #download.dl-readonly .dl-order-chip { cursor: default; }
+@media (max-width: 560px) {
+  #xHourlyDates, #xDailyDates { width: 100%; }
+  #xHourlyDates > div, #xDailyDates > div { flex: 1 1 100%; min-width: 0; }
+  #xHourlyDates input, #xDailyDates input { width: 100%; min-width: 0; box-sizing: border-box; }
+}

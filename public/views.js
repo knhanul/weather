@@ -181,10 +181,13 @@
     const x = (NW().stations() || []).find((s) => String(s.station_id) === String(id));
     return x ? x.station_name : "";
   };
+  let unitOf = () => "";
+  const shownUnit = (m) => (m.unit && m.unit !== "hhmi" && m.key !== "source_kind" ? m.unit : "");
   function fmtVal(key, v) {
     if (v === null || v === undefined || v === "") return null;
     if (key === "source_kind") return v === "OFFICIAL" ? "공식" : v === "DERIVED" ? "시간자료 집계" : String(v);
     if (key === "observation_datetime") return String(v).slice(0, 16);
+    if (unitOf(key) === "hhmi" && /^\d{1,4}$/.test(String(v))) { const t = String(v).padStart(4, "0"); return `${t.slice(0, 2)}:${t.slice(2)}`; } // 기상청 hhmi(시분) → HH:MM
     return String(v);
   }
   const dayLabel = (d) => {
@@ -213,9 +216,10 @@
       return;
     }
     const meta = (k) => c.meta.get(k) || { key: k, label: k, unit: "" };
+    unitOf = (k) => meta(k).unit || "";
     const dash = '<span class="vw-null" title="값 없음(NULL)">—</span>';
     if (s.view === "grid") {
-      const head = keys.map((k) => { const m = meta(k); return `<th scope="col"${isNum(m) ? ' class="n"' : ""}>${esc(m.label)}${m.unit ? ` <small>${esc(m.unit)}</small>` : ""}</th>`; }).join("");
+      const head = keys.map((k) => { const m = meta(k); return `<th scope="col"${isNum(m) ? ' class="n"' : ""}>${esc(m.label)}${shownUnit(m) ? ` <small>${esc(shownUnit(m))}</small>` : ""}</th>`; }).join("");
       const body = d.rows.map((r) => `<tr${r.source_kind === "DERIVED" ? ' class="vw-derived"' : ""}>${keys.map((k) => { const v = fmtVal(k, r[k]); return `<td${isNum(meta(k)) ? ' class="n"' : ""}>${v == null ? dash : esc(v)}</td>`; }).join("")}</tr>`).join("");
       out.innerHTML = `<div class="vw-grid-wrap"><table class="vw-grid"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
       return;
@@ -229,7 +233,7 @@
       return `<li class="vw-card"><div class="vw-card-h"><b>${esc(t)}</b><span class="vw-st">${esc(sid)} ${esc(name)}</span>${tag}</div><dl>${fieldKeys.map((k) => {
         const m = meta(k);
         const v = fmtVal(k, r[k]);
-        return `<div><dt>${esc(m.label)}</dt><dd>${v == null ? dash : `${esc(v)}${m.unit && k !== "source_kind" ? `<small>${esc(m.unit)}</small>` : ""}`}</dd></div>`;
+        return `<div><dt>${esc(m.label)}</dt><dd>${v == null ? dash : `${esc(v)}${shownUnit(m) ? `<small>${esc(shownUnit(m))}</small>` : ""}`}</dd></div>`;
       }).join("")}</dl></li>`;
     }).join("")}</ul>`;
   }

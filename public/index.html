@@ -504,7 +504,7 @@
     .sm-btn { height:30px; padding:0 10px; font-size:12px; }
   </style>
   <link rel="stylesheet" href="/chart-full.css?v=3" />
-  <link rel="stylesheet" href="/views.css?v=1" />
+  <link rel="stylesheet" href="/views.css?v=2" />
 </head>
 <body>
   <div class="layout">
@@ -2322,12 +2322,12 @@
       const msg = $("xLayoutMsg");
       if (msg && (note || mode === "readonly")) {
         msg.style.color = "var(--muted)";
-        msg.textContent = note || "로그인하면 자주 쓰는 컬럼 구성을 내 계정에 저장하고 어느 기기에서나 불러올 수 있습니다.";
+        msg.textContent = note || ""; // 비로그인 안내는 아래 로그인 상자에
       }
     }
     function userDefaultLayoutId(kind) {
       const l = Object.values(dlState.layouts).find((x) => x && x.kind === kind && x.isDefault);
-      return l ? "custom:" + l.id : "preset:default";
+      return l ? "custom:" + l.id : "preset:preset_" + kind + "_default";
     }
 
     async function initDownload() {
@@ -2440,17 +2440,16 @@
       const cat = getCatalogForCurrentKind();
       let cols = [];
 
+      if (layoutId === "default" || layoutId === "preset:default") layoutId = "preset:preset_" + dlState.kind + "_default"; // 목록에 있는 실제 프리셋 id 로(선택 상자가 비어 보이지 않게)
+      dlState.currentLayoutId = layoutId;
       if (layoutId.startsWith("preset:")) {
         const pid = layoutId.slice(7);
         cols = cat.presets?.[pid]?.columns || cat.defaultColumns;
       } else if (layoutId.startsWith("custom:")) {
         const cid = layoutId.slice(7);
         if (dlState.layouts[cid]) dlState.baseCustomId = cid;
-        else dlState.currentLayoutId = "preset:default";
+        else dlState.currentLayoutId = "preset:preset_" + dlState.kind + "_default";
         cols = dlState.layouts[cid]?.columns || cat.defaultColumns;
-      } else if (layoutId === "default" || layoutId === "preset:default") {
-        cols = cat.defaultColumns;
-        dlState.currentLayoutId = "preset:default";
       }
 
       const validKeys = new Set(cat.catalog.map((f) => f.key));
@@ -3062,7 +3061,7 @@
     // 대시보드 자료가 늦거나 실패해도 다른 화면은 그대로 뜨게
     Promise.allSettled([loadMe(), loadDash()]).then(route);
   </script>
-  <script src="/views.js?v=1"></script>
+  <script src="/views.js?v=2"></script>
   <script src="/stats.js?v=7"></script>
 </body>
 </html>
