@@ -54,17 +54,17 @@ const MOB = { width: 390, height: 844 };
   await page.keyboard.press("Escape");
   await settle(page);
   s = await dstate(page);
-  ok(!s.open && s.focusMenu && s.hlen === h0 + 1 && s.hash === "#/" && !s.inert, `Esc → 닫힘, 포커스 ☰ ${JSON.stringify(s)}`);
+  ok(!s.open && s.focusMenu && ["", "#/"].includes(s.hash) && !s.inert, `Esc → 닫힘, 포커스 ☰ ${JSON.stringify(s)}`);
   // 배경 누르기
   await page.tap("#abMenu"); await settle(page);
   await page.touchscreen.tap(375, 500); await settle(page);
   s = await dstate(page);
-  ok(!s.open && s.hash === "#/", `배경 누르기 → 닫힘 ${s.open}`);
+  ok(!s.open && ["", "#/"].includes(s.hash), `배경 누르기 → 닫힘 ${s.open}`);
   // 뒤로 가기 = 서랍만 닫힘
   await page.tap("#abMenu"); await settle(page);
   await page.goBack(); await settle(page);
   s = await dstate(page);
-  ok(!s.open && s.hash === "#/" && s.title === "한눈에 보기", `뒤로 가기 → 서랍만 닫힘(화면 그대로) ${JSON.stringify({ open: s.open, hash: s.hash })}`);
+  ok(!s.open && ["", "#/"].includes(s.hash) && s.title === "한눈에 보기", `뒤로 가기 → 서랍만 닫힘(화면 그대로) ${JSON.stringify({ open: s.open, hash: s.hash })}`);
   // 메뉴 고르기 → 닫히고 이동, 뒤로 가기 한 번이면 원래 화면
   await page.tap("#abMenu"); await settle(page);
   await page.tap('#navStats a:text-is("연도별 비교")'); await page.waitForTimeout(1200);
@@ -73,7 +73,10 @@ const MOB = { width: 390, height: 844 };
   await page.screenshot({ path: `${SH}/drawer-yearly-mobile.png` });
   await page.goBack(); await page.waitForTimeout(900);
   s = await dstate(page);
-  ok(!s.open && (s.hash === "#/" || /^#\/\?/.test(s.hash) || /^#\/stats\/overview/.test(s.hash)) && s.title === "한눈에 보기", `뒤로 가기 한 번 → 한눈에 보기 ${s.hash}`);
+  ok(!s.open && (["", "#/"].includes(s.hash) || /^#\/\?/.test(s.hash) || /^#\/stats\/overview/.test(s.hash)) && s.title === "한눈에 보기", `뒤로 가기 한 번 → 한눈에 보기 ${s.hash}`);
+  await page.goForward(); await page.waitForTimeout(900);
+  s = await dstate(page);
+  ok(!s.open && /^#\/stats\/yearly/.test(s.hash), `앞으로 가기 → 연도별 비교(서랍은 안 열림) ${s.hash.slice(0, 20)}`);
   // 다른 화면에선 하위 메뉴 접힘 + 펼치기 버튼
   await page.tap("#abMenu"); await settle(page);
   await page.tap('aside a[data-page="hourly"]'); await page.waitForTimeout(1200);

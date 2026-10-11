@@ -44,3 +44,9 @@
 - 한눈에 보기에서 시스템 카드(자료 건수·최근 수집·저장소)·미적재 링크 제거 → 수집이력(관리) 화면 위로 옮김. 머리 상태 칩: 조회 화면은 '공식 최신'만, 관리 화면은 전과 같이 전부.
 - 모바일: 조회 줄은 줄바꿈(가로 넘침 없음), 날씨 통계 화면일 때만 하위 메뉴 줄 표시.
 - 검증: scripts/e2e/nav.mjs ALL PASS(스크린샷 /workspace/shots/nav-*.png), views·dl·chartfull e2e 재실행 ALL PASS, 회귀 해시 비교.
+
+## 2026-10-11 · 좁은 화면·설치된 앱: 앱 막대 + 서랍 메뉴 (3d6e511)
+- ≤800px(기존 기준): 위쪽 앱 막대(☰ · 로고 · 현재 화면 제목, 52px + 안전 영역). 늘 보이던 메뉴 줄 제거. ☰ → 왼쪽 서랍(기존 aside 그대로): 날씨 통계(접고 펼치기, 통계 화면에서 열면 펼침)·질문으로 보는 날씨·시간별/일별 날씨·보기 설정, 관리 메뉴는 들어갈 수 있을 때만, 로그인/로그아웃(머리 #phAuth 를 비춤).
+- 닫기: 메뉴 고르기·배경·✕·Esc·뒤로 가기(열 때 history 한 칸, 고르면 그 칸을 되돌린 뒤 이동 → 뒤로 가기 한 번이면 앞 화면). role=dialog·aria-modal·aria-expanded, 본문 inert, Tab 가두기, 닫으면 ☰ 로 포커스.
+- 페이지 머리: 제목은 앱 막대로(h1 은 화면 읽기용으로 남김), 로그인은 서랍으로. manifest: id "/", start_url "/#/stats/overview", standalone, theme #026ef8. viewport-fit=cover + safe-area 여백. 넓은 화면은 픽셀 단위로 같음.
+- 검증: scripts/e2e/drawer.mjs ALL PASS (스크린샷 /workspace/shots/drawer-*.png), nav·views·dl·chartfull 재실행 ALL PASS.
