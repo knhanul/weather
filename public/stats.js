@@ -13,8 +13,10 @@
   const ymdDot = (ymd) => (ymd ? `${ymd.slice(0, 4)}.${+ymd.slice(5, 7)}.${+ymd.slice(8, 10)}` : "");
   // 1일 결측(값은 비교에 넣음, 빠진 날은 채우지 않음): '1일 결측(10/12)'
   const MISS = (x, unit = "일") => (x && x.status === "complete" && x.missing ? `${x.missing}${unit} 결측${x.missingDates?.length ? `(${x.missingDates.map(md).join(", ")})` : ""}` : "");
+  // 결측 1일 안내는 아래 파란 띠(missWarn)로 따로 보여 주므로 요약 문장 목록에서는 뺀다(CSV 머리에는 남음)
+  const txtLines = (list) => (list || []).filter((t) => !/결측을 포함해 계산한 연도/.test(t)).map((t) => `<li>${E(t)}</li>`).join("");
   const missTip = (x, unit = "일") => (MISS(x, unit) ? ` <span class="sx-miss">${E(MISS(x, unit))} · 나머지 ${unit === "밤" ? "밤" : "날"}로 계산</span>` : "");
-  const missWarn = (list, unit = "일") => (list && list.length ? `<p class="sx-warn sx-warn-miss">${E(`${unit === "밤" ? "1밤" : "1일"} 결측을 포함해 계산한 연도: ${list.slice(0, 8).map((x) => `${x.year}년(${x.dates.map(md).join(", ")} 빠짐 · ${x.obs}/${x.days}${unit})`).join(", ")}${list.length > 8 ? ` 외 ${list.length - 8}개` : ""} — 빠진 ${unit === "밤" ? "밤" : "날"}은 채우지 않고 나머지로만 집계`)}</p>` : "");
+  const missWarn = (list, unit = "일", extra = "") => (list && list.length ? `<p class="sx-warn sx-warn-miss">${E(`${unit === "밤" ? "1밤" : "1일"} 결측을 포함해 계산한 연도: ${list.slice(0, 8).map((x) => `${x.year}년(${x.dates.map(md).join(", ")} 빠짐 · ${x.obs}/${x.days}${unit})`).join(", ")}${list.length > 8 ? ` 외 ${list.length - 8}개` : ""} — 빠진 ${unit === "밤" ? "밤" : "날"}은 채우지 않고 나머지로만 집계${extra ? `. ${extra}` : ""}`)}</p>` : "");
   const STATUS = { complete: "온전", partial: "자료 부족", none: "자료 없음", ongoing: "진행 중", future: "아직 없음", nodate: "그 해엔 없는 날짜" };
   const PERIOD_KINDS = [["year", "연 전체"], ["month", "월 전체"], ["week", "월 안의 날짜 구간"], ["season", "계절"], ["range", "직접 지정"]];
   const SEASON_IDS = ["spring", "summer", "autumn", "winter"];
@@ -604,7 +606,7 @@
     out.innerHTML = `
       <h2 class="sx-q">${E(q)}<small>${E(r.fromYear)}~${E(r.toYear)}년 · 해마다 같은 날짜 구간(${E(r.period.label)})을 집계 · ${E(m.def)}</small></h2>
       <div class="sx-key">${key.join("")}</div>
-      <ul class="sx-text">${r.text.map((t) => `<li>${E(t)}</li>`).join("")}</ul>
+      <ul class="sx-text">${txtLines(r.text)}</ul>
       ${warn.map((w) => `<p class="sx-warn">${E(w)}</p>`).join("")}${missHtml}
       ${ok ? `<div class="sx-chart" id="yxChart"></div>${legendHtml([
         { label: `${m.label}(${m.unit}) · ${m.chart === "line" ? "선" : "막대"}`, color: COLORS[0], cls: m.chart === "bar" ? "bar" : "" },
@@ -1108,12 +1110,12 @@
       `<div><span>첫 30℃ 이상 날(평균)</span><b class="${fd.available && fd.delta < 0 ? "up" : ""}">${E(shiftTxt(fd))}</b><small>${fd.available ? `${fd.baseline.from}~${fd.baseline.to}년 ${posToMdC(fd.baseline.mean)} → ${fd.recent.from}~${fd.recent.to}년 ${posToMdC(fd.recent.mean)}` : E(fd.reason || "")}</small></div>`,
       `<div><span>마지막 30℃ 이상 날(평균)</span><b>${E(shiftTxt(r.lastDelta))}</b><small>${r.lastDelta.available ? `${posToMdC(r.lastDelta.baseline.mean)} → ${posToMdC(r.lastDelta.recent.mean)}` : E(r.lastDelta.reason || "")}</small></div>`,
       `<div><span>30℃ 이상인 날 수(평균)</span><b class="${r.countDelta.available && r.countDelta.delta > 0 ? "up" : ""}">${r.countDelta.available ? signedPlain(r.countDelta.delta, "일") : "비교 안 함"}</b><small>${r.countDelta.available ? `${num(r.countDelta.baseline.mean, 1)}일 → ${num(r.countDelta.recent.mean, 1)}일` : E(r.countDelta.reason || "")}</small></div>`,
-      s.earliest ? `<div><span>가장 일찍 온 해</span><b>${s.earliest.year}년 ${md(s.earliest.first)}</b><small>온전한 ${s.completeYears}개 연도 중</small></div>` : "",
+      s.earliest ? `<div><span>가장 일찍 온 해</span><b>${s.earliest.year}년 ${md(s.earliest.first)}</b><small>비교한 ${s.completeYears}개 연도 중${MISS(s.earliest) ? ` · ${E(MISS(s.earliest))}` : ""}</small></div>` : "",
       r.ongoing && r.ongoing.first ? `<div><span>올해(${r.ongoing.year}년, 진행 중)</span><b>${md(r.ongoing.first)}</b><small>${md(r.ongoing.until)}까지 ${r.ongoing.countSoFar}일</small></div>` : "",
     ].join("");
     const has = rows.some((x) => ok(x) && x.first);
     out.innerHTML = `<h2 class="sx-q">${E(stName(state.station))}, 더위가 더 일찍 찾아올까?<small>매년 처음·마지막으로 일최고기온 30℃ 이상이었던 날(서비스 기준 — 여름 시작·폭염특보 기준 아님) · 공식 일자료</small></h2>
-      <div class="sx-key">${key}</div><ul class="sx-text">${r.text.map((t) => `<li>${E(t)}</li>`).join("")}</ul>${incWarn(s.incomplete)}${missWarn(s.missing1)}
+      <div class="sx-key">${key}</div><ul class="sx-text">${txtLines(r.text)}</ul>${incWarn(s.incomplete)}${missWarn(s.missing1, "일", "빠진 날이 30℃ 이상이었는지는 알 수 없어 일수·첫날·마지막 날은 남은 날 기준")}
       ${s.noEventYears.length ? `<p class="sx-warn">30℃ 이상인 날이 없었던 해(날짜 평균에서 뺌): ${E(s.noEventYears.join(", "))}</p>` : ""}
       ${has ? `<div class="sx-chart" id="lxChart"></div>${legendHtml([{ label: "첫 30℃ 이상 날", color: COLORS[1] }, { label: "마지막 30℃ 이상 날", color: COLORS[0] }, { label: "자료 부족·진행 중", cls: "box" }])}<div class="sx-chart" id="lxChart2"></div>${legendHtml([{ label: "30℃ 이상인 날 수(일) · 막대", color: "#c2410c", cls: "bar" }])}` : stateHtml("표시할 연도가 없습니다.")}
       ${csvLink(url)}${tableHtml(r.table, (row, i) => rows[i].status !== "complete")}${rulesList(r.rules, DAILY_RULES())}`;
@@ -1148,7 +1150,7 @@
         ${r.summary.longest ? `<div><span>연도별 가장 긴 해</span><b>${r.summary.longest.len}일</b><small>${r.summary.longest.year}년 (${md(r.summary.longest.runStart)}~${md(r.summary.longest.runEnd)})</small></div>` : ""}
         <div><span>해마다 가장 긴 기간(평균) · 1990년대 대비</span><b>${d.available ? signedPlain(d.delta, "일") : "비교 안 함"}</b><small>${d.available ? `${num(d.baseline.mean, 1)}일 → ${num(d.recent.mean, 1)}일 (${d.recent.from}~${d.recent.to})` : E(d.reason || "")}</small></div></div>
       <div class="sx-rec"><div><h3>보유 기간 최장 기록 10위<small>구간·연도 경계와 상관없이 셈</small></h3><ol>${top.map((t) => `<li><span class="r">${t.rank}위</span><span>${ymdDot(t.start)}~${ymdDot(t.end)}${t.endReason === "missing" ? " <small class=\"muted\">(다음 날 자료 없음)</small>" : t.endReason === "range" ? ' <small class="muted">(진행 중)</small>' : ""}</span><b>${t.len}일</b></li>`).join("")}</ol></div></div>
-      ${incWarn(r.summary.incomplete)}${missWarn(r.summary.missing1)}
+      ${incWarn(r.summary.incomplete)}${missWarn(r.summary.missing1, "일", "연속 일수는 빠진 날에서 끊어 셈")}
       <div class="sx-chart" id="lxChart"></div>${legendHtml([{ label: `해마다 가장 긴 ${r.kindLabel}(일) · ${r.period.label}`, color: wet ? COLORS[0] : "#ca8a04", cls: "bar" }, { label: "자료 부족·진행 중(값 없음)", cls: "box" }])}
       ${csvLink(url)}${tableHtml(r.table, (row, i) => rows[i].status !== "complete")}${rulesList(r.rules, DAILY_RULES())}`;
     chart($id("lxChart"), { labels, type: "bar", unit: "일", shade: yrShade(rows), series: [{ name: r.kindLabel, color: wet ? COLORS[0] : "#ca8a04", values: rows.map((x) => (ok(x) ? x.len : null)) }], tip: (i) => { const x = rows[i]; return `<b>${x.year}년</b><br>${ok(x) ? `가장 긴 ${E(r.kindLabel)} <b>${x.len}일</b>${x.runStart ? `<br>${md(x.runStart)}~${md(x.runEnd)}` : ""}${missTip(x)}` : E(STATUS[x.status] || "")}<br><span class="tip-sub">관측 ${x.obs ?? 0}/${x.days ?? 0}일 · ${SOURCE}</span>`; }, xLabel: yrLabel(labels), aria: q });
@@ -1161,7 +1163,7 @@
       <div class="sx-key"><div><span>주말(토·일)</span><b>${pct(r.weekend.share)}</b><small>${num(r.weekend.valid, 0)}일 중 ${num(r.weekend.hit, 0)}일</small></div>
         <div><span>평일(월~금)</span><b>${pct(r.weekday.share)}</b><small>${num(r.weekday.valid, 0)}일 중 ${num(r.weekday.hit, 0)}일</small></div>
         <div><span>차이(주말 − 평일)</span><b>${r.diff == null ? "—" : signedPlain(r.diff, "%p")}</b><small>자료 없는 날 ${num(r.weekday.missing + r.weekend.missing, 0)}일은 분모에서 뺌</small></div></div>
-      <ul class="sx-text">${r.text.map((t) => `<li>${E(t)}</li>`).join("")}</ul>
+      <ul class="sx-text">${txtLines(r.text)}</ul>
       <div class="sx-chart" id="lxChart"></div>${legendHtml([{ label: "요일별 강수일 비율(%) · 막대", color: COLORS[0], cls: "bar" }])}
       ${csvLink(url)}${tableHtml(r.table)}${rulesList(r.rules, DAILY_RULES())}`;
     chart($id("lxChart"), { labels: dow.map((d) => `${d.label}요일`), type: "bar", unit: "%", series: [{ name: "비율", color: COLORS[0], values: dow.map((d) => d.share) }], tip: (i) => `<b>${dow[i].label}요일</b><br>강수일 비율 <b>${pct(dow[i].share)}</b><br><span class="tip-sub">유효 관측 ${num(dow[i].valid, 0)}일 중 ${num(dow[i].hit, 0)}일 · ${E(r.period.label)} ${r.fromYear}~${r.toYear} · ${SOURCE}</span>`, aria: "요일별 강수일 비율" });
@@ -1178,7 +1180,7 @@
         ${sm.hottest ? `<div><span>가장 더웠던 해</span><b>${sm.hottest.year}년 ${num(sm.hottest.max, 1)}℃</b><small>최고기온</small></div>` : ""}
         ${sm.coldest ? `<div><span>가장 추웠던 해</span><b>${sm.coldest.year}년 ${num(sm.coldest.min, 1)}℃</b><small>최저기온</small></div>` : ""}
         ${sm.wettest ? `<div><span>비가 가장 많았던 해</span><b>${sm.wettest.year}년 ${num(sm.wettest.rain, 1)}mm</b><small>일강수량</small></div>` : ""}</div>
-      <ul class="sx-text">${r.text.map((t) => `<li>${E(t)}</li>`).join("")}</ul>
+      <ul class="sx-text">${txtLines(r.text)}</ul>
       ${rows.some(okR) ? `<div class="sx-chart" id="${prefix}Chart"></div>${legendHtml([{ label: "최고기온(℃)", color: "#ea580c" }, { label: "최저기온(℃)", color: COLORS[0] }])}<div class="sx-chart" id="${prefix}Chart2"></div>${legendHtml([{ label: "일강수량(mm) · 막대", color: "#0891b2", cls: "bar" }])}` : stateHtml("이 날짜의 자료가 없습니다.")}
       ${csvLink(url)}${tableHtml(r.table, (row) => row.status !== "자료 있음" && !String(row.status).startsWith("자료 있음"))}${rulesList(r.rules, DAILY_RULES())}`;
     if (!rows.some(okR)) return;
@@ -1193,7 +1195,7 @@
     out.innerHTML = `<h2 class="sx-q">${E(stName(state.station))}, 산책·러닝하기 좋은 시기는? <span class="sx-badge">시간자료 집계</span><small>내가 정한 조건: ${E(r.condLabel)} — 공식 건강·안전 기준이 아닙니다 · ${r.fromYear}~${r.toYear}년 · 자료 ${E(r.asOf || "")}까지</small></h2>
       <div class="sx-key">${r.best ? `<div><span>조건을 가장 자주 만족한 달</span><b>${r.best.month}월 ${pct(r.best.share)}</b><small>판정 ${num(r.best.valid, 0)}시각 중 ${num(r.best.ok, 0)}시각</small></div><div><span>가장 드문 달</span><b>${r.worst.month}월 ${pct(r.worst.share)}</b><small>판정 ${num(r.worst.valid, 0)}시각</small></div>` : ""}
         <div><span>전체</span><b>${pct(r.total.share)}</b><small>판정 ${num(r.total.valid, 0)} / 전체 ${num(r.total.slots, 0)}시각</small></div></div>
-      <ul class="sx-text">${r.text.map((t) => `<li>${E(t)}</li>`).join("")}</ul>
+      <ul class="sx-text">${txtLines(r.text)}</ul>
       ${r.total.valid ? `<div class="sx-chart" id="lxChart"></div>${legendHtml([{ label: "조건 만족 비율(%) · 막대", color: "#16a34a", cls: "bar" }])}` : stateHtml("판정할 수 있는 시각이 없습니다.")}
       ${hasEra ? `<h3 style="margin:16px 0 0;font-size:14.5px">예전과 비교 — ${r.eras.base.from}~${r.eras.base.to}년 vs ${r.eras.recent.from}~${r.eras.recent.to}년</h3><div class="sx-chart" id="lxChart2"></div>${legendHtml([{ label: `${r.eras.base.from}~${r.eras.base.to}년`, color: "#94a3b8", cls: "bar" }, { label: `${r.eras.recent.from}~${r.eras.recent.to}년`, color: "#16a34a", cls: "bar" }])}` : ""}
       ${csvLink(url)}${tableHtml(r.table)}${rulesList(r.rules, [HOURLY_NOTE])}`;
@@ -1210,7 +1212,7 @@
       <div class="sx-key"><div><span>출근 시간 강수 관측 비율</span><b>${pct(w.am.total.hShare)}</b><small>판정 ${num(w.am.total.hValid, 0)}시각 · 강수 관측 날 ${pct(w.am.total.dShare)}</small></div>
         <div><span>퇴근 시간 강수 관측 비율</span><b>${pct(w.pm.total.hShare)}</b><small>판정 ${num(w.pm.total.hValid, 0)}시각 · 강수 관측 날 ${pct(w.pm.total.dShare)}</small></div>
         <div><span>하루 전체(비교 기준)</span><b>${pct(w.all.total.hShare)}</b><small>같은 날들의 모든 정시</small></div></div>
-      <ul class="sx-text">${r.text.map((t) => `<li>${E(t)}</li>`).join("")}</ul>
+      <ul class="sx-text">${txtLines(r.text)}</ul>
       ${w.am.total.hValid ? `<div class="sx-chart" id="lxChart"></div>${legendHtml([{ label: "출근 시간", color: C.am, cls: "bar" }, { label: "퇴근 시간", color: C.pm, cls: "bar" }, { label: "하루 전체", color: C.all, cls: "bar" }])}` : stateHtml("판정할 수 있는 시간자료가 없습니다.")}
       ${csvLink(url)}${tableHtml(r.table)}${rulesList(r.rules, [HOURLY_NOTE])}`;
     if (!w.am.total.hValid) return;
@@ -1227,7 +1229,7 @@
         ${s.highest ? `<div><span>가장 많았던 해</span><b>${s.highest.value}일</b><small>${E(s.highest.years.join(", "))}년</small></div>` : ""}
         <div><span>1990년대 대비</span><b style="font-size:14px">${r.delta.available ? signedPlain(r.delta.delta, "일") : "비교하지 않음"}</b><small>${E(r.delta.available ? `${r.delta.baseline.mean}일 → ${r.delta.recent.mean}일` : r.delta.reason || "")}</small></div>
         <div><span>판정 가능한 연도</span><b>${s.completeYears}개</b><small>${r.fromYear}~${r.toYear}년 중</small></div></div>
-      <ul class="sx-text">${r.text.map((t) => `<li>${E(t)}</li>`).join("")}</ul>${incWarn(s.incomplete)}${missWarn(s.missing1, "밤")}
+      <ul class="sx-text">${txtLines(r.text)}</ul>${incWarn(s.incomplete)}${missWarn(s.missing1, "밤")}
       ${s.completeYears ? `<div class="sx-chart" id="lxChart"></div>${legendHtml([{ label: "열대야 추정(일) · 막대", color: "#9333ea", cls: "bar" }, { label: "판정 못 한 밤이 2밤 이상인 해(값 없음)", cls: "box" }])}` : stateHtml("모든 밤을 판정할 수 있는 연도가 없습니다.")}
       ${csvLink(url)}${tableHtml(r.table, (row, i) => rows[i].status !== "complete")}${rulesList(r.rules, [HOURLY_NOTE])}`;
     if (!s.completeYears) return;
