@@ -220,9 +220,9 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
     const asOf = asOfFor([store]);
     if (!asOf || !store.n) throw new StatsError("이 지점에는 공식 일자료가 없습니다", 404);
     const asOfYear = +asOf.slice(0, 4);
-    const m = seoulMonth();
+    const nowMonth = String(seoulMonth());
     const cards = (url.searchParams.get("set") === "life" ? LIFE_CARDS : CARDS).map((c0) => {
-      const c = c0.period.includes("{m}") ? { ...c0, q: c0.q.replace("{m}", String(m)), period: c0.period.replace("{m}", String(m)) } : c0;
+      const c = c0.period.includes("{m}") ? { ...c0, q: c0.q.replace("{m}", nowMonth), period: c0.period.replace("{m}", nowMonth) } : c0;
       const p = parsePeriod(c.period);
       const m = getMetric(c.metric);
       const d = decadeDelta(m, yearRows(store, m, p, BASELINE.from, asOfYear, asOf));
