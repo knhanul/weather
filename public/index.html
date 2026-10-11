@@ -2771,11 +2771,11 @@
     if (window.NWStation) {
       NWStation.current = () => (currentPage === "hourly" ? $("hStation").value : currentPage === "daily" ? $("dStation").value : currentPage === "questions" || (currentPage === "dash" && !/^#\/(stats\/overview)?(\?|$)/.test(location.hash || "#/")) ? (window.Stats && Stats.station && Stats.station()) || dashState.station : dashState.station);
       NWStation.onApply((id) => {
-        dashState.station = id;
+        // 주소의 station 을 바꾸고 route() 로 다시 그림(한눈에 보기는 route 가 지점 바뀜을 보고 다시 불러옴)
         if (window.Stats) window.Stats.onStation(id);
         for (const sel of ["hStation", "dStation"]) if ([...$(sel).options].some((o) => o.value === id)) $(sel).value = id;
         const [p, q] = (location.hash || "#/").split("?");
-        if (!["dash", "questions", "hourly", "daily"].includes(currentPage) || p === "#/stats/region") return;
+        if (!["dash", "questions", "hourly", "daily"].includes(currentPage) || p === "#/stats/region") { dashState.station = id; return; }
         const qp = new URLSearchParams(q || "");
         qp.set("station", id);
         history.replaceState(history.state, "", `${p || "#/"}?${qp}`);
