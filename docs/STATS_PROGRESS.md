@@ -50,3 +50,10 @@
 - 닫기: 메뉴 고르기·배경·✕·Esc·뒤로 가기(열 때 history 한 칸, 고르면 그 칸을 되돌린 뒤 이동 → 뒤로 가기 한 번이면 앞 화면). role=dialog·aria-modal·aria-expanded, 본문 inert, Tab 가두기, 닫으면 ☰ 로 포커스.
 - 페이지 머리: 제목은 앱 막대로(h1 은 화면 읽기용으로 남김), 로그인은 서랍으로. manifest: id "/", start_url "/#/stats/overview", standalone, theme #026ef8. viewport-fit=cover + safe-area 여백. 넓은 화면은 픽셀 단위로 같음.
 - 검증: scripts/e2e/drawer.mjs ALL PASS (스크린샷 /workspace/shots/drawer-*.png), nav·views·dl·chartfull 재실행 ALL PASS.
+
+## 2026-10-11 · 기본 달·기본 관측지점 (5679567 · d392fc4 · 이후 고침)
+- 기본 달 = 지금 달(Asia/Seoul): 연도별·지역별 비교 기본, 월/주/직접 지정 고르기의 기본값, 질문 카드 '우리 동네 N월은…'(서버, 요청 시점의 서울 달). 진행 중인 달은 엔진 규칙 그대로(올해는 '진행 중', 비교는 끝난 해끼리). 매년 같은 날 기본 = 오늘(MM-DD).
+- 기본 지점: 주소 station > 저장한 선택(직접 고름 또는 위치로 고름, localStorage `nw.station` = {id, why, at} — 지점 번호만) > 서울 108. 직접 고르면 저장, 그 방문 동안 자동 변경 없음. 로그인 시 `/api/station-pref`(station_prefs 새 표, 지점 번호만)와 맞춤(더 최근 것).
+- 위치: 권한이 '허용'일 때만 조용히(low accuracy, 6초, 30분 캐시), 아니면 작은 안내 띠의 버튼을 눌러야 요청. 거부·'괜찮아요'는 기억. 좌표·거리는 브라우저 메모리에서만(서버로 보내지 않음, 저장 안 함). 이유 알림: '현재 위치에서 가장 가까운 관측소: 수원(119), 약 4.1km'.
+- 좌표: 기상청 관측지점 정보(minwon.kma.go.kr) 8곳 → station-coords.mjs, /api/stations 에 새 필드로만 추가(DB 칸 없음).
+- 검증: scripts/defaults.test.mjs(서울 달 12월↔1월, 2/29, 하버사인·가까운 지점, 주소 우선, station-pref 권한·검증·좌표 미저장), scripts/e2e/geo.mjs ALL PASS(허용·거부·버튼·직접 고름·주소 우선·12/31·1/1 가짜 시계·좌표 전송 없음), 기존 e2e 재실행 ALL PASS.
