@@ -504,6 +504,7 @@
     .sm-btn { height:30px; padding:0 10px; font-size:12px; }
   </style>
   <link rel="stylesheet" href="/chart-full.css?v=3" />
+  <link rel="stylesheet" href="/views.css?v=1" />
 </head>
 <body>
   <div class="layout">
@@ -520,9 +521,9 @@
         <div class="nav-group" role="group" aria-labelledby="navLookup">
           <p class="nav-label" id="navLookup">조회</p>
           <a href="#/" data-page="dash">날씨 통계</a>
-          <a href="#/hourly" data-page="hourly">시간자료</a>
-          <a href="#/daily" data-page="daily">일자료</a>
-          <a href="#/download" data-page="download">다운로드</a>
+          <a href="#/hourly-weather" data-page="hourly">시간별 날씨</a>
+          <a href="#/daily-weather" data-page="daily">일별 날씨</a>
+          <a href="#/view-settings" data-page="download">보기 설정</a>
         </div>
         <div class="nav-group" role="group" aria-labelledby="navAdmin">
           <p class="nav-label" id="navAdmin">관리</p>
@@ -599,35 +600,43 @@
               <div><label>종료</label><input id="hTo" type="datetime-local" step="3600" /></div>
               <button id="hQuery">조회</button>
             </div>
+            <div id="hBar"></div>
             <p class="muted" id="hMsg"></p>
-            <div class="row" id="hPager" style="display:none">
-              <button class="sec" id="hPrev">이전</button>
-              <button class="sec" id="hNext">다음</button>
+            <div id="hResult" class="vw-result" aria-live="polite"></div>
+            <div class="vw-pager" id="hPager" hidden>
+              <button type="button" class="sec" id="hPrev">이전</button>
+              <span class="muted" id="hPageInfo"></span>
+              <button type="button" class="sec" id="hNext">다음</button>
             </div>
-            <div style="overflow:auto"><table><thead><tr><th>관측일시</th><th>지점</th><th>기온</th><th>강수</th><th>습도</th><th>풍속</th><th>출처</th></tr></thead><tbody id="hBody"></tbody></table></div>
           </div>
         </section>
         <section class="page" id="daily">
           <div class="card">
-            <p class="muted">공식 일자료가 없으면 시간자료 집계(DERIVED)를 보여 줍니다. 둘은 다를 수 있습니다. 공식 일자료는 관리 › 자료수집에서 받습니다.</p>
+            <p class="muted">기상청 공식 일자료를 보여 주고, 공식 일자료가 없는 날은 시간자료로 집계한 값(표시: 시간자료 집계)을 보여 줍니다. 둘은 다를 수 있습니다.</p>
             <div class="row">
               <div><label>지점</label><select id="dStation"></select></div>
               <div><label>시작</label><input id="dFrom" type="date" /></div>
               <div><label>종료</label><input id="dTo" type="date" /></div>
               <button id="dQuery">조회</button>
             </div>
+            <div id="dBar"></div>
             <p class="muted" id="dMsg"></p>
-            <div style="overflow:auto"><table><thead><tr><th>일자</th><th>평균</th><th>최저</th><th>최고</th><th>강수</th><th>습도</th><th>출처</th></tr></thead><tbody id="dBody"></tbody></table></div>
+            <div id="dResult" class="vw-result" aria-live="polite"></div>
+            <div class="vw-pager" id="dPager" hidden>
+              <button type="button" class="sec" id="dPrev">이전</button>
+              <span class="muted" id="dPageInfo"></span>
+              <button type="button" class="sec" id="dNext">다음</button>
+            </div>
           </div>
         </section>
         <section class="page" id="download">
           <!-- 1. 조회 범위 설정 카드 -->
           <div class="card">
             <div class="card-head">
-              <h2>조회 범위 설정</h2>
+              <h2>미리보기·내려받기 범위</h2>
               <span class="badge" id="dlStorageBadge" style="background:var(--soft);color:var(--pri-dark);font-size:12px;font-weight:600;">DB 확인 중…</span>
             </div>
-            <p class="muted" style="margin-top:2px;">기상청 공식 ASOS 관측 DB(시간별 또는 일별)를 직접 조회해 원하는 컬럼 구성으로 CSV를 내려받습니다. 결측값(미관측)은 0이 아닌 NULL 그대로 보존됩니다.</p>
+            <p class="muted" style="margin-top:2px;">여기서 만든 레이아웃은 시간별 날씨·일별 날씨 화면의 레이아웃 목록에 나오고, 같은 컬럼 구성으로 원자료 CSV 도 내려받을 수 있습니다. 결측값(미관측)은 0이 아닌 NULL 그대로 보존됩니다.</p>
             <div class="row" style="align-items:flex-end;">
               <div style="min-width:160px;">
                 <label for="xKind">자료 종류</label>
@@ -679,7 +688,7 @@
           <!-- 2. 레이아웃 저장·불러오기 카드 -->
           <div class="card">
             <div class="card-head">
-              <h2>레이아웃 구성 관리</h2>
+              <h2>레이아웃(보기 구성) 관리</h2>
               <span class="muted" style="font-size:12px;" id="xLayoutWhere">선택한 자료 종류와 컬럼·순서를 브라우저에 저장</span>
             </div>
             <p class="muted" style="margin-top:2px;">자주 쓰는 컬럼 조합과 순서를 이름 붙여 저장하고 다시 불러올 수 있습니다. 날짜와 지점 같은 매번 바뀌는 조회 조건은 레이아웃과 분리되어 유지됩니다.</p>
@@ -700,19 +709,20 @@
               <button type="button" class="sec" id="xLayoutReset">기본값 복원</button>
             </div>
             <p id="xLayoutMsg" class="muted" style="font-size:12px; margin-top:6px; margin-bottom:0;"></p>
+            <div class="dl-login" id="xLoginPrompt" hidden></div>
           </div>
 
           <!-- 3. 컬럼 선택 카드 -->
           <div class="card">
             <div class="card-head" style="flex-wrap:wrap; gap:10px;">
               <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                <h2 style="margin:0;">다운로드 컬럼 선택</h2>
+                <h2 style="margin:0;">컬럼 선택</h2>
                 <span id="xColCounter" class="col-count-badge">선택됨 0개 / 전체 0개</span>
               </div>
               <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                <button type="button" class="sec sm-btn" id="xBtnDefault">기본 구성</button>
-                <button type="button" class="sec sm-btn" id="xBtnAll">전체 선택</button>
-                <button type="button" class="sec sm-btn" id="xBtnClear">선택 초기화</button>
+                <button type="button" class="sec sm-btn x-layout-edit" id="xBtnDefault">기본 구성</button>
+                <button type="button" class="sec sm-btn x-layout-edit" id="xBtnAll">전체 선택</button>
+                <button type="button" class="sec sm-btn x-layout-edit" id="xBtnClear">선택 초기화</button>
                 <input id="xColFilter" type="text" placeholder="컬럼명·한글 검색…" style="height:30px; font-size:12px; width:150px; padding:0 8px; border:1px solid var(--line); border-radius:6px;" />
               </div>
             </div>
@@ -726,10 +736,10 @@
           <!-- 4. 결과 CSV 컬럼 순서 카드 -->
           <div class="card">
             <div class="card-head">
-              <h2>CSV 출력 순서 조정</h2>
+              <h2>컬럼 순서 (화면·CSV 공통)</h2>
               <span class="muted" style="font-size:12px;">마우스 드래그 또는 [▲][▼] 버튼으로 순서 이동</span>
             </div>
-            <p class="muted" style="margin-top:2px;">다운로드되는 CSV 파일의 헤더 및 데이터 열 순서입니다. 키보드로도 [▲]/[▼]를 눌러 좌우 순서를 자유롭게 조정할 수 있습니다.</p>
+            <p class="muted" style="margin-top:2px;">시간별·일별 날씨 그리드의 열 순서이자 카드의 항목 순서, 그리고 내려받는 CSV 의 열 순서입니다. 키보드로도 [▲]/[▼]를 눌러 좌우 순서를 자유롭게 조정할 수 있습니다.</p>
             <div id="xOrderWrap" class="dl-order-wrap" role="list" aria-label="선택된 컬럼 순서 목록"></div>
           </div>
 
@@ -737,7 +747,7 @@
           <div class="card">
             <div class="card-head" style="flex-wrap:wrap; gap:10px;">
               <div>
-                <h2 style="margin:0;">데이터 미리보기 및 다운로드</h2>
+                <h2 style="margin:0;">미리보기 및 CSV 내려받기</h2>
                 <p class="muted" id="xPreviewMeta" style="margin:2px 0 0; font-size:13px;">조회 중…</p>
               </div>
               <div class="dl-actions-bar">
@@ -893,7 +903,7 @@
       fillStations($("hStation")); fillStations($("dStation")); fillStations($("xStation"));
       $("hFrom").value = toPicker(d.latestOfficialHour.slice(0,10) + " 00:00:00");
       $("hTo").value = toPicker(d.latestOfficialHour);
-      $("dFrom").value = d.latestOfficialHour.slice(0,10);
+      $("dFrom").value = new Date(Date.parse(d.latestOfficialHour.slice(0, 10) + "T00:00:00Z") - 6 * 86400000).toISOString().slice(0, 10); // 일별 날씨 기본: 최근 7일
       $("dTo").value = d.latestOfficialHour.slice(0,10);
       $("xFrom").value = $("hFrom").value;
       $("xTo").value = $("hTo").value;
@@ -1928,20 +1938,9 @@
       loadGaps();
     }
     let hPage = 1;
-    async function queryHourly() {
-      const q = new URLSearchParams({ stationId: $("hStation").value, from: dtVal("hFrom"), to: dtVal("hTo"), page: String(hPage), pageSize: "500" });
-      const r = await (await fetch("/api/hourly?" + q)).json();
-      $("hMsg").textContent = `${r.from} ~ ${r.to} · 전체 ${r.total}건 · ${r.page}/${r.pages}페이지`;
-      $("hPager").style.display = r.pages > 1 ? "flex" : "none";
-      $("hBody").innerHTML = r.data.map((row) => `<tr><td>${row.observation_datetime}</td><td>${row.station_id} ${row.station_name||""}</td><td>${fmt(row.temperature)}</td><td>${fmt(row.precipitation)}</td><td>${fmt(row.humidity)}</td><td>${fmt(row.wind_speed)}</td><td>${row.source_kind}</td></tr>`).join("") || `<tr><td colspan="7">자료 없음</td></tr>`;
-      window.__hPages = r.pages;
-    }
-    async function queryDaily() {
-      const q = new URLSearchParams({ stationId: $("dStation").value, from: $("dFrom").value, to: $("dTo").value });
-      const r = await (await fetch("/api/daily?" + q)).json();
-      $("dMsg").textContent = `${r.from} ~ ${r.to} · ${r.data.length}건`;
-      $("dBody").innerHTML = r.data.map((row) => `<tr><td>${row.observation_date}</td><td>${fmt(row.avg_temperature)}</td><td>${fmt(row.min_temperature)}</td><td>${fmt(row.max_temperature)}</td><td>${fmt(row.precipitation)}</td><td>${fmt(row.avg_humidity)}</td><td>${row.source_kind}</td></tr>`).join("") || `<tr><td colspan="7">자료 없음</td></tr>`;
-    }
+    // 시간별·일별 날씨: 레이아웃·그리드/카드 보기는 views.js(window.Views)
+    function queryHourly() { if (window.Views) window.Views.show("hourly"); }
+    function queryDaily() { if (window.Views) window.Views.show("daily"); }
     async function loadJobs() {
       const jobs = await (await fetch("/api/jobs")).json();
       $("jMsg").textContent = jobs.length ? `최근 ${jobs.length}건 · 최신순` : "수집 이력이 없습니다.";
@@ -1960,9 +1959,9 @@
     // ---------- 상단 띠: 화면 이름·설명, 상태 칩 ----------
     const PAGE_HEAD = {
       dash: ["조회", "날씨 통계", "1990년부터 쌓인 관측 자료로 보는 우리 동네 날씨"],
-      hourly: ["조회", "시간자료", "지점·기간별 시간 단위 관측값 조회"],
-      daily: ["조회", "일자료", "하루 단위 기온·강수 요약 조회"],
-      download: ["조회", "다운로드", "관측 자료를 CSV 파일로 내려받기"],
+      hourly: ["조회", "시간별 날씨", "지점·기간별 한 시간 단위 관측값 — 레이아웃으로 컬럼을 고르고 그리드·카드로 보기"],
+      daily: ["조회", "일별 날씨", "하루 단위 관측값 — 레이아웃으로 컬럼을 고르고 그리드·카드로 보기"],
+      download: ["조회", "보기 설정", "보여 줄 컬럼 구성(레이아웃) 만들기·저장과 CSV 내려받기"],
       collect: ["관리", "자료수집", "기상청 API에서 지정한 구간의 자료 수집"],
       gaps: ["관리", "미적재 현황", "지점별 빠진 자료 확인과 선택 수집"],
       jobs: ["관리", "수집이력", "지금까지 실행한 수집 작업 기록"],
@@ -2079,7 +2078,7 @@
       } else if (isNuni() && !me.loggedIn) {
         html = `${ico}<h2>관리자 로그인이 필요합니다</h2>
           <p class="muted">${esc(t)} 화면은 관리 권한이 있는 카카오 계정으로 로그인해야 쓸 수 있습니다.</p>
-          <p class="muted">날씨 통계·시간자료·일자료·다운로드는 로그인하지 않아도 이용할 수 있습니다.</p>
+          <p class="muted">날씨 통계·시간별 날씨·일별 날씨·보기 설정(기본 프리셋과 CSV 내려받기)은 로그인하지 않아도 이용할 수 있습니다.</p>
           <div class="lock-actions">${kakaoBtn("lg")}<a class="lock-alt" href="#/">날씨 통계로 가기</a></div>`;
       } else if (isNuni() && me.role !== "blocked") {
         html = `${ico}<h2>관리 권한이 없습니다</h2>
@@ -2089,7 +2088,7 @@
       } else if (!me.loggedIn) {
         html = `${ico}<h2>관리자 로그인이 필요합니다</h2>
           <p class="muted">${esc(t)} 화면은 승인된 카카오 계정으로 로그인한 관리자만 쓸 수 있습니다.</p>
-          <p class="muted">날씨 통계·시간자료·일자료·다운로드는 로그인하지 않아도 이용할 수 있습니다.</p>
+          <p class="muted">날씨 통계·시간별 날씨·일별 날씨·보기 설정(기본 프리셋과 CSV 내려받기)은 로그인하지 않아도 이용할 수 있습니다.</p>
           <div class="lock-actions">${kakaoBtn("lg")}<a class="lock-alt" href="#/">날씨 통계로 가기</a></div>`;
       } else if (me.role === "blocked") {
         html = `${ico}<h2>사용이 차단된 계정입니다</h2><p class="muted">${esc(me.nickname || "")}님 계정은 관리 기능을 쓸 수 없습니다. 필요하면 관리자에게 문의하세요.</p>
@@ -2174,10 +2173,16 @@
       if (name === "collect") loadCollectJobs();
       if (name === "stations") loadStations();
     }
+    // 예전 주소(#/hourly, #/daily, #/download)는 새 주소로 바꿔 계속 쓸 수 있게(뒤에 붙은 ?조건은 그대로)
+    const ROUTE_ALIAS = { "/hourly": "/hourly-weather", "/daily": "/daily-weather", "/download": "/view-settings" };
     function route() {
+      {
+        const [p0, q0] = location.hash.replace("#", "").split("?");
+        if (ROUTE_ALIAS[p0]) history.replaceState(history.state, "", `#${ROUTE_ALIAS[p0]}${q0 !== undefined ? `?${q0}` : ""}`);
+      }
       const h = location.hash.replace("#", "").split("?")[0] || "/";
       const statsTab = { "/": "overview", "/stats/yearly": "yearly", "/stats/region": "region", "/stats/life": "life", "/stats/records": "records" }[h] || (h.startsWith("/stats/") ? "overview" : null);
-      const map = { "/": "dash", "/stats/yearly": "dash", "/stats/region": "dash", "/stats/life": "dash", "/stats/records": "dash", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/users": "users" };
+      const map = { "/": "dash", "/stats/yearly": "dash", "/stats/region": "dash", "/stats/life": "dash", "/stats/records": "dash", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/users": "users" };
       let name = map[h] || "dash";
       if (name === "users" && !me.authEnabled) name = "dash";
       show(name);
@@ -2211,10 +2216,6 @@
         else drawChart(false);
       }
     }
-    $("hQuery").onclick = () => { hPage = 1; queryHourly(); };
-    $("hPrev").onclick = () => { hPage = Math.max(1, hPage - 1); queryHourly(); };
-    $("hNext").onclick = () => { hPage = Math.min(window.__hPages || 1, hPage + 1); queryHourly(); };
-    $("dQuery").onclick = queryDaily;
     // ---------- 기상 자료 다운로드 (개선) ----------
     const DL_STORAGE_KEY = "nuni_weather_export_layouts";
     const dlState = {
@@ -2306,9 +2307,16 @@
       renderLayoutMode(note);
       return prevMode !== mode;
     }
+    const dlLocked = () => dlState.mode === "readonly"; // 비로그인: 기본 프리셋만(컬럼 고르기·순서 바꾸기·저장 안 됨)
     function renderLayoutMode(note) {
       const mode = dlState.mode;
       document.querySelectorAll(".x-layout-edit").forEach((el) => { el.hidden = mode === "readonly"; });
+      $("download").classList.toggle("dl-readonly", mode === "readonly");
+      const lp = $("xLoginPrompt");
+      if (lp) {
+        lp.hidden = mode !== "readonly";
+        if (mode === "readonly") lp.innerHTML = `<p><b>로그인하면 컬럼을 직접 고르고 순서를 바꿔 내 레이아웃으로 저장</b>할 수 있습니다(여러 개, 시간별·일별 따로, ★ 기본 지정). 지금은 기본 프리셋을 읽기 전용으로 보고, 그 구성으로 CSV 를 내려받을 수 있습니다.</p>${kakaoBtn()}`;
+      }
       const where = $("xLayoutWhere");
       if (where) where.textContent = mode === "server" ? "내 계정에 저장 · 로그인한 본인만 볼 수 있음" : mode === "local" ? "선택한 자료 종류와 컬럼·순서를 브라우저에 저장" : "기본 프리셋만 사용 · 로그인하면 내 레이아웃 저장";
       const msg = $("xLayoutMsg");
@@ -2357,7 +2365,23 @@
         setupDownloadEvents();
       }
 
-      if (dlState.orderedKeys.length === 0 || modeChanged) {
+      // #/view-settings?kind=daily&layout=custom:… (시간별·일별 날씨의 '레이아웃 만들기·편집' 링크)
+      const hpw = hashParams();
+      const wantKind = hpw.get("kind");
+      let kindChanged = false;
+      if ((wantKind === "hourly" || wantKind === "daily") && wantKind !== dlState.kind) {
+        dlState.kind = wantKind;
+        $("xKind").value = wantKind;
+        $("xHourlyDates").style.display = wantKind === "hourly" ? "flex" : "none";
+        $("xDailyDates").style.display = wantKind === "hourly" ? "none" : "flex";
+        kindChanged = true;
+      }
+      const wantLayout = hpw.get("layout");
+      const layoutOk = (ref) => ref && ((ref.startsWith("preset:") && getCatalogForCurrentKind().presets?.[ref.slice(7)]) || (ref.startsWith("custom:") && dlState.layouts[ref.slice(7)]?.kind === dlState.kind));
+      if (layoutOk(wantLayout) && wantLayout !== dlState.lastWanted) {
+        dlState.lastWanted = wantLayout;
+        applyLayout(wantLayout);
+      } else if (dlState.orderedKeys.length === 0 || modeChanged || kindChanged) {
         applyLayout(userDefaultLayoutId(dlState.kind));
       } else {
         populateLayoutSelect();
@@ -2392,7 +2416,7 @@
         }
         html += `</optgroup>`;
       }
-      html += `<option value="custom_current">(사용자 지정 구성)</option>`;
+      if (!dlLocked()) html += `<option value="custom_current">(사용자 지정 구성)</option>`;
       sel.innerHTML = html;
       sel.value = dlState.currentLayoutId;
       updateLayoutButtons();
@@ -2487,7 +2511,7 @@
           const isReq = Boolean(f.required);
           const avail = f.avail !== false;
           html += `    <label class="dl-field-label${isReq ? " is-req" : ""}" title="${esc(f.desc || "")}">`;
-          html += `      <input type="checkbox" data-col="${esc(f.key)}"${isChecked ? " checked" : ""}${isReq ? " disabled" : ""} />`;
+          html += `      <input type="checkbox" data-col="${esc(f.key)}"${isChecked ? " checked" : ""}${isReq || dlLocked() ? " disabled" : ""} />`;
           html += `      <div class="dl-field-info">`;
           html += `        <div class="dl-field-top">`;
           html += `          <span class="dl-field-name">${esc(f.name_ko)}</span>`;
@@ -2524,10 +2548,12 @@
         const isFirst = idx === 0;
         const isLast = idx === dlState.orderedKeys.length - 1;
 
-        html += `<div class="dl-order-chip" draggable="true" data-index="${idx}" data-key="${esc(key)}" tabindex="0" role="listitem">`;
+        const locked = dlLocked();
+        html += `<div class="dl-order-chip" draggable="${locked ? "false" : "true"}" data-index="${idx}" data-key="${esc(key)}" tabindex="0" role="listitem">`;
         html += `  <span class="dl-order-idx">${idx + 1}</span>`;
         html += `  <span>${esc(f.name_ko || key)}</span>`;
         html += `  <span style="font-family:monospace;font-size:11px;color:var(--muted);">${esc(key)}</span>`;
+        if (locked) { html += `</div>`; return; }
         html += `  <div class="dl-order-btns">`;
         html += `    <button type="button" class="dl-order-btn" data-act="up" data-index="${idx}" title="앞으로 이동"${isFirst ? " disabled" : ""} aria-label="${esc(f.name_ko)} 앞으로 이동">▲</button>`;
         html += `    <button type="button" class="dl-order-btn" data-act="down" data-index="${idx}" title="뒤로 이동"${isLast ? " disabled" : ""} aria-label="${esc(f.name_ko)} 뒤로 이동">▼</button>`;
@@ -2848,10 +2874,12 @@
       };
 
       $("xBtnDefault").onclick = () => {
+        if (dlLocked()) return; // 비로그인: 읽기 전용
         applyLayout("preset:default");
       };
 
       $("xBtnAll").onclick = () => {
+        if (dlLocked()) return; // 비로그인: 읽기 전용
         const cat = getCatalogForCurrentKind();
         const allKeys = cat.catalog.map((f) => f.key);
         dlState.selectedKeys = new Set(allKeys);
@@ -2864,6 +2892,7 @@
       };
 
       $("xBtnClear").onclick = () => {
+        if (dlLocked()) return; // 비로그인: 읽기 전용
         const cat = getCatalogForCurrentKind();
         const reqKeys = cat.catalog.filter((f) => f.required).map((f) => f.key);
         dlState.selectedKeys = new Set(reqKeys);
@@ -2881,6 +2910,7 @@
       };
 
       $("xColGroups").onchange = (e) => {
+        if (dlLocked()) { renderColGroups(); return; }
         const cb = e.target.closest('input[type="checkbox"][data-col]');
         if (!cb) return;
         const col = cb.dataset.col;
@@ -2898,6 +2928,7 @@
       };
 
       $("xOrderWrap").onclick = (e) => {
+        if (dlLocked()) return; // 비로그인: 읽기 전용
         const btn = e.target.closest("button[data-act]");
         if (!btn) return;
         const act = btn.dataset.act;
@@ -2931,6 +2962,7 @@
 
       const orderWrap = $("xOrderWrap");
       orderWrap.addEventListener("dragstart", (e) => {
+        if (dlLocked()) { e.preventDefault(); return; }
         const chip = e.target.closest(".dl-order-chip");
         if (!chip) return;
         dlState.draggedIndex = Number(chip.dataset.index);
@@ -3022,12 +3054,15 @@
       el.addEventListener("click", () => { try { el.showPicker && el.showPicker(); } catch (e) {} });
     });
     window.toggleSt = toggleSt;
+    // views.js(시간별·일별 날씨)가 읽기만 하는 연결점
+    window.NW = { me: () => me, stations: () => (dashCache && dashCache.stations) || [], loginHref: () => loginHref(), fromPicker, toPicker };
     window.addEventListener("hashchange", route);
-    setPageHead(({ "/hourly": "hourly", "/daily": "daily", "/download": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider" })[location.hash.replace("#", "").split("?")[0]] || "dash");
+    setPageHead(({ "/hourly": "hourly", "/daily": "daily", "/download": "download", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider" })[location.hash.replace("#", "").split("?")[0]] || "dash");
     showLoginNote();
     // 대시보드 자료가 늦거나 실패해도 다른 화면은 그대로 뜨게
     Promise.allSettled([loadMe(), loadDash()]).then(route);
   </script>
-  <script src="/stats.js?v=6"></script>
+  <script src="/views.js?v=1"></script>
+  <script src="/stats.js?v=7"></script>
 </body>
 </html>

@@ -600,7 +600,7 @@
       ])}` : stateHtml("이 조건에서 자료가 온전한 연도가 없어 그래프를 그리지 않습니다.")}
       <div class="sx-tools"><span class="muted">그래프·요약표·CSV 는 같은 계산 결과입니다.</span><a class="dl-chip-btn" href="${E(url)}&format=csv" download>통계 결과 CSV 내려받기</a></div>
       ${tableHtml(r.table, (row, i) => r.rows[i].status !== "complete")}
-      <p class="muted">원자료(일자료·시간자료 전체)는 <a href="#/download">다운로드</a> 메뉴에서 받습니다. 출처: ${SOURCE}.</p>
+      <p class="muted">원자료(일자료·시간자료)는 <a href="#/daily-weather">일별 날씨</a>·<a href="#/hourly-weather">시간별 날씨</a>에서 보고, <a href="#/view-settings">보기 설정</a>에서 CSV 로 받습니다. 출처: ${SOURCE}.</p>
       ${rulesHtml(m, [`1990년대 대비: ${BASE_TEXT()}`])}`;
     if (ok)
       chart($id("yxChart"), {
@@ -894,7 +894,7 @@
   const rulesList = (rules, extra = []) => `<details class="sx-rules"><summary>계산 기준</summary><ul>${[...(rules || []), ...extra].map((l) => `<li>${E(l)}</li>`).join("")}</ul></details>`;
   const DAILY_RULES = () => (meta?.rules || []).slice(0, 3);
   const HOURLY_NOTE = "자료: 기상청 ASOS 시간자료(정시 관측) — '시간자료 집계'이며 공식 일자료 통계와 다릅니다. 시각은 한국 시간(Asia/Seoul) 정시입니다.";
-  const csvLink = (url) => `<div class="sx-tools"><span class="muted">그래프·요약표·CSV 는 같은 계산 결과입니다. 원자료는 <a href="#/download">다운로드</a> 메뉴.</span><a class="dl-chip-btn" href="${E(url)}${url.includes("?") ? "&" : "?"}format=csv" download>통계 결과 CSV 내려받기</a></div>`;
+  const csvLink = (url) => `<div class="sx-tools"><span class="muted">그래프·요약표·CSV 는 같은 계산 결과입니다. 원자료 CSV 는 <a href="#/view-settings">보기 설정</a>.</span><a class="dl-chip-btn" href="${E(url)}${url.includes("?") ? "&" : "?"}format=csv" download>통계 결과 CSV 내려받기</a></div>`;
   function lifeQuery(extra = {}) {
     const q = new URLSearchParams({ station: state.station, from: String(state.from), to: String(state.to) });
     for (const [k, v] of Object.entries(extra)) if (v !== null && v !== undefined) q.set(k, String(v));

@@ -1,0 +1,51 @@
+/* 시간별·일별 날씨 보기(views.js) + 보기 설정 잠금 안내. 기존 디자인 변수 그대로. */
+.vw-bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin: 12px 0 4px; }
+.vw-lay { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); min-width: 0; flex: 0 1 280px; }
+.vw-lay select { min-width: 0; width: 100%; }
+.vw-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.vw-toggle button { border: 0; border-radius: 0; background: transparent; color: var(--fg); height: 36px; padding: 0 16px; font-weight: 600; }
+.vw-toggle button + button { border-left: 1px solid var(--line); }
+.vw-toggle button[aria-pressed="true"] { background: var(--pri); color: var(--pri-fg); }
+.vw-edit { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--pri-dark); text-decoration: none; align-self: center; }
+.vw-edit small { color: var(--muted); font-weight: 500; }
+.vw-edit:hover { text-decoration: underline; }
+.vw-note { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+.vw-note.warn { color: var(--warn); background: var(--warn-bg); border-radius: 8px; padding: 6px 10px; }
+.vw-pager { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.vw-pager[hidden] { display: none; }
+.vw-result[aria-busy="true"] { opacity: .55; transition: opacity .15s; }
+.vw-empty { padding: 20px 8px; text-align: center; color: var(--muted); }
+.vw-null { color: #9aa8bf; }
+.vw-grid-wrap { overflow: auto; max-height: 70vh; border: 1px solid var(--line); border-radius: 10px; margin-top: 8px; }
+.vw-grid { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.vw-grid th { position: sticky; top: 0; background: var(--soft); color: var(--fg); text-align: left; font-weight: 700; white-space: nowrap; padding: 8px 10px; border-bottom: 1px solid var(--line); z-index: 1; }
+.vw-grid th small { color: var(--muted); font-weight: 500; }
+.vw-grid td { padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.vw-grid .n { text-align: right; }
+.vw-grid tbody tr:hover { background: #f6f9ff; }
+.vw-grid tr.vw-derived td:first-child { box-shadow: inset 3px 0 0 #f0b45a; }
+.vw-cards { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.vw-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--surface); }
+.vw-card-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-bottom: 6px; }
+.vw-card-h b { font-size: 14px; }
+.vw-st { font-size: 12px; color: var(--muted); }
+.vw-tag { font-size: 11px; font-weight: 600; color: var(--warn); background: var(--warn-bg); border-radius: 999px; padding: 1px 7px; }
+.vw-card dl { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+.vw-card dl > div { min-width: 0; }
+.vw-card dt { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vw-card dd { margin: 0; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.vw-card dd small { font-size: 11px; font-weight: 500; color: var(--muted); margin-left: 2px; }
+@media (max-width: 560px) {
+  .vw-bar { align-items: stretch; }
+  .vw-lay { flex: 1 1 100%; }
+  .vw-toggle { flex: 1 1 auto; } .vw-toggle button { flex: 1 1 50%; }
+  .vw-edit { margin-left: 0; }
+  .vw-cards { grid-template-columns: 1fr; }
+  .vw-grid { font-size: 12.5px; }
+}
+/* 보기 설정: 비로그인은 기본 프리셋 읽기 전용 */
+.dl-login { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 10px 0 0; padding: 10px 14px; border-radius: 12px; background: var(--soft); color: var(--pri-dark); font-size: 13.5px; }
+.dl-login[hidden] { display: none; }
+.dl-login p { margin: 0; flex: 1 1 260px; }
+#download.dl-readonly .dl-field-label { cursor: default; opacity: .8; }
+#download.dl-readonly .dl-order-chip { cursor: default; }
