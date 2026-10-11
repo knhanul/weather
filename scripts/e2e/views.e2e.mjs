@@ -19,6 +19,11 @@ async function ctxFor(tag, base, { mobile = false, cookie = false } = {}) {
   page.on("request", (r) => { const u = r.url(); if (u.includes("/api/view") || u.includes("/api/export/layouts")) calls.push(`${r.method()} ${u.replace(base, "")}`); });
   return { ctx, page, calls };
 }
+// 실제 자료는 수집 지연으로 '공식 최신일'이 비어 있을 수 있어 자료가 있는 지난 날짜로 고정
+const DH = "from=2026-10-08%2000:00&to=2026-10-08%2023:00";
+const DD = "from=2026-10-02&to=2026-10-08";
+// 좁은 화면은 조회 조건이 요약 막대로 접혀 있음(fold.js) → 펼친 뒤 조작
+const unfold = (page, id) => page.evaluate((id) => { const b = document.querySelector(`[data-fold-bar="${id}"] button`); if (b && b.getAttribute("aria-expanded") === "false") b.click(); }, id).then(() => page.waitForTimeout(150));
 const views = (calls) => calls.filter((c) => c.startsWith("GET /api/view?")).length;
 const heads = (page, sel) => page.$$eval(`${sel} .vw-grid th`, (t) => t.map((x) => x.childNodes[0].textContent.trim()));
 const vstate = (page, k) => page.evaluate((k) => ({ layout: window.Views._state[k].layout, view: window.Views._state[k].view, fetches: window.Views._state[k].fetches }), k);
@@ -27,7 +32,7 @@ const settle = (page) => page.waitForFunction(() => !document.querySelector('.vw
 // ---------- 비로그인 · 데스크톱 (실제 자료)
 {
   const { ctx, page, calls } = await ctxFor("anon", ANON);
-  await page.goto(`${ANON}/#/hourly?station=108`, { waitUntil: "networkidle" });
+  await page.goto(`${ANON}/#/hourly?station=108&${DH}`, { waitUntil: "networkidle" });
   await page.waitForSelector("#hResult .vw-grid, #hResult .vw-cards", { timeout: 20000 });
   ok(/^#\/hourly-weather\?/.test(await page.evaluate(() => location.hash)), `예전 #/hourly → ${await page.evaluate(() => location.hash.slice(0, 40))}`);
   ok((await page.textContent("#phTitle")) === "시간별 날씨" && (await page.title()).startsWith("시간별 날씨"), "제목 '시간별 날씨'");
@@ -57,14 +62,14 @@ const settle = (page) => page.waitForFunction(() => !document.querySelector('.vw
   ok(/layout=preset%3Apreset_hourly_temp/.test(hash) && /view=card/.test(hash), `주소에 layout·view ${hash.slice(0, 120)}`);
   await page.screenshot({ path: `${SH}/view-hourly-card-desktop.png` });
   // 주소 없이 다시 열면 브라우저에 기억한 것
-  await page.goto(`${ANON}/#/hourly-weather`, { waitUntil: "networkidle" });
+  await page.goto(`${ANON}/#/hourly-weather?${DH}`, { waitUntil: "networkidle" });
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForSelector("#hResult .vw-cards", { timeout: 20000 });
   s = await vstate(page, "hourly");
   ok(s.layout === "preset:preset_hourly_temp" && s.view === "card", `비로그인: localStorage 로 기억 ${JSON.stringify(s)}`);
   ok(!calls.some((c) => c.includes("/api/view-prefs") || c.includes("/api/export/layouts")), "비로그인: 보기 설정·레이아웃 API 를 부르지 않음");
   // 일별
-  await page.goto(`${ANON}/#/daily?station=108`, { waitUntil: "networkidle" });
+  await page.goto(`${ANON}/#/daily?station=108&${DD}`, { waitUntil: "networkidle" });
   await page.waitForSelector("#dResult .vw-grid, #dResult .vw-cards", { timeout: 20000 });
   ok(/^#\/daily-weather/.test(await page.evaluate(() => location.hash)) && (await page.textContent("#phTitle")) === "일별 날씨", "예전 #/daily → 일별 날씨");
   const dopts = await page.$$eval("#dBar select option", (o) => o.map((x) => x.value));
@@ -94,17 +99,19 @@ const settle = (page) => page.waitForFunction(() => !document.querySelector('.vw
 // ---------- 비로그인 · 모바일 (처음이면 카드)
 {
   const { ctx, page } = await ctxFor("anon-m", ANON, { mobile: true });
-  await page.goto(`${ANON}/#/hourly-weather?station=108`, { waitUntil: "networkidle" });
+  await page.goto(`${ANON}/#/hourly-weather?station=108&${DH}`, { waitUntil: "networkidle" });
   await page.waitForSelector("#hResult .vw-cards", { timeout: 20000 });
   ok((await vstate(page, "hourly")).view === "card", "모바일 처음: 카드");
+  await unfold(page, "h");
   await toBar(page, "hBar");
   await page.screenshot({ path: `${SH}/view-hourly-card-mobile.png` });
   await page.click("#hBar button[data-vw=grid]");
   await page.waitForSelector("#hResult .vw-grid");
   await toBar(page, "hBar");
   await page.screenshot({ path: `${SH}/view-hourly-grid-mobile.png` });
-  await page.goto(`${ANON}/#/daily-weather?station=108`, { waitUntil: "networkidle" });
+  await page.goto(`${ANON}/#/daily-weather?station=108&${DD}`, { waitUntil: "networkidle" });
   await page.waitForSelector("#dResult .vw-cards", { timeout: 20000 });
+  await unfold(page, "d");
   await toBar(page, "dBar");
   await page.screenshot({ path: `${SH}/view-daily-card-mobile.png` });
   await page.click("#dBar button[data-vw=grid]");
