@@ -270,7 +270,7 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
     const r = thresholdDates(c.store, "hot30_days", p, c);
     const table = {
       columns: [{ key: "year", label: "연도" }, { key: "first", label: "첫 30℃ 이상" }, { key: "last", label: "마지막 30℃ 이상" }, { key: "count", label: "일수(일)" }, { key: "obs", label: "관측일수" }, { key: "days", label: "구간 일수" }, { key: "status", label: "상태" }, MISS_COL],
-      rows: r.rows.map((x) => ({ year: x.year, first: x.first || "", last: x.last || "", count: x.count, obs: x.obs, days: x.days, status: x.status === "complete" && !x.first ? `${missingLabel(x) || "온전"}(그런 날 없음)` : STATUS_TXT(x), missingDates: missCell(x) })),
+      rows: r.rows.map((x) => ({ year: x.year, first: x.first || "", last: x.last || "", count: x.count, obs: x.obs, days: x.days, status: x.status === "complete" && !x.first ? (missingLabel(x) ? `${missingLabel(x)} · 그런 날 없음` : "온전(그런 날 없음)") : STATUS_TXT(x), missingDates: missCell(x) })),
     };
     return csvOr(url, res, `weather-stats-heat-${fileKey(c.st.station_id)}`, table, [...head("더위가 일찍 올까(최고기온 30℃ 이상 첫날·마지막 날)", c.st, `기간 ${r.period.label} · 연도 ${c.fromYear}~${c.toYear} · 자료 ${c.asOf}까지`), ...r.text], { station: c.station, ...r, rules: LIFE_RULES.heat });
   }
