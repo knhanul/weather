@@ -164,6 +164,15 @@
     .page { display:none; } .page.on { display:grid; gap:16px; }
     svg { width:100%; height:160px; }
     /* 대시보드 */
+    .geo-banner, .geo-note { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin:0 0 12px; padding:9px 12px; border-radius:12px; background:var(--soft); color:var(--fg); font-size:13.5px; line-height:1.45; }
+    .geo-banner[hidden], .geo-note[hidden] { display:none; }
+    .geo-banner .geo-txt { flex:1 1 260px; min-width:0; }
+    .geo-banner .geo-btns { display:flex; flex-wrap:wrap; gap:6px; }
+    .geo-banner button, .geo-note button { height:30px; padding:0 12px; font-size:13px; }
+    .geo-note { background:var(--surface); border:1px solid var(--line); }
+    .geo-note > span:nth-child(2) { flex:1 1 220px; min-width:0; }
+    .geo-note .geo-x { width:30px; padding:0; background:transparent; color:var(--muted); box-shadow:none; }
+    .geo-busy { color:var(--muted); }
     .sec-title { margin:4px 0 -4px; font-size:13px; color:var(--muted); font-weight:500; }
     .q-link { display:flex; align-items:center; justify-content:space-between; gap:12px; text-decoration:none; color:var(--fg); }
     .q-link b { display:block; font-size:15px; color:var(--pri-dark); }
@@ -548,6 +557,8 @@
         <ul class="ph-chips" id="phChips" aria-label="시스템 상태"></ul>
       </header>
       <main>
+        <div class="geo-banner" id="geoBanner" role="status" hidden></div>
+        <p class="geo-note" id="geoNote" role="status" hidden></p>
         <p class="login-note" id="loginNote" role="status" hidden><span id="loginNoteText"></span><button type="button" id="loginNoteClose">닫기</button></p>
         <section class="page" id="dash">
           <div class="st-panel" id="tabOverview">
@@ -788,6 +799,7 @@
     <div class="g-log" id="gDlgLog"></div>
     <div class="g-btns"><button class="sec" id="gDlgCancel" type="button">취소</button><button id="gDlgOk" type="button">수집 시작</button></div>
   </dialog>
+  <script src="/geo.js?v=1"></script>
   <script>
     const $ = (id) => document.getElementById(id);
     // 달력 입력칸 값("2026-09-25T23:00")과 서버 형식("2026-09-25 23:00:00") 사이 변환
@@ -917,8 +929,10 @@
       if (want && known.has(want)) { dashState.station = want; return; }
       if (dashState.station && known.has(dashState.station)) return;
       const list = dashStations();
+      // 기본 지점: 저장한 선택(직접 고름·위치로 고름) > 서울 108 > (자료 있는 지점 중 최신)
       const withData = list.filter((s) => s.summary).sort((a, b) => String(b.summary.last_observation).localeCompare(String(a.summary.last_observation)));
-      dashState.station = (withData[0] || list[0] || {}).id || "108";
+      const pick = window.NWDefaults && NWDefaults.pickStation({ stored: window.NWStation && NWStation.stored(), known: new Set(withData.map((s) => s.id)), fallback: "108" });
+      dashState.station = (pick && pick.id) || (withData[0] || list[0] || {}).id || "108";
     }
     function syncHash() {
       const want = dashCustom()
@@ -1290,7 +1304,7 @@
       const svg = box.querySelector("svg");
       if (svg) { svg.querySelector("line.hv")?.setAttribute("visibility", "hidden"); svg.querySelector("circle.hvdot")?.setAttribute("visibility", "hidden"); }
     }
-    $("stSel").addEventListener("click", (e) => { const b = e.target.closest("button[data-st]"); if (b && !b.disabled) selectStation(b.dataset.st); });
+    $("stSel").addEventListener("click", (e) => { const b = e.target.closest("button[data-st]"); if (b && !b.disabled) { if (window.NWStation) NWStation.manual(b.dataset.st); selectStation(b.dataset.st); } });
     $("periodSel").addEventListener("click", (e) => {
       const b = e.target.closest("button[data-h],button[data-m]");
       if (!b) return;
@@ -2151,6 +2165,7 @@
         if (dashKey() !== before) { renderDashControls(); loadSeries(); }
         else drawChart(false);
       }
+      if (window.NWStation) NWStation.routed(name);
     }
     // ---------- 기상 자료 다운로드 (개선) ----------
     const DL_STORAGE_KEY = "nuni_weather_export_layouts";
@@ -2752,10 +2767,25 @@
     setPageHead(({ "/questions": "questions", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider" })[location.hash.replace("#", "").split("?")[0]] || "dash");
     showLoginNote();
     // 대시보드 자료가 늦거나 실패해도 다른 화면은 그대로 뜨게
-    Promise.allSettled([loadMe(), loadDash()]).then(route);
+    // 기본 지점(geo.js): 지금 화면의 지점, 나중에 정해진 기본 지점(위치·내 계정) 반영 — 주소에 지점을 넣었거나 직접 고른 뒤에는 바꾸지 않음
+    if (window.NWStation) {
+      NWStation.current = () => (currentPage === "hourly" ? $("hStation").value : currentPage === "daily" ? $("dStation").value : currentPage === "questions" || (currentPage === "dash" && !/^#\/(stats\/overview)?(\?|$)/.test(location.hash || "#/")) ? (window.Stats && Stats.station && Stats.station()) || dashState.station : dashState.station);
+      NWStation.onApply((id) => {
+        dashState.station = id;
+        if (window.Stats) window.Stats.onStation(id);
+        for (const sel of ["hStation", "dStation"]) if ([...$(sel).options].some((o) => o.value === id)) $(sel).value = id;
+        const [p, q] = (location.hash || "#/").split("?");
+        if (!["dash", "questions", "hourly", "daily"].includes(currentPage) || p === "#/stats/region") return;
+        const qp = new URLSearchParams(q || "");
+        qp.set("station", id);
+        history.replaceState(history.state, "", `${p || "#/"}?${qp}`);
+        route();
+      });
+    }
+    Promise.allSettled([loadMe(), loadDash()]).then(route).then(() => { if (window.NWStation) { NWStation.start(); NWStation.syncServer(); } });
   </script>
-  <script src="/views.js?v=3"></script>
-  <script src="/stats.js?v=8"></script>
+  <script src="/views.js?v=4"></script>
+  <script src="/stats.js?v=9"></script>
   <script src="/drawer.js?v=1"></script>
 </body>
 </html>

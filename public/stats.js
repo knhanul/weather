@@ -73,12 +73,11 @@
     return s ? `${s.station_id} ${s.station_name}` : String(id);
   };
   const asOfYear = () => (meta && meta.asOf ? +meta.asOf.slice(0, 4) : new Date().getFullYear());
+  // 기본 달 = 지금 달(Asia/Seoul). 진행 중인 달은 올해 값을 '진행 중'으로 따로 두고, 비교는 다 끝난 해끼리(엔진 규칙 그대로)
+  const curMonth = () => (window.NWDefaults ? NWDefaults.seoulMonth() : new Date().getMonth() + 1);
+  const lastDay = (m) => [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
   function defaultPeriod() {
-    if (!meta || !meta.asOf) return "month:5";
-    const y = +meta.asOf.slice(0, 4);
-    const m = +meta.asOf.slice(5, 7);
-    const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
-    return `month:${+meta.asOf.slice(8, 10) === last ? m : m === 1 ? 12 : m - 1}`;
+    return `month:${curMonth()}`;
   }
 
   // ------------------------------------------------------------ 주소 상태
@@ -90,7 +89,8 @@
     const known = (id) => !!stationOf(id);
     const st = q.get("station");
     if (st && known(st)) state.station = st;
-    if (!state.station) state.station = (typeof dashState !== "undefined" && dashState.station && known(dashState.station) ? dashState.station : null) || (known("108") ? "108" : meta?.stations?.[0]?.station_id);
+    const saved = window.NWStation && NWStation.stored();
+    if (!state.station) state.station = (typeof dashState !== "undefined" && dashState.station && known(dashState.station) ? dashState.station : null) || (saved && known(saved.id) ? saved.id : null) || (known("108") ? "108" : meta?.stations?.[0]?.station_id);
     const mt = q.get("metric");
     if (mt && metricOf(mt)) state.metric = mt;
     const pr = q.get("period");
@@ -166,13 +166,14 @@
   // ------------------------------------------------------------ 공통 조건 고르기
   function parsePeriodKey(key) {
     const p = String(key || "").split(":");
-    if (p[0] === "month") return { kind: "month", month: +p[1] || 5 };
-    if (p[0] === "week") return { kind: "week", month: +p[1] || 5, week: +p[2] || 1 };
+    if (p[0] === "month") return { kind: "month", month: +p[1] || curMonth() };
+    if (p[0] === "week") return { kind: "week", month: +p[1] || curMonth(), week: +p[2] || 1 };
     if (p[0] === "season") return { kind: "season", season: SEASON_IDS.includes(p[1]) ? p[1] : "summer" };
     if (p[0] === "range") {
-      const a = (p[1] || "04-25").split("-").map(Number);
-      const b = (p[2] || "05-05").split("-").map(Number);
-      return { kind: "range", sm: a[0] || 4, sd: a[1] || 25, em: b[0] || 5, ed: b[1] || 5 };
+      const cm = curMonth();
+      const a = (p[1] || `${p2(cm)}-01`).split("-").map(Number);
+      const b = (p[2] || `${p2(cm)}-${lastDay(cm)}`).split("-").map(Number);
+      return { kind: "range", sm: a[0] || cm, sd: a[1] || 1, em: b[0] || cm, ed: b[1] || lastDay(cm) };
     }
     return { kind: "year" };
   }
@@ -211,13 +212,13 @@
     const prev = parsePeriodKey(state.period);
     const o = { kind };
     const val = (k, d) => (g(k) ? +g(k).value : d);
-    o.month = val("month", prev.month || 5);
+    o.month = val("month", prev.month || curMonth());
     o.week = val("week", prev.week || 1);
     o.season = g("season") ? g("season").value : prev.season || "summer";
-    o.sm = val("sm", prev.sm || 4);
-    o.sd = val("sd", prev.sd || 25);
-    o.em = val("em", prev.em || 5);
-    o.ed = val("ed", prev.ed || 5);
+    o.sm = val("sm", prev.sm || curMonth());
+    o.sd = val("sd", prev.sd || 1);
+    o.em = val("em", prev.em || curMonth());
+    o.ed = val("ed", prev.ed || lastDay(curMonth()));
     return periodKeyOf(o);
   }
   function metricSelectHtml(id, cur) {
@@ -510,7 +511,7 @@
       <div><label>보기</label><div class="seg"><button type="button" data-mode="trend" class="${state.mode === "trend" ? "on" : ""}">연도별 추이</button><button type="button" data-mode="overlay" class="${state.mode === "overlay" ? "on" : ""}">날짜별 겹쳐보기</button></div></div>`;
   }
   function onYearlyCtl(t) {
-    if (t.id === "yxSt") state.station = t.value;
+    if (t.id === "yxSt") { state.station = t.value; if (window.NWStation) NWStation.manual(t.value); }
     else if (t.id === "yxMetric") state.metric = t.value;
     else if (t.id === "yxFrom" || t.id === "yxTo") {
       state.from = +$id("yxFrom").value;
@@ -891,7 +892,7 @@
   ];
   const REC_VIEWS = [["records", "기록 순위"], ["day", "매년 같은 날"], ["date", "그날의 날씨"]];
   const PRESET_DAYS = [["01-01", "새해 첫날"], ["03-01", "삼일절"], ["05-05", "어린이날"], ["06-06", "현충일"], ["08-15", "광복절"], ["10-03", "개천절"], ["10-09", "한글날"], ["12-25", "성탄절"], ["02-29", "2/29"]];
-  const life = { view: "heat", kind: "wet", md: "05-05", wperiod: "year", tperiod: "range:06-01:09-30", o: { tmin: 10, tmax: 25, dry: true, wind: 5, h1: 6, h2: 9, hum: null }, am: [7, 9], pm: [17, 19], weekdays: true };
+  const life = { view: "heat", kind: "wet", md: window.NWDefaults ? NWDefaults.seoulMd() : "05-05", wperiod: "year", tperiod: "range:06-01:09-30", o: { tmin: 10, tmax: 25, dry: true, wind: 5, h1: 6, h2: 9, hum: null }, am: [7, 9], pm: [17, 19], weekdays: true };
   const rec = { view: "records", period: "all", date: null };
   const reqL = { n: 0 };
   const hoursOpts = Array.from({ length: 24 }, (_, h) => [h, `${h}시`]);
@@ -975,7 +976,7 @@
     p.innerHTML = `<div class="card"><h2 class="sx-q">생활 속 날씨<small>주말·산책·러닝·출퇴근·기념일처럼 생활과 가까운 질문을 과거 관측으로 봅니다. 앞으로의 예보·확률이 아닙니다.</small></h2><div class="sx-ctl" id="lxCtl"></div><div id="lxNav"></div><div class="sx-ctl" id="lxCtl2" style="margin-top:10px"></div></div><div class="card" id="lxOut"></div>`;
     p.addEventListener("change", (e) => {
       const t = e.target;
-      if (t.id === "lxSt") state.station = t.value;
+      if (t.id === "lxSt") { state.station = t.value; if (window.NWStation) NWStation.manual(t.value); }
       else if (t.id === "lxFrom" || t.id === "lxTo") {
         state.from = +$id("lxFrom").value;
         state.to = +$id("lxTo").value;
@@ -1257,7 +1258,7 @@
     p.innerHTML = `<div class="card"><h2 class="sx-q">날씨 기록<small>보유 관측기간(1990년~)의 최고·최저 기록과, 특정 날짜의 과거 날씨 · 관측지점 한 곳의 공식 일자료</small></h2><div class="sx-ctl" id="rcCtl"></div><div id="rcNav"></div></div><div class="card" id="rcOut"></div>`;
     p.addEventListener("change", (e) => {
       const t = e.target;
-      if (t.id === "rcSt") state.station = t.value;
+      if (t.id === "rcSt") { state.station = t.value; if (window.NWStation) NWStation.manual(t.value); }
       else if (t.id === "rcPeriod") rec.period = t.value;
       else if (t.id === "rcDate") {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(t.value)) return;
@@ -1402,6 +1403,7 @@
     p.addEventListener("change", (e) => {
       if (e.target.id !== "qxSt") return;
       state.station = e.target.value;
+      if (window.NWStation) NWStation.manual(state.station);
       history.replaceState(null, "", questionsHref(state.station));
       loadQuestions();
     });
@@ -1435,7 +1437,7 @@
     state.station = id;
     updateTabLinks();
   }
-  window.Stats = { route, onStation };
+  window.Stats = { route, onStation, station: () => state.station };
   // 본문 스크립트의 첫 route() 가 이 파일보다 먼저 돌았으면 지금 탭을 맞춘다
   if (typeof route === "function") {
     const h = location.hash.replace("#", "").split("?")[0] || "/";

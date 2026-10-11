@@ -105,7 +105,14 @@
   function applyHashInputs(kind, hp) {
     const p = P[kind];
     const sid = hp.get("station");
-    if (sid && [...$(p.st).options].some((o) => o.value === sid)) $(p.st).value = sid;
+    const has = (id) => id && [...$(p.st).options].some((o) => o.value === id);
+    if (has(sid)) $(p.st).value = sid;
+    else if (!$(p.st).dataset.touched) {
+      // 주소에 지점이 없으면 기본 지점(저장한 선택 > 서울 108)
+      const saved = window.NWStation && NWStation.stored();
+      if (saved && has(saved.id)) $(p.st).value = saved.id;
+      else if (has("108")) $(p.st).value = "108";
+    }
     const okH = (v) => /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(v || "");
     const okD = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || "");
     for (const [k, id] of [["from", p.from], ["to", p.to]]) {
@@ -312,6 +319,10 @@
     if (s.bound) return;
     s.bound = true;
     const p = P[kind];
+    $(p.st).addEventListener("change", () => {
+      $(p.st).dataset.touched = "1";
+      if (window.NWStation) NWStation.manual($(p.st).value);
+    });
     $(p.bar).addEventListener("change", (e) => {
       if (e.target.dataset.vw !== "layout") return;
       s.layout = e.target.value;
