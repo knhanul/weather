@@ -1,5 +1,4 @@
 // 메뉴 이름·예전 주소, 시간별·일별 날씨 레이아웃·그리드/카드, 보기 설정(비로그인/로그인) e2e + 스크린샷 /workspace/shots/view-*.png
-// 실행: ANON=<실제 자료 서버> LOCAL=<로그인 테스트 세션 서버(JSON 모드, data/hourly.json)> TOKEN=<nw_session> node scripts/e2e/views.e2e.mjs (playwright-core 필요)
 import { chromium } from "playwright-core";
 const ANON = process.env.ANON || "http://127.0.0.1:8099"; // 실제 자료(테스트 컨테이너)
 const LOCAL = process.env.LOCAL || "http://127.0.0.1:8095"; // 로그인 테스트 세션(JSON 모드)
@@ -33,7 +32,7 @@ const settle = (page) => page.waitForFunction(() => !document.querySelector('.vw
   ok(/^#\/hourly-weather\?/.test(await page.evaluate(() => location.hash)), `예전 #/hourly → ${await page.evaluate(() => location.hash.slice(0, 40))}`);
   ok((await page.textContent("#phTitle")) === "시간별 날씨" && (await page.title()).startsWith("시간별 날씨"), "제목 '시간별 날씨'");
   const nav = await page.$$eval("nav a[data-page]", (a) => a.map((x) => [x.dataset.page, x.textContent.trim(), x.getAttribute("href"), x.classList.contains("active")]));
-  ok(JSON.stringify(nav.slice(1, 4).map((x) => x.slice(0, 3))) === JSON.stringify([["hourly", "시간별 날씨", "#/hourly-weather"], ["daily", "일별 날씨", "#/daily-weather"], ["download", "보기 설정", "#/view-settings"]]) && nav[1][3], `메뉴 ${JSON.stringify(nav.slice(1, 4))}`);
+  ok(JSON.stringify(nav.slice(2, 5).map((x) => x.slice(0, 3))) === JSON.stringify([["hourly", "시간별 날씨", "#/hourly-weather"], ["daily", "일별 날씨", "#/daily-weather"], ["download", "보기 설정", "#/view-settings"]]) && nav[2][3], `메뉴 ${JSON.stringify(nav.slice(2, 5))}`);
   const opts = await page.$$eval("#hBar select option", (o) => o.map((x) => x.value));
   ok(opts.every((v) => v.startsWith("preset:preset_hourly_")) && opts.length === 4, `비로그인 레이아웃 = 시간 프리셋 4개만 ${opts.join(",")}`);
   ok(!(await page.$("#hBar optgroup[label='내 레이아웃']")) && /카카오 로그인/.test(await page.textContent("#hBar")), "비로그인: 내 레이아웃 없음 + 로그인 안내");
@@ -88,10 +87,8 @@ const settle = (page) => page.waitForFunction(() => !document.querySelector('.vw
   await page.locator("#xColGroups input[data-col=avg_temperature]").click({ force: true }).catch(() => {});
   ok(!(await page.isChecked("#xColGroups input[data-col=avg_temperature]")), "비로그인: 컬럼을 눌러도 바뀌지 않음");
   await page.screenshot({ path: `${SH}/view-settings-loggedout-desktop.png` });
-  const [dl] = await Promise.all([page.waitForEvent("download", { timeout: 20000 }), page.click("#xDownloadBtn")]);
-  const csv = await (await dl.createReadStream()).toArray().then((b) => Buffer.concat(b).toString("utf8"));
-  const head = csv.split("\n").find((l) => !l.startsWith("\uFEFF#") && !l.startsWith("#"));
-  ok(head === "observation_date,station_id,station_name,precipitation,max_precip_10min,max_precip_1h,precip_duration,max_new_snow,max_snow_depth,snow_new_3h_sum", `CSV 내려받기(프리셋 컬럼) ${head}`);
+  const gone = await page.evaluate(() => ["xStation", "xFrom", "xFromDaily", "xPreviewThead", "xDownloadBtn", "dlStorageBadge"].filter((id) => document.getElementById(id)).length + document.querySelectorAll(".dl-quick-ranges").length);
+  ok(gone === 0 && !/미리보기|내려받기 범위/.test(await page.textContent("#download h2:first-of-type, #download")), "보기 설정: 미리보기·내려받기 범위 없음");
   await ctx.close();
 }
 // ---------- 비로그인 · 모바일 (처음이면 카드)
