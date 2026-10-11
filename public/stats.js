@@ -11,6 +11,10 @@
   const signed = (v, unit) => (v === null || v === undefined ? "—" : `${v > 0 ? "+" : v < 0 ? "−" : "±"}${num(Math.abs(v), 1)}${unit}`);
   const md = (ymd) => (ymd ? `${+ymd.slice(5, 7)}/${+ymd.slice(8, 10)}` : "");
   const ymdDot = (ymd) => (ymd ? `${ymd.slice(0, 4)}.${+ymd.slice(5, 7)}.${+ymd.slice(8, 10)}` : "");
+  // 1일 결측(값은 비교에 넣음, 빠진 날은 채우지 않음): '1일 결측(10/12)'
+  const MISS = (x, unit = "일") => (x && x.status === "complete" && x.missing ? `${x.missing}${unit} 결측${x.missingDates?.length ? `(${x.missingDates.map(md).join(", ")})` : ""}` : "");
+  const missTip = (x, unit = "일") => (MISS(x, unit) ? ` <span class="sx-miss">${E(MISS(x, unit))} · 나머지 ${unit === "밤" ? "밤" : "날"}로 계산</span>` : "");
+  const missWarn = (list, unit = "일") => (list && list.length ? `<p class="sx-warn sx-warn-miss">${E(`${unit === "밤" ? "1밤" : "1일"} 결측을 포함해 계산한 연도: ${list.slice(0, 8).map((x) => `${x.year}년(${x.dates.map(md).join(", ")} 빠짐 · ${x.obs}/${x.days}${unit})`).join(", ")}${list.length > 8 ? ` 외 ${list.length - 8}개` : ""} — 빠진 ${unit === "밤" ? "밤" : "날"}은 채우지 않고 나머지로만 집계`)}</p>` : "");
   const STATUS = { complete: "온전", partial: "자료 부족", none: "자료 없음", ongoing: "진행 중", future: "아직 없음", nodate: "그 해엔 없는 날짜" };
   const PERIOD_KINDS = [["year", "연 전체"], ["month", "월 전체"], ["week", "월 안의 날짜 구간"], ["season", "계절"], ["range", "직접 지정"]];
   const SEASON_IDS = ["spring", "summer", "autumn", "winter"];
@@ -559,7 +563,7 @@
     const key = [];
     if (s.highest) key.push(`<div><span>${hiW}</span><b>${fv(s.highest.value, m)}</b><small>${E(yrs(s.highest.years.slice(0, 3)))}${s.highest.years.length > 3 ? ` 외 ${s.highest.years.length - 3}개` : ""}${s.highest.years.length === 1 ? dateOf(s.highest.years[0]) : ""}</small></div>`);
     if (s.lowest) key.push(`<div><span>${loW}</span><b>${fv(s.lowest.value, m)}</b><small>${E(yrs(s.lowest.years.slice(0, 3)))}${s.lowest.years.length > 3 ? ` 외 ${s.lowest.years.length - 3}개` : ""}${s.lowest.years.length === 1 ? dateOf(s.lowest.years[0]) : ""}</small></div>`);
-    if (s.latest) key.push(`<div><span>최근 비교 가능한 해 · ${s.latest.year}년</span><b>${fv(s.latest.value, m)}</b><small>${s.latest.rank.of}개 연도 중 ${ord} ${s.latest.rank.high}위${s.latest.date ? ` · ${md(s.latest.date)}` : ""}</small></div>`);
+    if (s.latest) key.push(`<div><span>최근 비교 가능한 해 · ${s.latest.year}년</span><b>${fv(s.latest.value, m)}</b><small>${s.latest.rank.of}개 연도 중 ${ord} ${s.latest.rank.high}위${s.latest.date ? ` · ${md(s.latest.date)}` : ""}${s.latest.missing ? ` · ${E(MISS({ status: "complete", missing: s.latest.missing, missingDates: s.latest.missingDates }))}` : ""}</small></div>`);
     key.push(
       d.available
         ? `<div><span>1990년대 대비 변화</span><b class="${d.delta > 0 ? "up" : d.delta < 0 ? "down" : ""}">${signed(d.delta, m.unit)}${d.pct != null ? ` <small style="display:inline">(${d.pct > 0 ? "+" : d.pct < 0 ? "−" : "±"}${Math.abs(d.pct)}%)</small>` : ""}</b><small>${d.baseline.from}~${d.baseline.to}년 ${num(d.baseline.mean, 1)}${E(m.unit)} (${d.baseline.n}개 연도) → ${d.recent.from}~${d.recent.to}년 ${num(d.recent.mean, 1)}${E(m.unit)} (${d.recent.n}개 연도)</small></div>`
@@ -567,7 +571,8 @@
     );
     key.push(`<div><span>계산에 쓴 자료</span><b>${s.completeYears}개 연도</b><small>${r.fromYear}~${r.toYear}년 중 · 관측일 ${num(obsSum, 0)}일 · 자료 ${E(r.asOf)}까지</small></div>`);
     const warn = [];
-    if (s.incomplete.length) warn.push(`자료 부족으로 그래프·순위·평균에서 뺀 연도: ${s.incomplete.slice(0, 8).map((x) => `${x.year}년(관측 ${x.obs}/${x.days}일)`).join(", ")}${s.incomplete.length > 8 ? ` 외 ${s.incomplete.length - 8}개` : ""}`);
+    const missHtml = missWarn(s.missing1);
+    if (s.incomplete.length) warn.push(`자료 부족(2일 이상 결측)으로 그래프·순위·평균에서 뺀 연도: ${s.incomplete.slice(0, 8).map((x) => `${x.year}년(관측 ${x.obs}/${x.days}일)`).join(", ")}${s.incomplete.length > 8 ? ` 외 ${s.incomplete.length - 8}개` : ""}`);
     const nod = r.rows.filter((x) => x.status === "nodate");
     if (nod.length) warn.push(`평년에는 이 날짜가 없어 ${nod.length}개 연도를 비교하지 않았습니다(2월 29일).`);
     const ong = r.ongoing;
@@ -593,14 +598,14 @@
     const tip = (i) => {
       const x = r.rows[i];
       if (!x || x.status === "nodate" || x.status === "future") return x ? `<b>${x.year}년</b><br>${E(STATUS[x.status])}` : "";
-      const v = x.status === "complete" ? `${E(m.label)} <b>${fv(x.value, m)}</b>${x.date ? ` · ${md(x.date)}` : ""}` : x.status === "ongoing" ? `진행 중(${E(x.until)}까지) · 구간 전체 값 없음` : `<span>${E(STATUS[x.status])} — 값을 내지 않음</span>`;
+      const v = x.status === "complete" ? `${E(m.label)} <b>${fv(x.value, m)}</b>${x.date ? ` · ${md(x.date)}` : ""}${missTip(x)}` : x.status === "ongoing" ? `진행 중(${E(x.until)}까지) · 구간 전체 값 없음` : `<span>${E(STATUS[x.status])} — 값을 내지 않음</span>`;
       return `<b>${x.year}년</b> <span class="tip-sub">${ymdDot(x.start)}~${ymdDot(x.end)} · ${x.days}일</span><br>${v}<br><span class="tip-sub">관측 ${x.obs}/${x.days}일 · ${SOURCE}</span>`;
     };
     out.innerHTML = `
       <h2 class="sx-q">${E(q)}<small>${E(r.fromYear)}~${E(r.toYear)}년 · 해마다 같은 날짜 구간(${E(r.period.label)})을 집계 · ${E(m.def)}</small></h2>
       <div class="sx-key">${key.join("")}</div>
       <ul class="sx-text">${r.text.map((t) => `<li>${E(t)}</li>`).join("")}</ul>
-      ${warn.map((w) => `<p class="sx-warn">${E(w)}</p>`).join("")}
+      ${warn.map((w) => `<p class="sx-warn">${E(w)}</p>`).join("")}${missHtml}
       ${ok ? `<div class="sx-chart" id="yxChart"></div>${legendHtml([
         { label: `${m.label}(${m.unit}) · ${m.chart === "line" ? "선" : "막대"}`, color: COLORS[0], cls: m.chart === "bar" ? "bar" : "" },
         ...(refs.length ? [{ label: `${d.baseline.from}~${d.baseline.to}년 평균`, color: "#64748b", cls: "dash" }, { label: `${d.recent.from}~${d.recent.to}년 평균`, color: "#c2410c", cls: "dash" }] : []),
@@ -629,7 +634,7 @@
     const m = r.metric;
     const v = r.value;
     const q = `${stName(r.station.station_id)}의 ${r.period.label}, 해마다 날짜별로 어땠을까?`;
-    const notes = r.series.filter((s) => s.status !== "complete").map((s) => `${s.year}년: ${s.status === "ongoing" ? `진행 중 — ${ymdDot(s.until)}까지` : s.status === "future" ? "아직 자료가 없는 기간" : s.status === "nodate" ? "그 해엔 없는 날짜" : `자료 부족(관측 ${s.obs}/${s.days}일)${v.cumulative ? " — 자료 없는 날 이후 누적은 끊김" : ""}`}`);
+    const notes = r.series.filter((s) => s.status !== "complete" || s.missing).map((s) => s.status === "complete" ? `${s.year}년: ${MISS(s)} — 빠진 날은 점이 없음${v.cumulative ? ", 그 뒤 누적은 끊김" : ""}` : `${s.year}년: ${s.status === "ongoing" ? `진행 중 — ${ymdDot(s.until)}까지` : s.status === "future" ? "아직 자료가 없는 기간" : s.status === "nodate" ? "그 해엔 없는 날짜" : `자료 부족(관측 ${s.obs}/${s.days}일)${v.cumulative ? " — 자료 없는 날 이후 누적은 끊김" : ""}`}`);
     const has = r.series.some((s) => s.values.some((x) => x != null));
     const labels = r.keys;
     const tip = (i) => {
@@ -858,7 +863,7 @@
     const has = r.commonYears.length > 0;
     const tip = (i) => {
       const x = rows0[i];
-      const lines = r.stations.map((s) => `<span style="color:${colorOf(r, s.station_id)}">●</span> ${E(stShort(s.station_id))} <b>${s.rows[i].common ? fv(s.rows[i].value, m) : E(STATUS[s.rows[i].status] || "")}</b>${s.rows[i].date ? ` · ${md(s.rows[i].date)}` : ""}`);
+      const lines = r.stations.map((s) => `<span style="color:${colorOf(r, s.station_id)}">●</span> ${E(stShort(s.station_id))} <b>${s.rows[i].common ? fv(s.rows[i].value, m) : E(STATUS[s.rows[i].status] || "")}</b>${s.rows[i].date ? ` · ${md(s.rows[i].date)}` : ""}${s.rows[i].common ? missTip(s.rows[i]) : ""}`);
       return `<b>${x.year}년</b> <span class="tip-sub">${x.start ? `${ymdDot(x.start)}~${ymdDot(x.end)} · ${x.days}일` : ""}</span><br>${lines.join("<br>")}<br><span class="tip-sub">${x.common ? "공통 연도" : "공통 연도 아님(값 숨김)"} · ${SOURCE}</span>`;
     };
     out.innerHTML = `
@@ -1070,7 +1075,7 @@
     fn(out, r, url, "lx");
   }
   const yrShade = (rows) => rows.map((x, i) => ({ x, i })).filter(({ x }) => ["partial", "none", "ongoing"].includes(x.status)).map(({ x, i }) => ({ i, label: x.status === "ongoing" ? "진행" : "부족" }));
-  const incWarn = (list) => (list && list.length ? `<p class="sx-warn">${E(`자료 부족으로 값·순위에서 뺀 연도: ${list.slice(0, 8).map((x) => `${x.year}년(${x.obs}/${x.days}일)`).join(", ")}${list.length > 8 ? ` 외 ${list.length - 8}개` : ""}`)}</p>` : "");
+  const incWarn = (list) => (list && list.length ? `<p class="sx-warn">${E(`자료 부족(2일 이상 결측)으로 값·순위에서 뺀 연도: ${list.slice(0, 8).map((x) => `${x.year}년(${x.obs}/${x.days}일)`).join(", ")}${list.length > 8 ? ` 외 ${list.length - 8}개` : ""}`)}</p>` : "");
   const yrLabel = (labels) => (i) => (labels.length > 12 ? `'${labels[i].slice(2)}` : labels[i]);
   const signedPlain = (v, unit) => (v === null || v === undefined ? "—" : `${v > 0 ? "+" : v < 0 ? "−" : "±"}${num(Math.abs(v), 1)}${unit}`);
 
@@ -1108,7 +1113,7 @@
     ].join("");
     const has = rows.some((x) => ok(x) && x.first);
     out.innerHTML = `<h2 class="sx-q">${E(stName(state.station))}, 더위가 더 일찍 찾아올까?<small>매년 처음·마지막으로 일최고기온 30℃ 이상이었던 날(서비스 기준 — 여름 시작·폭염특보 기준 아님) · 공식 일자료</small></h2>
-      <div class="sx-key">${key}</div><ul class="sx-text">${r.text.map((t) => `<li>${E(t)}</li>`).join("")}</ul>${incWarn(s.incomplete)}
+      <div class="sx-key">${key}</div><ul class="sx-text">${r.text.map((t) => `<li>${E(t)}</li>`).join("")}</ul>${incWarn(s.incomplete)}${missWarn(s.missing1)}
       ${s.noEventYears.length ? `<p class="sx-warn">30℃ 이상인 날이 없었던 해(날짜 평균에서 뺌): ${E(s.noEventYears.join(", "))}</p>` : ""}
       ${has ? `<div class="sx-chart" id="lxChart"></div>${legendHtml([{ label: "첫 30℃ 이상 날", color: COLORS[1] }, { label: "마지막 30℃ 이상 날", color: COLORS[0] }, { label: "자료 부족·진행 중", cls: "box" }])}<div class="sx-chart" id="lxChart2"></div>${legendHtml([{ label: "30℃ 이상인 날 수(일) · 막대", color: "#c2410c", cls: "bar" }])}` : stateHtml("표시할 연도가 없습니다.")}
       ${csvLink(url)}${tableHtml(r.table, (row, i) => rows[i].status !== "complete")}${rulesList(r.rules, DAILY_RULES())}`;
@@ -1117,10 +1122,10 @@
       labels, type: "line", unit: "", shade: yrShade(rows),
       series: [{ name: "첫날", color: COLORS[1], values: rows.map((x) => (ok(x) ? x.firstPos : null)) }, { name: "마지막 날", color: COLORS[0], values: rows.map((x) => (ok(x) ? x.lastPos : null)) }],
       yFmt: posToMdC, yStep: (span) => (span > 150 ? 30 : span > 60 ? 15 : 7),
-      tip: (i) => { const x = rows[i]; return `<b>${x.year}년</b><br>${ok(x) ? `첫날 <b>${x.first ? md(x.first) : "없음"}</b> · 마지막 <b>${x.last ? md(x.last) : "없음"}</b><br>30℃ 이상 ${x.count}일` : E(STATUS[x.status] || "")}<br><span class="tip-sub">관측 ${x.obs ?? 0}/${x.days ?? 0}일 · ${SOURCE}</span>`; },
+      tip: (i) => { const x = rows[i]; return `<b>${x.year}년</b><br>${ok(x) ? `첫날 <b>${x.first ? md(x.first) : "없음"}</b> · 마지막 <b>${x.last ? md(x.last) : "없음"}</b><br>30℃ 이상 ${x.count}일${missTip(x)}` : E(STATUS[x.status] || "")}<br><span class="tip-sub">관측 ${x.obs ?? 0}/${x.days ?? 0}일 · ${SOURCE}</span>`; },
       xLabel: yrLabel(labels), aria: "연도별 첫·마지막 30℃ 이상 날짜",
     });
-    chart($id("lxChart2"), { labels, type: "bar", unit: "일", shade: yrShade(rows), series: [{ name: "일수", color: "#c2410c", values: rows.map((x) => (ok(x) ? x.count : null)) }], tip: (i) => `<b>${rows[i].year}년</b><br>30℃ 이상 <b>${ok(rows[i]) ? `${rows[i].count}일` : E(STATUS[rows[i].status] || "")}</b>`, xLabel: yrLabel(labels), aria: "연도별 30℃ 이상인 날 수" });
+    chart($id("lxChart2"), { labels, type: "bar", unit: "일", shade: yrShade(rows), series: [{ name: "일수", color: "#c2410c", values: rows.map((x) => (ok(x) ? x.count : null)) }], tip: (i) => `<b>${rows[i].year}년</b><br>30℃ 이상 <b>${ok(rows[i]) ? `${rows[i].count}일` : E(STATUS[rows[i].status] || "")}</b>${ok(rows[i]) ? missTip(rows[i]) : ""}`, xLabel: yrLabel(labels), aria: "연도별 30℃ 이상인 날 수" });
   }
   function posToMdC(pos) {
     if (pos === null || pos === undefined || !Number.isFinite(pos)) return "";
@@ -1143,10 +1148,10 @@
         ${r.summary.longest ? `<div><span>연도별 가장 긴 해</span><b>${r.summary.longest.len}일</b><small>${r.summary.longest.year}년 (${md(r.summary.longest.runStart)}~${md(r.summary.longest.runEnd)})</small></div>` : ""}
         <div><span>해마다 가장 긴 기간(평균) · 1990년대 대비</span><b>${d.available ? signedPlain(d.delta, "일") : "비교 안 함"}</b><small>${d.available ? `${num(d.baseline.mean, 1)}일 → ${num(d.recent.mean, 1)}일 (${d.recent.from}~${d.recent.to})` : E(d.reason || "")}</small></div></div>
       <div class="sx-rec"><div><h3>보유 기간 최장 기록 10위<small>구간·연도 경계와 상관없이 셈</small></h3><ol>${top.map((t) => `<li><span class="r">${t.rank}위</span><span>${ymdDot(t.start)}~${ymdDot(t.end)}${t.endReason === "missing" ? " <small class=\"muted\">(다음 날 자료 없음)</small>" : t.endReason === "range" ? ' <small class="muted">(진행 중)</small>' : ""}</span><b>${t.len}일</b></li>`).join("")}</ol></div></div>
-      ${incWarn(r.summary.incomplete)}
+      ${incWarn(r.summary.incomplete)}${missWarn(r.summary.missing1)}
       <div class="sx-chart" id="lxChart"></div>${legendHtml([{ label: `해마다 가장 긴 ${r.kindLabel}(일) · ${r.period.label}`, color: wet ? COLORS[0] : "#ca8a04", cls: "bar" }, { label: "자료 부족·진행 중(값 없음)", cls: "box" }])}
       ${csvLink(url)}${tableHtml(r.table, (row, i) => rows[i].status !== "complete")}${rulesList(r.rules, DAILY_RULES())}`;
-    chart($id("lxChart"), { labels, type: "bar", unit: "일", shade: yrShade(rows), series: [{ name: r.kindLabel, color: wet ? COLORS[0] : "#ca8a04", values: rows.map((x) => (ok(x) ? x.len : null)) }], tip: (i) => { const x = rows[i]; return `<b>${x.year}년</b><br>${ok(x) ? `가장 긴 ${E(r.kindLabel)} <b>${x.len}일</b>${x.runStart ? `<br>${md(x.runStart)}~${md(x.runEnd)}` : ""}` : E(STATUS[x.status] || "")}<br><span class="tip-sub">관측 ${x.obs ?? 0}/${x.days ?? 0}일 · ${SOURCE}</span>`; }, xLabel: yrLabel(labels), aria: q });
+    chart($id("lxChart"), { labels, type: "bar", unit: "일", shade: yrShade(rows), series: [{ name: r.kindLabel, color: wet ? COLORS[0] : "#ca8a04", values: rows.map((x) => (ok(x) ? x.len : null)) }], tip: (i) => { const x = rows[i]; return `<b>${x.year}년</b><br>${ok(x) ? `가장 긴 ${E(r.kindLabel)} <b>${x.len}일</b>${x.runStart ? `<br>${md(x.runStart)}~${md(x.runEnd)}` : ""}${missTip(x)}` : E(STATUS[x.status] || "")}<br><span class="tip-sub">관측 ${x.obs ?? 0}/${x.days ?? 0}일 · ${SOURCE}</span>`; }, xLabel: yrLabel(labels), aria: q });
   }
 
   function lifeWeekendView(out, r, url) {
@@ -1222,11 +1227,11 @@
         ${s.highest ? `<div><span>가장 많았던 해</span><b>${s.highest.value}일</b><small>${E(s.highest.years.join(", "))}년</small></div>` : ""}
         <div><span>1990년대 대비</span><b style="font-size:14px">${r.delta.available ? signedPlain(r.delta.delta, "일") : "비교하지 않음"}</b><small>${E(r.delta.available ? `${r.delta.baseline.mean}일 → ${r.delta.recent.mean}일` : r.delta.reason || "")}</small></div>
         <div><span>판정 가능한 연도</span><b>${s.completeYears}개</b><small>${r.fromYear}~${r.toYear}년 중</small></div></div>
-      <ul class="sx-text">${r.text.map((t) => `<li>${E(t)}</li>`).join("")}</ul>${incWarn(s.incomplete)}
-      ${s.completeYears ? `<div class="sx-chart" id="lxChart"></div>${legendHtml([{ label: "열대야 추정(일) · 막대", color: "#9333ea", cls: "bar" }, { label: "판정 못 한 밤이 있는 해(값 없음)", cls: "box" }])}` : stateHtml("모든 밤을 판정할 수 있는 연도가 없습니다.")}
+      <ul class="sx-text">${r.text.map((t) => `<li>${E(t)}</li>`).join("")}</ul>${incWarn(s.incomplete)}${missWarn(s.missing1, "밤")}
+      ${s.completeYears ? `<div class="sx-chart" id="lxChart"></div>${legendHtml([{ label: "열대야 추정(일) · 막대", color: "#9333ea", cls: "bar" }, { label: "판정 못 한 밤이 2밤 이상인 해(값 없음)", cls: "box" }])}` : stateHtml("모든 밤을 판정할 수 있는 연도가 없습니다.")}
       ${csvLink(url)}${tableHtml(r.table, (row, i) => rows[i].status !== "complete")}${rulesList(r.rules, [HOURLY_NOTE])}`;
     if (!s.completeYears) return;
-    chart($id("lxChart"), { labels, type: "bar", unit: "일", shade: yrShade(rows), series: [{ name: "열대야", color: "#9333ea", values: rows.map((x) => (ok(x) ? x.value : null)) }], tip: (i) => { const x = rows[i]; return `<b>${x.year}년</b> <span class="tip-sub">${x.start ? `${ymdDot(x.start)}~${ymdDot(x.end)}` : ""}</span><br>${ok(x) ? `열대야(추정) <b>${x.value}일</b>` : `${E(STATUS[x.status] || "")}${x.countValid != null ? ` — 판정한 밤 중 ${x.countValid}일` : ""}`}<br><span class="tip-sub">판정한 밤 ${x.obs ?? 0}/${x.days ?? 0} · ${x.warmestNight ? `가장 더운 밤 ${md(x.warmestNight.date)} ${x.warmestNight.min}℃ · ` : ""}시간자료 집계</span>`; }, xLabel: yrLabel(labels), aria: "연도별 열대야 추정" });
+    chart($id("lxChart"), { labels, type: "bar", unit: "일", shade: yrShade(rows), series: [{ name: "열대야", color: "#9333ea", values: rows.map((x) => (ok(x) ? x.value : null)) }], tip: (i) => { const x = rows[i]; return `<b>${x.year}년</b> <span class="tip-sub">${x.start ? `${ymdDot(x.start)}~${ymdDot(x.end)}` : ""}</span><br>${ok(x) ? `열대야(추정) <b>${x.value}일</b>${missTip(x, "밤")}` : `${E(STATUS[x.status] || "")}${x.countValid != null ? ` — 판정한 밤 중 ${x.countValid}일` : ""}`}<br><span class="tip-sub">판정한 밤 ${x.obs ?? 0}/${x.days ?? 0} · ${x.warmestNight ? `가장 더운 밤 ${md(x.warmestNight.date)} ${x.warmestNight.min}℃ · ` : ""}시간자료 집계</span>`; }, xLabel: yrLabel(labels), aria: "연도별 열대야 추정" });
   }
 
   // ---- 날씨 기록 탭
