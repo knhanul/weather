@@ -22,3 +22,14 @@
 - 함께 고침: 터치에서 손을 떼면 pointerleave 로 툴팁이 바로 사라지던 문제(터치는 다음 탭까지 유지).
 - 확인: `scripts/e2e/chart-full.e2e.mjs`(Playwright 모바일 에뮬레이션: iOS 대체/안드로이드 스텁/가로/데스크톱, 30여 항목 통과), `scripts/e2e/csp-harness.mjs`(엄격 CSP 위반 0), 회귀 해시(health 의 db_ms 외 동일). 실제 기기(iPhone·Android)는 미확인.
 - 참고: 사이트는 현재 CSP 헤더를 보내지 않으며 기존 index.html 인라인 `<script>`·`<style>`·style 속성이 있어 엄격 CSP 를 바로 켤 수는 없음(새 컴포넌트는 준비됨). PWA: manifest(display standalone) 있음, 서비스 워커 없음.
+
+## 2026-10-11 — 메뉴 이름 변경 · 보기 설정 · 시간별/일별 날씨 그리드|카드
+
+- 메뉴: 시간자료 → **시간별 날씨**(`#/hourly-weather`), 일자료 → **일별 날씨**(`#/daily-weather`), 다운로드 → **보기 설정**(`#/view-settings`). 예전 `#/hourly`·`#/daily`·`#/download` 는 `?조건`을 그대로 두고 새 주소로 바꿔 줌(replaceState).
+- `/api/view` (새, 공개 GET): `kind, stationId, from, to, columns, page, pageSize(≤1000, 기본 200)` → 고른 컬럼만(+ 출처 표시용 `source_kind`) 페이지 단위. 시간자료는 DB `LIMIT/OFFSET`, 일자료는 기간(≤3700일) 전체를 공식 + 시간자료 집계로 만든 뒤 자름(`/api/export` 와 같은 경로). 기존 `/api/hourly`·`/api/daily`·`/api/export*` 응답은 바꾸지 않음(해시 비교 SAME).
+- `/api/view-prefs` (새): 로그인 사용자별 `{kind: {view: grid|card, layout: preset:<id>|custom:<내 레이아웃 id>}}`. 비로그인 401, 차단 거절, 다른 사이트 쓰기 403, 남의 레이아웃 id·다른 종류 프리셋은 400. 표 `view_prefs`(migrations/mysql/0004, hub/0005 — 새 표만 추가).
+- 화면(public/views.js·views.css): 레이아웃 선택(기본 프리셋 + 내 레이아웃, ★ 표시) + 그리드|카드. 처음 레이아웃 = 주소 > (이 화면에서 마지막에 고른 것 / 보기 설정의 ★ 중 더 최근 것) > 기본 구성. 보기 방식은 주소 > 저장값 > (폭 640px 미만이면 카드, 아니면 그리드). 비로그인은 localStorage, 로그인은 계정. 보기 방식 전환은 다시 받지 않고, 이미 받은 컬럼으로 되는 레이아웃도 다시 받지 않음.
+- 보기 설정: 비로그인은 기본 프리셋 읽기 전용(컬럼 체크·순서·저장 잠금 + 로그인 안내), 그 구성으로 CSV 내려받기는 그대로. `#/view-settings?kind=&layout=` 로 열 수 있음(시간별·일별 날씨의 '레이아웃 만들기·편집' 링크). 기본 프리셋이 선택 상자에 비어 보이던 문제(`preset:default`)도 고침.
+- 일별 날씨 기본 기간: 최근 7일(예전: 공식 최신 하루).
+- 검증: scripts/view.test.mjs 10건, scripts/e2e/views.e2e.mjs 36항목(비로그인 = 테스트 컨테이너 실제 자료, 로그인 = 로컬 JSON 모드 테스트 세션), 기존 API 해시 비교 26건 SAME.
+- 시간: `/api/view` 시간자료 한 달 0.23초, 1990~2026 전체 범위 첫 쪽 1.8초·1600쪽 4.2초(COUNT + 깊은 OFFSET, 예전 /api/hourly 와 같은 방식), 일자료 10년 2.1초·한 달 0.9초.
