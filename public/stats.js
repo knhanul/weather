@@ -1360,12 +1360,13 @@
       updateTabLinks();
       return;
     }
-    const panel = $id(PANEL[tab]);
-    if (!meta) panel.innerHTML = `<div class="card">${stateHtml("통계 정보를 불러오는 중…")}</div>`;
+    // 질문으로 보는 날씨 패널은 index.html 에 고정 마크업(#qCards 등)이 있어 통째로 바꾸지 않고 안쪽 칸에만 상태를 씀
+    const panel = tab === "questions" ? $id("qxLife") : $id(PANEL[tab]);
+    if (!meta) panel.innerHTML = tab === "questions" ? stateHtml("통계 정보를 불러오는 중…") : `<div class="card">${stateHtml("통계 정보를 불러오는 중…")}</div>`;
     try {
       await loadMeta();
     } catch (e) {
-      panel.innerHTML = `<div class="card">${errorHtml(e.message, "sxMetaRetry")}</div>`;
+      panel.innerHTML = tab === "questions" ? errorHtml(e.message, "sxMetaRetry") : `<div class="card">${errorHtml(e.message, "sxMetaRetry")}</div>`;
       $id("sxMetaRetry").onclick = () => route(tab);
       return;
     }
