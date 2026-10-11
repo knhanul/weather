@@ -46,8 +46,14 @@ test("연속 강수일은 결측일을 건너뛰어 잇지 않는다", () => {
   const s2 = buildDailyStore("1", rowsFor("2021-01-01", "2021-01-05", flat((d) => ({ precipitation: { "2021-01-02": 0.0, "2021-01-03": 0.05, "2021-01-04": 0.1 }[d] ?? null }))));
   assert.deepEqual(runsIn(s2, "wet", ymdToDn("2021-01-01"), ymdToDn("2021-01-05")).map((r) => r.start), ["2021-01-04"]);
 });
-test("연도별 최장 연속: 빠진 날이 있는 해는 값 없이 '자료 부족', 보유 기간 최장은 순위와 날짜", () => {
-  const rows = rowsFor("1990-01-01", "1992-12-31", (d) => (d === "1991-03-03" ? null : flat({ precipitation: d.startsWith("1990-07-0") ? 2 : d >= "1992-08-01" && d <= "1992-08-12" ? 1 : null })(d)));
+test("연도별 최장 연속: 2일 이상 빠진 해는 값 없이 '자료 부족', 1일 결측인 해는 값을 내되 그날에서 끊음, 보유 기간 최장은 순위와 날짜", () => {
+  // 1일 결측: 1993-07-05 가 빠지면 7/1~7/9 비는 7/1~7/4(4일)·7/6~7/9(4일)로 끊긴다(잇지 않음)
+  const one = buildDailyStore("2", rowsFor("1993-01-01", "1993-12-31", (d) => (d === "1993-07-05" ? null : flat({ precipitation: d.startsWith("1993-07-0") ? 2 : null })(d))));
+  const y93 = longestRunYear(one, "wet", parsePeriod("year"), 1993, "1993-12-31");
+  assert.equal(y93.status, "complete");
+  assert.equal(y93.len, 4);
+  assert.deepEqual(y93.missingDates, ["1993-07-05"]);
+  const rows = rowsFor("1990-01-01", "1992-12-31", (d) => (d === "1991-03-03" || d === "1991-03-04" ? null : flat({ precipitation: d.startsWith("1990-07-0") ? 2 : d >= "1992-08-01" && d <= "1992-08-12" ? 1 : null })(d)));
   const s = buildDailyStore("1", rows);
   const p = parsePeriod("year");
   assert.equal(longestRunYear(s, "wet", p, 1990, "1992-12-31").len, 9); // 7/1~7/9
@@ -151,8 +157,9 @@ test("열대야 추정: 밤 = 그날 19시~다음 날 09시 정시 15개(자정�
   assert.equal(nightMin(hs, "2020-08-02"), null); // 03시 없음
   assert.equal(nightMin(hs, "2020-08-04"), 24);
   const y = tropicalYear(hs, parsePeriod("range:07-31:08-04"), 2020, "2020-08-05");
-  assert.equal(y.status, "partial"); // 8/2 밤 판정 못 함
-  assert.equal(y.value, null);
+  assert.equal(y.status, "complete"); // 8/2 밤 하나만 판정 못 함 → 1밤 결측으로 넣음(그 밤은 세지 않음)
+  assert.equal(y.value, 2);
+  assert.deepEqual(y.missingDates, ["2020-08-02"]);
   assert.equal(y.countValid, 2); // 7/31, 8/3
   const y2 = tropicalYear(hs, parsePeriod("range:07-31:08-01"), 2020, "2020-08-05");
   assert.equal(y2.status, "complete");

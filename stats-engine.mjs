@@ -272,7 +272,24 @@ export function metricInfo(id) {
   return { id, label: m.label, unit: m.unit, chart: m.chart, group: m.group, agg: m.agg, digits: m.digits, def: m.def, field: m.field };
 }
 
-// 한 구간 집계. 완전(관측일 = 구간 일수)할 때만 value 가 있다. 합계·일수는 부분 값을 내지 않는다.
+// ---------------------------------------------------------------- 결측 허용(한 곳에서만 정의)
+// 구간(2일 이상)에 그 지표의 자료 없는 날이 정확히 MAX_MISSING_DAYS(1)일이면 비교에 넣는다: 값은 남은 유효일로만 집계하고(채우거나 추정하지 않음)
+// status 는 complete 그대로, missing·missingDates 로 '1일 결측'을 표시한다. 2일 이상 빠지면 지금처럼 partial(자료 부족).
+export const MAX_MISSING_DAYS = 1;
+export const missingOk = (days, missing) => days > 0 && (missing === 0 || (missing <= MAX_MISSING_DAYS && days > MAX_MISSING_DAYS));
+// 화면·CSV 공용 표시: '1일 결측(2017-10-12)'
+export const missingLabel = (r) => (r && r.status === "complete" && r.missing > 0 ? `${r.missing}일 결측${r.missingDates?.length ? `(${r.missingDates.join(", ")})` : ""}` : "");
+// 요약용: 결측 1일을 포함해 계산한 해 목록과 안내 문장
+export function missingYears(rows) {
+  return rows.filter((r) => r.status === "complete" && r.missing > 0).map((r) => ({ year: r.year, obs: r.obs, days: r.days, missing: r.missing, dates: r.missingDates || [] }));
+}
+export function missingText(list, what = "날") {
+  if (!list || !list.length) return null;
+  const items = list.slice(0, 8).map((x) => `${x.year}년(${x.dates.join(", ") || `${x.missing}일`} 빠짐, ${x.obs}/${x.days}${what === "밤" ? "밤" : "일"})`).join(", ");
+  return `${MAX_MISSING_DAYS}${what === "밤" ? "밤" : "일"} 결측을 포함해 계산한 연도: ${items}${list.length > 8 ? ` 외 ${list.length - 8}개` : ""} — 빠진 ${what}은 채우지 않고 나머지 ${what}만으로 집계했습니다.`;
+}
+
+// 한 구간 집계. 완전(관측일 = 구간 일수)하거나 결측이 1일뿐일 때(missingOk) value 가 있다(유효일만으로 집계). 합계·일수는 부분 값을 내지 않는다.
 // 평균·극값은 참고용 partial 값을 따로 준다(그래프·순위·증감에는 쓰지 않음).
 export function aggregate(store, metric, range) {
   const m = typeof metric === "string" ? getMetric(metric) : metric;
@@ -283,9 +300,13 @@ export function aggregate(store, metric, range) {
   let cnt = 0;
   let best = NaN;
   let bestDn = null;
+  const missingDates = [];
   for (let dn = a; dn <= b; dn++) {
     const v = dayValue(store, m.field, dn);
-    if (!Number.isFinite(v)) continue;
+    if (!Number.isFinite(v)) {
+      if (missingDates.length <= MAX_MISSING_DAYS) missingDates.push(dnToYmd(dn));
+      continue;
+    }
     obs++;
     if (m.agg === "mean" || m.agg === "sum") sum += v;
     else if (m.agg === "count") cnt += m.test(v) ? 1 : 0;
@@ -296,18 +317,18 @@ export function aggregate(store, metric, range) {
     }
   }
   const days = b - a + 1;
-  const complete = obs === days;
+  const complete = obs > 0 && missingOk(days, days - obs);
   let raw = null;
   if (obs) raw = m.agg === "mean" ? sum / obs : m.agg === "sum" ? sum : m.agg === "count" ? cnt : best;
   const value = complete ? round(raw, m.digits) : null;
   const partial = !complete && obs && (m.agg === "mean" || m.agg === "max" || m.agg === "min") ? round(raw, m.digits) : null;
   const date = (m.agg === "max" || m.agg === "min") && bestDn != null ? dnToYmd(bestDn) : null;
-  return { value, raw: complete ? raw : null, partial, date: complete || partial != null ? date : null, obs, days, missing: days - obs, complete };
+  return { value, raw: complete ? raw : null, partial, date: complete || partial != null ? date : null, obs, days, missing: days - obs, missingDates: complete && obs < days ? missingDates : [], complete };
 }
 
 // ---------------------------------------------------------------- 연도별 같은 기간
 // asOf = 자료가 완료된 마지막 날(지점 자료 끝과 공식 최신 날짜 중 이른 날). 끝이 asOf 보다 뒤인 구간은 진행 중(ongoing) 또는 미래.
-// status: complete | partial(자료 부족) | ongoing(진행 중) | future | none(보유 자료 밖) | nodate(그 해엔 구간 없음: 평년 2/29)
+// status: complete(1일 결측 포함 — missing·missingDates) | partial(자료 부족, 2일 이상 결측) | ongoing(진행 중) | future | none(보유 자료 밖) | nodate(그 해엔 구간 없음: 평년 2/29)
 export function yearRow(store, metric, p, year, asOf) {
   const r = resolvePeriod(p, year);
   if (!r) return { year, status: "nodate", value: null, obs: 0, days: 0 };
@@ -321,7 +342,7 @@ export function yearRow(store, metric, p, year, asOf) {
   if (!store.n || r.end < store.firstDate) return { ...base, status: "none", value: null, obs: 0, missing: r.days };
   const ag = aggregate(store, metric, r);
   const status = ag.complete ? "complete" : ag.obs ? "partial" : "none";
-  return { ...base, status, value: ag.value, raw: ag.raw, partial: ag.partial, date: ag.date, obs: ag.obs, missing: ag.missing };
+  return { ...base, status, value: ag.value, raw: ag.raw, partial: ag.partial, date: ag.date, obs: ag.obs, missing: ag.missing, ...(ag.missingDates.length ? { missingDates: ag.missingDates } : {}) };
 }
 
 export function yearRows(store, metric, p, fromYear, toYear, asOf) {
@@ -391,7 +412,7 @@ export function ongoingCompare(store, metric, p, year, asOf, fromYear) {
     const t = truncatedPeriod(p, y, year, asOf);
     if (!t || t.end < (store.firstDate || "9999")) continue;
     const ag = aggregate(store, m, t);
-    past.push({ year: y, start: t.start, end: t.end, days: t.days, value: ag.value, raw: ag.raw, complete: ag.complete, date: ag.date });
+    past.push({ year: y, start: t.start, end: t.end, days: t.days, value: ag.value, raw: ag.raw, complete: ag.complete, date: ag.date, missing: ag.complete ? ag.missing : undefined });
   }
   const ok = past.filter((r) => r.complete);
   const res = {
@@ -401,6 +422,7 @@ export function ongoingCompare(store, metric, p, year, asOf, fromYear) {
     days: cur.days,
     obs: curAg.obs,
     complete: curAg.complete,
+    missing: curAg.complete ? curAg.missing : undefined,
     value: curAg.value,
     date: curAg.date,
     compareYears: ok.length,
@@ -425,8 +447,9 @@ export function yearlyCompare(store, metricId, p, { fromYear, toYear, asOf, data
     summary.highest = { value: round(hi, m.digits), years: ok.filter((r) => r.raw === hi).map((r) => r.year) };
     summary.lowest = { value: round(lo, m.digits), years: ok.filter((r) => r.raw === lo).map((r) => r.year) };
     const last = ok[ok.length - 1];
-    summary.latest = { year: last.year, value: last.value, date: last.date || null, rank: rankOf(ok.map((r) => r.raw), last.raw) };
+    summary.latest = { year: last.year, value: last.value, date: last.date || null, missing: last.missing || 0, missingDates: last.missingDates || [], rank: rankOf(ok.map((r) => r.raw), last.raw) };
   }
+  summary.missing1 = missingYears(rows);
   summary.incomplete = rows.filter((r) => r.status === "partial" || r.status === "none").map((r) => ({ year: r.year, status: r.status, obs: r.obs, days: r.days }));
   const allRows = yearRows(store, m, p, Math.min(dataFrom, fromYear), Math.max(toYear, +asOf.slice(0, 4)), asOf);
   const delta = decadeDelta(m, allRows);
@@ -461,9 +484,11 @@ function yearlyText(m, p, s, d, ong) {
   const out = [];
   if (s.latest) {
     const r = s.latest.rank;
-    out.push(`${s.latest.year}년 ${periodLabel(p)} ${m.label}: ${fmtv(s.latest.value, m)} — 자료가 온전한 ${r.of}개 연도 중 ${orderWord(m)} ${r.high}위입니다.`);
+    out.push(`${s.latest.year}년 ${periodLabel(p)} ${m.label}: ${fmtv(s.latest.value, m)}${s.latest.missing ? `(${s.latest.missing}일 결측, ${s.latest.missingDates.join(", ")} 제외)` : ""} — 자료가 온전한 ${r.of}개 연도 중 ${orderWord(m)} ${r.high}위입니다.`);
   } else out.push("비교할 수 있는(자료가 온전한) 연도가 없습니다.");
   out.push(deltaText(m, d));
+  const mt = missingText(s.missing1);
+  if (mt) out.push(mt);
   if (ong && ong.complete && ong.rank) {
     out.push(`진행 중인 ${ong.year}년은 ${mdOf(ong.end)}까지 ${fmtv(ong.value, m)} — 같은 날짜(${mdOf(ong.start)}~${mdOf(ong.end)})까지 비교한 ${ong.rank.of}개 연도(올해 포함) 중 ${orderWord(m)} ${ong.rank.high}위입니다.`);
   }
@@ -486,6 +511,7 @@ export function overlay(store, metricId, p, years, asOf) {
     const vals = new Array(keys.length).fill(null);
     let status = "complete";
     let obs = 0;
+    const missingDates = [];
     if (!r) return { year: y, status: "nodate", values: vals, obs: 0, days: 0 };
     if (r.start > asOf) return { year: y, status: "future", start: r.start, end: r.end, values: vals, obs: 0, days: r.days };
     const end = r.end > asOf ? asOf : r.end;
@@ -498,6 +524,7 @@ export function overlay(store, metricId, p, years, asOf) {
       let v = dayValue(store, m.field, dn);
       if (!Number.isFinite(v)) {
         broken = true;
+        if (missingDates.length <= MAX_MISSING_DAYS) missingDates.push(dnToYmd(dn));
         continue;
       }
       obs++;
@@ -508,8 +535,9 @@ export function overlay(store, metricId, p, years, asOf) {
       if (k >= 0 && Number.isFinite(v)) vals[k] = round(v, 1);
     }
     const days = ymdToDn(end) - ymdToDn(r.start) + 1;
-    if (status === "complete" && obs < days) status = obs ? "partial" : "none";
-    return { year: y, status, start: r.start, end: r.end, until: end, values: vals, obs, days };
+    if (status === "complete" && obs < days && !(obs && missingOk(days, days - obs))) status = obs ? "partial" : "none";
+    const miss = status === "complete" && obs < days ? { missing: days - obs, missingDates } : {};
+    return { year: y, status, start: r.start, end: r.end, until: end, values: vals, obs, days, ...miss };
   });
   const what = cumulative ? "누적 강수량" : { avg: "일평균기온", max: "일최고기온", min: "일최저기온", range: "일교차" }[m.field];
   return { metric: metricInfo(metricId), period: { key: p.key, label: periodLabel(p) }, value: { label: what, unit: cumulative ? "mm" : "℃", cumulative }, asOf, keys, series };
@@ -539,7 +567,8 @@ export function regionYearly(stores, metricId, p, { fromYear, toYear, asOf }) {
       station_id: s.stationId,
       mean: avg,
       years: used.length,
-      rows: rows.map((r) => ({ year: r.year, value: cset.has(r.year) ? r.value : null, date: cset.has(r.year) ? r.date || null : null, status: r.status, common: cset.has(r.year), obs: r.obs, days: r.days, start: r.start, end: r.end })),
+      rows: rows.map((r) => ({ year: r.year, value: cset.has(r.year) ? r.value : null, date: cset.has(r.year) ? r.date || null : null, status: r.status, common: cset.has(r.year), obs: r.obs, days: r.days, start: r.start, end: r.end, ...(r.missingDates ? { missing: r.missing, missingDates: r.missingDates } : {}) })),
+      missing1: missingYears(used),
       delta,
     };
   });
@@ -556,7 +585,7 @@ export function regionPeriod(stores, p, { fromYear, toYear, asOf, metrics = REGI
     asOf,
     metrics: metrics.map((id) => {
       const r = regionYearly(stores, id, p, { fromYear, toYear, asOf });
-      return { metric: r.metric, commonYears: r.commonYears, stations: r.stations.map((s) => ({ station_id: s.station_id, mean: s.mean, years: s.years, delta: s.delta })) };
+      return { metric: r.metric, commonYears: r.commonYears, stations: r.stations.map((s) => ({ station_id: s.station_id, mean: s.mean, years: s.years, delta: s.delta, missing1: s.missing1 })) };
     }),
   };
 }
@@ -573,7 +602,7 @@ export function regionMonthly(stores, metricId, { fromYear, toYear, asOf }) {
     month: i + 1,
     values: stores.map((s, k) => {
       const used = per[k][i].filter((r) => ys.has(r.year));
-      return { station_id: s.stationId, value: used.length ? round(mean(used.map((r) => r.raw)), m.digits) : null, years: used.length };
+      return { station_id: s.stationId, value: used.length ? round(mean(used.map((r) => r.raw)), m.digits) : null, years: used.length, missing1: missingYears(used) };
     }),
   }));
   return { metric: metricInfo(metricId), fromYear, toYear, asOf, commonYears: years, months };
@@ -597,7 +626,8 @@ export const RULES = [
   "자료: 기상청 지상(종관, ASOS) 공식 일자료(일평균·일최고·일최저기온, 일강수량). 관측지점 한 곳의 값이며 시·도 전체 평균이 아닙니다.",
   "날짜는 한국 시간(Asia/Seoul) 하루(0~24시) 기준입니다. 기상청 공식 일자료의 날짜를 그대로 씁니다.",
   "그날 공식 일자료가 없으면 '자료 없음'입니다. 일자료는 있는데 일강수량이 비어 있으면 기상청 일자료 관례대로 무강수(0mm)로 셉니다. 결측을 0으로 채우지 않습니다.",
-  "한 해의 비교 구간에 자료 없는 날이 하루라도 있으면 그해는 '자료 부족'으로 따로 표시하고 그래프·순위·증감 비교에서 뺍니다.",
+  "한 해의 비교 구간(2일 이상)에 그 항목의 자료 없는 날이 딱 1일이면 그해도 비교(그래프·순위·평균·증감)에 넣고 '1일 결측'과 빠진 날짜를 함께 표시합니다. 빠진 날은 채우거나 추정하지 않고 나머지 날로만 계산합니다(평균은 남은 날의 평균, 총강수량·일수는 남은 날의 합·수).",
+  "자료 없는 날이 2일 이상이면 그해는 '자료 부족'으로 따로 표시하고 그래프·순위·증감 비교에서 뺍니다.",
   "진행 중인 구간(올해 이번 달 등)은 자료가 있는 마지막 날까지만, 다른 해의 같은 월·일까지와 비교합니다.",
   "계절: 봄 3~5월, 여름 6~8월, 가을 9~11월, 겨울 12~다음 해 2월. 겨울은 1·2월이 속한 해로 셉니다(예: 2025년 겨울 = 2024.12.1~2025.2.28).",
   "주차는 요일과 상관없이 날짜를 고정합니다: 1주차 1~7일, 2주차 8~14일, 3주차 15~21일, 4주차 22~28일, 5주차 29일~말일(달마다 일수가 다름, 2월 5주차는 윤년의 2/29 하루).",
@@ -645,10 +675,12 @@ export function thresholdDatesYear(store, metricId, p, year, asOf) {
   let first = null;
   let last = null;
   let missingBeforeFirst = false;
+  const missingDates = [];
   for (let dn = ymdToDn(r.start); dn <= ymdToDn(end); dn++) {
     const v = dayValue(store, m.field, dn);
     if (!Number.isFinite(v)) {
       if (first == null) missingBeforeFirst = true;
+      if (missingDates.length <= MAX_MISSING_DAYS) missingDates.push(dnToYmd(dn));
       continue;
     }
     obs++;
@@ -660,9 +692,10 @@ export function thresholdDatesYear(store, metricId, p, year, asOf) {
   }
   if (r.end > asOf) return { ...base, status: "ongoing", until: asOf, obs, first: missingBeforeFirst ? null : first, last: null, count: null, countSoFar: cnt };
   if (!store.n || r.end < store.firstDate) return { ...base, status: "none", first: null, last: null, count: null, obs: 0 };
-  const complete = obs === r.days;
+  const complete = obs > 0 && missingOk(r.days, r.days - obs);
   if (!complete) return { ...base, status: obs ? "partial" : "none", obs, first: null, last: null, count: null };
-  return { ...base, status: "complete", obs, first, last, count: cnt, firstPos: first ? mdPos(first, r.start) : null, lastPos: last ? mdPos(last, r.start) : null };
+  const miss = obs < r.days ? { missing: r.days - obs, missingDates } : {};
+  return { ...base, status: "complete", obs, ...miss, first, last, count: cnt, firstPos: first ? mdPos(first, r.start) : null, lastPos: last ? mdPos(last, r.start) : null };
 }
 const POS_METRIC = { digits: 0, agg: "mean", group: "date", unit: "일" };
 const CNT_METRIC = { digits: 0, agg: "count", group: "days", unit: "일" };
@@ -686,6 +719,7 @@ export function thresholdDates(store, metricId, p, { fromYear, toYear, asOf, dat
     latestFirst: withFirst.length ? withFirst.reduce((a, b) => (b.firstPos > a.firstPos ? b : a)) : null,
     latestLast: withFirst.length ? withFirst.reduce((a, b) => (b.lastPos > a.lastPos ? b : a)) : null,
     incomplete: rows.filter((r) => r.status === "partial" || r.status === "none").map((r) => ({ year: r.year, obs: r.obs, days: r.days })),
+    missing1: missingYears(rows),
   };
   const ong = rows.find((r) => r.status === "ongoing") || null;
   const text = [];
@@ -695,6 +729,8 @@ export function thresholdDates(store, metricId, p, { fromYear, toYear, asOf, dat
   if (lastDelta.available) text.push(`마지막 날은 ${posToMd(lastDelta.baseline.mean)} → ${posToMd(lastDelta.recent.mean)}로 ${dayWord(lastDelta.delta, "빨라졌습니다", "늦어졌습니다")}.`);
   if (countDelta.available) text.push(`그런 날 수는 ${countDelta.baseline.mean}일 → ${countDelta.recent.mean}일(${countDelta.delta > 0 ? "+" : countDelta.delta < 0 ? "−" : "±"}${Math.abs(countDelta.delta)}일)입니다.`);
   if (ong && ong.first) text.push(`진행 중인 ${ong.year}년은 ${mdOf(ong.first)}에 처음 기록했습니다(${mdOf(ong.until)}까지 ${ong.countSoFar}일).`);
+  const mt = missingText(summary.missing1);
+  if (mt) text.push(`${mt} 빠진 날이 그런 날이었는지는 알 수 없어 일수·첫날·마지막 날은 유효일 기준입니다.`);
   return { metric: metricInfo(metricId), period: { key: p.key, label: periodLabel(p) }, fromYear, toYear, asOf, rows, summary, firstDelta, lastDelta, countDelta, ongoing: ong, text };
 }
 
@@ -735,7 +771,8 @@ export function longestRunYear(store, kind, p, year, asOf) {
   const best = runs.reduce((a, b) => (!a || b.len > a.len ? b : a), null);
   const status = r.end > asOf ? "ongoing" : !store.n || r.end < store.firstDate ? "none" : ag.complete ? "complete" : ag.obs ? "partial" : "none";
   const val = status === "complete" ? (best ? best.len : 0) : null;
-  return { ...base, status, obs: ag.obs, len: val, partialLen: status !== "complete" && best ? best.len : null, runStart: best ? best.start : null, runEnd: best ? best.end : null, until: status === "ongoing" ? asOf : undefined };
+  const miss = status === "complete" && ag.missing > 0 ? { missing: ag.missing, missingDates: ag.missingDates } : {};
+  return { ...base, status, obs: ag.obs, ...miss, len: val, partialLen: status !== "complete" && best ? best.len : null, runStart: best ? best.start : null, runEnd: best ? best.end : null, until: status === "ongoing" ? asOf : undefined };
 }
 export function streaks(store, kind, p, { fromYear, toYear, asOf, top = 10 }) {
   const rows = [];
@@ -755,8 +792,9 @@ export function streaks(store, kind, p, { fromYear, toYear, asOf, top = 10 }) {
     allRows.push({ year: y, status: r.status, raw: r.len });
   }
   const delta = decadeDelta({ digits: 1, agg: "mean", group: "days", unit: "일" }, allRows);
-  const summary = { completeYears: ok.length, longest: ok.length ? ok.reduce((a, b) => (b.len > a.len ? b : a)) : null, incomplete: rows.filter((r) => r.status === "partial" || r.status === "none").map((r) => ({ year: r.year, obs: r.obs, days: r.days })) };
-  return { kind, kindLabel: RUN_KINDS[kind].label, period: { key: p.key, label: periodLabel(p) }, fromYear, toYear, asOf, rows, top: topList.slice(0, Math.max(top, topList.length)), summary, delta, record: { from: store.firstDate, to: asOf } };
+  const summary = { completeYears: ok.length, longest: ok.length ? ok.reduce((a, b) => (b.len > a.len ? b : a)) : null, incomplete: rows.filter((r) => r.status === "partial" || r.status === "none").map((r) => ({ year: r.year, obs: r.obs, days: r.days })), missing1: missingYears(rows) };
+  const mt = missingText(summary.missing1);
+  return { kind, text: mt ? [`${mt} 연속 일수는 빠진 날에서 끊어 셉니다.`] : [], kindLabel: RUN_KINDS[kind].label, period: { key: p.key, label: periodLabel(p) }, fromYear, toYear, asOf, rows, top: topList.slice(0, Math.max(top, topList.length)), summary, delta, record: { from: store.firstDate, to: asOf } };
 }
 
 // ---------------------------------------------------------------- 주말·평일 강수 비율(분모 = 유효 관측일)
@@ -1152,10 +1190,14 @@ export function tropicalYear(hs, p, year, lastDay) {
   let cnt = 0;
   let maxMin = -Infinity;
   let maxDate = null;
+  const missingDates = [];
   for (let dn = ymdToDn(r.start); dn <= ymdToDn(end); dn++) {
     const d = dnToYmd(dn);
     const m = nightMin(hs, d);
-    if (m === null) continue;
+    if (m === null) {
+      if (missingDates.length <= MAX_MISSING_DAYS) missingDates.push(d);
+      continue;
+    }
     valid++;
     if (m >= NIGHT.threshold) cnt++;
     if (m > maxMin) {
@@ -1164,8 +1206,9 @@ export function tropicalYear(hs, p, year, lastDay) {
     }
   }
   const nights = ymdToDn(end) - ymdToDn(r.start) + 1;
-  const status = r.end > lastNight ? "ongoing" : valid === r.days ? "complete" : valid ? "partial" : "none";
-  return { ...base, status, obs: valid, nights, value: status === "complete" ? cnt : null, countValid: cnt, warmestNight: maxDate ? { date: maxDate, min: round(maxMin, 1) } : null, until: status === "ongoing" ? end : undefined, raw: status === "complete" ? cnt : null };
+  const status = r.end > lastNight ? "ongoing" : valid > 0 && missingOk(r.days, r.days - valid) ? "complete" : valid ? "partial" : "none";
+  const miss = status === "complete" && valid < r.days ? { missing: r.days - valid, missingDates } : {};
+  return { ...base, status, obs: valid, ...miss, nights, value: status === "complete" ? cnt : null, countValid: cnt, warmestNight: maxDate ? { date: maxDate, min: round(maxMin, 1) } : null, until: status === "ongoing" ? end : undefined, raw: status === "complete" ? cnt : null };
 }
 export function tropicalNights(hs, p, { fromYear, toYear, asOf }) {
   const lastDay = minYmd(hourlyLastDay(hs), asOf);
@@ -1180,10 +1223,13 @@ export function tropicalNights(hs, p, { fromYear, toYear, asOf }) {
     highest: ok.length ? { value: Math.max(...ok.map((r) => r.value)), years: ok.filter((r) => r.value === Math.max(...ok.map((x) => x.value))).map((r) => r.year) } : null,
     latest: ok.length ? { year: ok[ok.length - 1].year, value: ok[ok.length - 1].value, rank: rankOf(ok.map((r) => r.value), ok[ok.length - 1].value) } : null,
     incomplete: rows.filter((r) => r.status === "partial" || r.status === "none").map((r) => ({ year: r.year, obs: r.obs, days: r.days, countValid: r.countValid })),
+    missing1: missingYears(rows),
   };
   const text = [];
-  if (summary.latest) text.push(`${summary.latest.year}년 ${periodLabel(p)} 열대야(추정): ${summary.latest.value}일 — 모든 밤을 판정할 수 있었던 ${summary.latest.rank.of}개 연도 중 많은 순 ${summary.latest.rank.high}위입니다.`);
-  else text.push("모든 밤의 정시 기온이 갖춰진 연도가 없어 연도 값을 내지 않습니다.");
+  if (summary.latest) text.push(`${summary.latest.year}년 ${periodLabel(p)} 열대야(추정): ${summary.latest.value}일 — 판정 못 한 밤이 1밤 이하인 ${summary.latest.rank.of}개 연도 중 많은 순 ${summary.latest.rank.high}위입니다.`);
+  else text.push("모든 밤의 정시 기온이 갖춰진(판정 못 한 밤이 1밤 이하인) 연도가 없어 연도 값을 내지 않습니다.");
+  const mt = missingText(summary.missing1, "밤");
+  if (mt) text.push(mt);
   const early = summary.incomplete.filter((x) => x.year < 2000).length;
   if (early >= 5) text.push(`${early}개 연도(1990년대)는 새벽 기온 결측(3시간 간격 관측)으로 판정 못 한 밤이 있어 연도 값을 내지 않았습니다.`);
   text.push(delta.available ? `최근 ${delta.recent.from}~${delta.recent.to}년 평균 ${delta.recent.mean}일, ${delta.baseline.from}~${delta.baseline.to}년 평균 ${delta.baseline.mean}일(차이 ${delta.delta > 0 ? "+" : delta.delta < 0 ? "−" : "±"}${Math.abs(delta.delta)}일).` : `1990년대 대비: ${delta.reason}`);
@@ -1192,13 +1238,13 @@ export function tropicalNights(hs, p, { fromYear, toYear, asOf }) {
 
 // ---------------------------------------------------------------- 생활 속 날씨 계산 기준(화면 '계산 기준'에 그대로)
 export const LIFE_RULES = {
-  heat: ["'최고기온 30℃ 이상'은 이 서비스의 기준이며 여름 시작·폭염특보 기준이 아닙니다.", "첫날·마지막 날은 그해 구간에 빠진 날이 없을 때만 확정합니다. 그런 날이 없었던 해는 날짜 평균에서 뺍니다.", "날짜 평균은 평년 달력 위치(1/1=1일)로 계산하고 월/일로 바꿔 보여 줍니다."],
-  streaks: ["연속 강수일 = 일강수량 0.1mm 이상인 날이 이어진 날 수, 연속 무강수일 = 자료가 있고 0.1mm 미만인 날이 이어진 날 수.", "자료 없는 날이 끼면 그 앞뒤를 잇지 않습니다(결측일을 건너뛰지 않음).", "연도별 값은 그 해 구간 안에서만 셉니다(구간 밖으로 이어진 날은 자름). '보유 기간 최장 기록'은 구간과 상관없이 셉니다."],
+  heat: ["'최고기온 30℃ 이상'은 이 서비스의 기준이며 여름 시작·폭염특보 기준이 아닙니다.", "첫날·마지막 날·일수는 그해 구간에 빠진 날이 1일 이하일 때만 냅니다. 1일 결측인 해는 그날을 뺀 유효일 기준이며 '1일 결측'으로 표시합니다. 그런 날이 없었던 해는 날짜 평균에서 뺍니다.", "날짜 평균은 평년 달력 위치(1/1=1일)로 계산하고 월/일로 바꿔 보여 줍니다."],
+  streaks: ["연속 강수일 = 일강수량 0.1mm 이상인 날이 이어진 날 수, 연속 무강수일 = 자료가 있고 0.1mm 미만인 날이 이어진 날 수.", "자료 없는 날이 끼면 그 앞뒤를 잇지 않습니다(결측일을 건너뛰지 않음). 결측 1일인 해도 연도 비교에 넣지만 연속은 그날에서 끊습니다.", "연도별 값은 그 해 구간 안에서만 셉니다(구간 밖으로 이어진 날은 자름). '보유 기간 최장 기록'은 구간과 상관없이 셉니다."],
   weekend: ["주말 = 토·일, 평일 = 월~금(공휴일은 따로 구분하지 않음).", "비율 = 강수일(0.1mm 이상) ÷ 공식 일자료가 있는 날(유효 관측일). 주말과 평일의 일수가 달라 단순 일수가 아닌 비율로 비교합니다.", "비율 차이는 %p 로 표시합니다."],
   day: ["매년 같은 월·일의 공식 일자료입니다. 2월 29일은 윤년에만 있습니다.", "'강수가 있었던 해의 비율' = 그날 0.1mm 이상 강수가 있었던 해 ÷ 자료가 있는 해. 과거 관측이며 앞으로의 강수확률·예보가 아닙니다."],
   outdoor: ["조건은 사용자가 정한 값이며 공식 건강·안전 기준이 아닙니다.", "시간자료(정시 관측) 집계: 고른 시간대의 정시 관측 중 조건을 모두 만족한 시각의 비율. 필요한 항목이 없는 시각은 분모에서 뺍니다.", "강수 없음 = 1시간 강수량 0.1mm 미만(공란은 무강수, 품질 플래그 9 는 자료 없음)."],
   commute: ["시간자료(정시 관측) 집계: 고른 시간대 정시 관측 중 1시간 강수량 0.1mm 이상인 시각의 비율.", "'강수가 관측된 날'은 그 시간대 정시 관측이 모두 있는 날만 분모로 셉니다.", "평일 = 월~금(공휴일 미반영). 정시 관측만 쓰므로 시각 사이의 짧은 비는 빠질 수 있습니다."],
-  tropical: ["추정치: 공식 열대야는 18:01~다음 날 09:00 의 밤 최저기온 25℃ 이상인 날입니다. 공식 밤 최저기온 자료가 없어 정시 기온(19~09시, 15개)의 최솟값으로 셉니다. 실제 최저는 정시 사이에 더 낮을 수 있어 실제보다 많게 셀 수 있습니다.", "15개 정시 중 하나라도 없으면 그 밤은 판정하지 않고, 판정 못 한 밤이 있는 해는 순위·증감에서 뺍니다.", "밤은 시작한 날짜(그날 저녁)로 셉니다.", "1990년대 시간자료는 새벽 01·02시(때때로 04·05·07시) 기온이 결측(품질 플래그 9, 3시간 간격 관측)이라 대부분의 밤을 판정할 수 없습니다. 그래서 1990년대 대비 변화는 계산하지 않습니다."],
+  tropical: ["추정치: 공식 열대야는 18:01~다음 날 09:00 의 밤 최저기온 25℃ 이상인 날입니다. 공식 밤 최저기온 자료가 없어 정시 기온(19~09시, 15개)의 최솟값으로 셉니다. 실제 최저는 정시 사이에 더 낮을 수 있어 실제보다 많게 셀 수 있습니다.", "15개 정시 중 하나라도 없으면 그 밤은 판정하지 않습니다. 판정 못 한 밤이 1밤이면 그해도 넣고 '1밤 결측'으로 표시하며(그 밤은 세지 않음), 2밤 이상이면 순위·증감에서 뺍니다.", "밤은 시작한 날짜(그날 저녁)로 셉니다.", "1990년대 시간자료는 새벽 01·02시(때때로 04·05·07시) 기온이 결측(품질 플래그 9, 3시간 간격 관측)이라 대부분의 밤을 판정할 수 없습니다. 그래서 1990년대 대비 변화는 계산하지 않습니다."],
   records: ["보유 관측기간(1990년~)의 공식 일자료 순위입니다. 같은 값은 같은 순위이며, 10위와 같은 값이면 함께 보여 줍니다.", "강수량·적설 순위는 0보다 큰 날만 셉니다. '자료 없음'인 날은 빠지며 그 수를 함께 표시합니다.", "관측지점 한 곳의 기록이며 그 지역 전체의 기록이 아닙니다."],
   snow: ["눈 통계는 공식 일자료의 최심신적설(그날 새로 쌓인 눈의 가장 깊은 값)·최심적설(가장 깊이 쌓인 눈)만 씁니다. 적설을 더해 강설량을 만들지 않습니다.", "눈이 내렸어도 쌓이지 않으면 0 입니다. 일자료 행이 있는데 적설이 비어 있으면 '쌓인 눈 없음'으로 봅니다.", "적설 관측 방식 변화(자동 관측 전환 등)로 연도 간 비교에 한계가 있을 수 있습니다."],
 };

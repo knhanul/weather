@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {
   parsePeriod, resolvePeriod, truncatedPeriod, periodLabel, buildDailyStore, aggregate, yearRow, yearRows, yearlyCompare,
   decadeDelta, rankOf, ongoingCompare, overlay, regionYearly, regionMonthly, regionPeriod, commonYears, toCsv, getMetric,
-  ymdToDn, dnToYmd, StatsError, weekdayOf,
+  ymdToDn, dnToYmd, StatsError, weekdayOf, missingLabel, missingOk,
 } from "../stats-engine.mjs";
 import { createStatsApi } from "../stats-api.mjs";
 import { createStatsData } from "../stats-data.mjs";
@@ -110,10 +110,20 @@ test("무강수(공란)와 자료 없음은 다르다", () => {
   const store = buildDailyStore("1", rows);
   const may = resolvePeriod(parsePeriod("month:5"), 2025);
   const total = aggregate(store, "rain_total", may);
-  assert.equal(total.complete, false);
-  assert.equal(total.value, null); // 하루라도 자료가 없으면 합계를 내지 않는다(0으로 채우지 않음)
-  assert.equal(total.partial, null); // 합계·일수는 부분 값도 내지 않는다
+  // 1일 결측: 비교에 넣되 빠진 날은 채우지 않고 남은 30일의 합만(5/10 은 0으로 채우지 않음)
+  assert.equal(total.complete, true);
+  assert.equal(total.value, 12.5);
   assert.equal(total.obs, 30);
+  assert.equal(total.missing, 1);
+  assert.deepEqual(total.missingDates, ["2025-05-10"]);
+  // 2일 결측이면 합계를 내지 않는다
+  const two = buildDailyStore("1b", rows.filter((r) => r.observation_date !== "2025-05-11"));
+  const total2 = aggregate(two, "rain_total", may);
+  assert.equal(total2.complete, false);
+  assert.equal(total2.value, null);
+  assert.equal(total2.partial, null); // 합계·일수는 부분 값도 내지 않는다
+  assert.deepEqual(total2.missingDates, []);
+  assert.equal(total2.obs, 29);
   const first9 = { start: "2025-05-01", end: "2025-05-09" };
   assert.equal(aggregate(store, "rain_total", first9).value, 12.5); // 공란은 0으로 합산
   assert.equal(aggregate(store, "rain_days", first9).value, 1); // 0.0 은 강수일(0.1mm 이상)이 아님
@@ -124,8 +134,13 @@ test("무강수(공란)와 자료 없음은 다르다", () => {
   // 기온 하나만 빈 날은 그 항목만 결측
   const oneNull = buildDailyStore("3", rowsFor("2025-05-01", "2025-05-03", (d) => flat({ max_temperature: d === "2025-05-02" ? null : 20 })(d)));
   const r3 = { start: "2025-05-01", end: "2025-05-03" };
-  assert.equal(aggregate(oneNull, "avg_max", r3).value, null);
-  assert.equal(aggregate(oneNull, "avg_max", r3).partial, 20);
+  assert.equal(aggregate(oneNull, "avg_max", r3).value, 20); // 1일 결측 → 남은 2일 평균
+  assert.equal(aggregate(oneNull, "avg_max", r3).missing, 1);
+  const twoNull = buildDailyStore("3b", rowsFor("2025-05-01", "2025-05-03", (d) => flat({ max_temperature: d === "2025-05-01" ? 20 : null })(d)));
+  assert.equal(aggregate(twoNull, "avg_max", r3).value, null);
+  assert.equal(aggregate(twoNull, "avg_max", r3).partial, 20);
+  // 하루짜리 구간이 빠지면 값이 없음(결측 허용은 2일 이상 구간만)
+  assert.equal(aggregate(oneNull, "avg_max", { start: "2025-05-02", end: "2025-05-02" }).complete, false);
   assert.equal(aggregate(oneNull, "avg_temp", r3).value, 10);
 });
 
@@ -157,7 +172,7 @@ test("순위: 같은 값은 같은 순위", () => {
 
 test("1990년대 대비 변화: 온전한 해 8개 미만이면 비교하지 않음, 기준 0이면 증감률 없음", () => {
   // 1990~1999: 1995~1997 의 5월이 자료 없음 → 온전한 해 7개 → 비교 안 함
-  const gap = buildDailyStore("1", rowsFor("1990-01-01", "2026-10-09", (d) => (d.slice(0, 4) >= "1995" && d.slice(0, 4) <= "1997" && d.slice(5, 7) === "05" && d.slice(8) === "15" ? null : flat()(d))));
+  const gap = buildDailyStore("1", rowsFor("1990-01-01", "2026-10-09", (d) => (d.slice(0, 4) >= "1995" && d.slice(0, 4) <= "1997" && d.slice(5, 7) === "05" && (d.slice(8) === "15" || d.slice(8) === "16") ? null : flat()(d))));
   const may = parsePeriod("month:5");
   const asOf = "2026-10-09";
   const d1 = decadeDelta(getMetric("avg_temp"), yearRows(gap, "avg_temp", may, 1990, 2026, asOf));
@@ -200,14 +215,49 @@ test("진행 중인 해는 같은 월·일까지만 비교", () => {
 });
 
 test("요약: 최고·최저 연도, 최근 연도 순위, 자료 부족 연도 별도 표시", () => {
-  const store = buildDailyStore("1", rowsFor("1990-01-01", "2025-12-31", (d) => (d === "1993-05-03" ? null : flat({ avg_temperature: +d.slice(0, 4) === 1998 ? 20 : +d.slice(0, 4) === 1991 ? 5 : 10 })(d))));
+  const store = buildDailyStore("1", rowsFor("1990-01-01", "2025-12-31", (d) => (d === "1993-05-03" || d === "1993-05-04" ? null : flat({ avg_temperature: +d.slice(0, 4) === 1998 ? 20 : +d.slice(0, 4) === 1991 ? 5 : 10 })(d))));
   const y = yearlyCompare(store, "avg_temp", parsePeriod("month:5"), { fromYear: 1990, toYear: 2025, asOf: "2025-12-31" });
   assert.deepEqual(y.summary.highest, { value: 20, years: [1998] });
   assert.deepEqual(y.summary.lowest, { value: 5, years: [1991] });
   assert.equal(y.summary.completeYears, 35);
-  assert.deepEqual(y.summary.incomplete, [{ year: 1993, status: "partial", obs: 30, days: 31 }]);
+  assert.deepEqual(y.summary.incomplete, [{ year: 1993, status: "partial", obs: 29, days: 31 }]);
+  assert.deepEqual(y.summary.missing1, []);
   assert.deepEqual(y.summary.latest.rank, { high: 2, low: 2, of: 35 });
   assert.ok(y.text.length >= 2 && y.text.every((t) => typeof t === "string"));
+});
+
+test("1일 결측: 그해도 비교·순위·증감에 넣고(유효일만 집계) '1일 결측'과 날짜를 표시, 2일 이상은 자료 부족", () => {
+  // 1993-05-03 하나만 빠짐(일평균 10, 1993년 5월은 나머지 날 12) → 1993년 5월 = 12(빠진 날을 채우지 않음)
+  const store = buildDailyStore("1", rowsFor("1990-01-01", "2025-12-31", (d) => (d === "1993-05-03" ? null : flat({ avg_temperature: d.startsWith("1993-05") ? 12 : 10 })(d))));
+  const y = yearlyCompare(store, "avg_temp", parsePeriod("month:5"), { fromYear: 1990, toYear: 2025, asOf: "2025-12-31" });
+  const r93 = y.rows.find((r) => r.year === 1993);
+  assert.equal(r93.status, "complete");
+  assert.equal(r93.value, 12);
+  assert.equal(r93.obs, 30);
+  assert.equal(r93.missing, 1);
+  assert.deepEqual(r93.missingDates, ["1993-05-03"]);
+  assert.equal(missingLabel(r93), "1일 결측(1993-05-03)");
+  assert.equal(y.summary.completeYears, 36);
+  assert.deepEqual(y.summary.incomplete, []);
+  assert.deepEqual(y.summary.missing1, [{ year: 1993, obs: 30, days: 31, missing: 1, dates: ["1993-05-03"] }]);
+  assert.deepEqual(y.summary.highest, { value: 12, years: [1993] }); // 순위·최고에도 들어감
+  assert.ok(y.text.some((t) => /1일 결측을 포함해 계산한 연도: 1993년\(1993-05-03 빠짐, 30\/31일\)/.test(t)));
+  assert.ok(y.delta.baseline.years.includes(1993)); // 1990년대 평균에도 들어감
+  // 온전한 해에는 결측 표시가 없다
+  const r94 = y.rows.find((r) => r.year === 1994);
+  assert.equal(r94.missing, 0);
+  assert.equal(r94.missingDates, undefined);
+  assert.equal(missingLabel(r94), "");
+  // 일수 지표도 같은 규칙(빠진 날은 세지 않음)
+  const hot = buildDailyStore("2", rowsFor("2020-08-01", "2020-08-31", (d) => (d === "2020-08-02" ? null : flat({ max_temperature: 34 })(d))));
+  const h = yearRow(hot, "heatwave_days", parsePeriod("month:8"), 2020, "2020-12-31");
+  assert.equal(h.status, "complete");
+  assert.equal(h.value, 30);
+  assert.deepEqual(h.missingDates, ["2020-08-02"]);
+  assert.equal(missingOk(31, 1), true);
+  assert.equal(missingOk(31, 2), false);
+  assert.equal(missingOk(1, 1), false);
+  assert.equal(missingOk(31, 0), true);
 });
 
 // ---------------------------------------------------------------- 겹쳐보기
@@ -222,7 +272,11 @@ test("날짜별 겹쳐보기: 월·일 축, 평년의 2/29 는 빈 값, 누적 �
   assert.equal(a.values[8], 9);
   assert.equal(a.values[9], null); // 2/10 결측
   assert.equal(a.values[10], null); // 결측 뒤 누적은 끊김(0으로 채우지 않음)
-  assert.equal(a.status, "partial");
+  assert.equal(a.status, "complete"); // 1일 결측(값은 채우지 않고 점만 비움)
+  assert.equal(a.missing, 1);
+  assert.deepEqual(a.missingDates, ["2023-02-10"]);
+  const two = buildDailyStore("1b", rowsFor("2023-02-01", "2023-02-28", (d) => (d === "2023-02-10" || d === "2023-02-11" ? null : flat({ precipitation: 1 })(d))));
+  assert.equal(overlay(two, "rain_total", parsePeriod("month:2"), [2023], "2024-12-31").series[0].status, "partial");
   assert.throws(() => overlay(store, "avg_temp", parsePeriod("month:2"), [2019, 2020, 2021, 2022, 2023], "2024-12-31"), StatsError);
   const t = overlay(store, "avg_max", parsePeriod("month:2"), [2024], "2024-12-31");
   assert.equal(t.value.label, "일최고기온");
@@ -232,8 +286,8 @@ test("날짜별 겹쳐보기: 월·일 축, 평년의 2/29 는 빈 값, 누적 �
 // ---------------------------------------------------------------- 지역별 비교
 test("지역 비교는 공통 연도만 쓰고 지점마다 같은 분모", () => {
   const a = buildDailyStore("A", rowsFor("1990-01-01", "2025-12-31", flat({ avg_temperature: 10 })));
-  // B 는 2000년 7월 하루가 없고, 1995년 여름은 더움
-  const b = buildDailyStore("B", rowsFor("1990-01-01", "2025-12-31", (d) => (d === "2000-07-15" ? null : flat({ avg_temperature: d.startsWith("1995-0") ? 30 : 20 })(d))));
+  // B 는 2000년 7월 이틀이 없고(자료 부족), 2005년 7월 하루가 없음(1일 결측 → 공통 연도에 들어감), 1995년 여름은 더움
+  const b = buildDailyStore("B", rowsFor("1990-01-01", "2025-12-31", (d) => (d === "2000-07-15" || d === "2000-07-16" || d === "2005-07-01" ? null : flat({ avg_temperature: d.startsWith("1995-0") ? 30 : 20 })(d))));
   const summer = parsePeriod("season:summer");
   const r = regionYearly([a, b], "avg_temp", summer, { fromYear: 1990, toYear: 2025, asOf: "2025-12-31" });
   assert.equal(r.commonYears.length, 35);
@@ -243,6 +297,9 @@ test("지역 비교는 공통 연도만 쓰고 지점마다 같은 분모", () =
   assert.equal(sb.years, 35);
   assert.equal(sa.rows.find((x) => x.year === 2000).value, null);
   assert.equal(sa.rows.find((x) => x.year === 2000).status, "complete");
+  assert.ok(r.commonYears.includes(2005));
+  assert.deepEqual(sb.rows.find((x) => x.year === 2005).missingDates, ["2005-07-01"]);
+  assert.deepEqual(sb.missing1.map((x) => x.year), [2005]);
   assert.equal(sb.mean, Math.round(((34 * 20 + 30) / 35) * 10) / 10);
   assert.equal(commonYears([[{ year: 1, status: "complete" }], [{ year: 1, status: "partial" }]]).length, 0);
   // 월별: 모든 지점·12개월이 온전한 해만(2000년 제외)
