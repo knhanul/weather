@@ -54,6 +54,11 @@
     nav a { display:block; padding:9px 12px; border-radius:10px; color:var(--fg); text-decoration:none; margin-bottom:2px; font-weight:500; transition:background .15s, color .15s; }
     nav a:hover { background:var(--soft); color:var(--pri-dark); }
     nav a.active { background:var(--pri); color:var(--pri-fg); font-weight:700; box-shadow:0 6px 14px -6px rgba(2,110,248,.55); }
+    .nav-sub { margin:0 0 6px 12px; padding-left:8px; border-left:2px solid var(--line); }
+    .nav-sub a { padding:6px 10px; font-size:13.5px; color:var(--muted); }
+    .nav-sub a.active { background:var(--soft); color:var(--pri-dark); font-weight:700; box-shadow:none; }
+    nav a.nav-parent.active { background:transparent; color:var(--pri-dark); box-shadow:none; }
+    nav a.nav-parent.active:hover { background:var(--soft); }
     .nav-group + .nav-group { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
     .nav-label { margin:0 0 4px; padding:0 12px; font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--muted); }
     .result { border-radius:8px; padding:10px 12px; margin-top:10px; font-size:14px; }
@@ -157,6 +162,11 @@
     svg { width:100%; height:160px; }
     /* 대시보드 */
     .sec-title { margin:4px 0 -4px; font-size:13px; color:var(--muted); font-weight:500; }
+    .q-link { display:flex; align-items:center; justify-content:space-between; gap:12px; text-decoration:none; color:var(--fg); }
+    .q-link b { display:block; font-size:15px; color:var(--pri-dark); }
+    .q-link small { display:block; margin-top:2px; color:var(--muted); font-size:13px; }
+    .q-link .go { font-size:24px; color:var(--pri); }
+    .q-link:hover { box-shadow:var(--shadow-sm); border-color:var(--soft-2); }
     .card h2 { margin:0; font-size:18px; }
     .card strong.big { font-size:20px; font-variant-numeric:tabular-nums; }
     .card .muted { margin:4px 0 0; }
@@ -297,6 +307,11 @@
       .nav-group + .nav-group { margin-top:0; padding-top:4px; border-top:1px solid var(--line); }
       .nav-label { flex-shrink:0; width:34px; margin:0; padding:0 4px; }
       nav a { white-space:nowrap; flex-shrink:0; padding:6px 10px; margin:0; font-size:14px; }
+      .nav-group.nav-main { flex-wrap:wrap; overflow-x:visible; row-gap:2px; }
+      .nav-sub { order:99; flex:1 1 100%; display:none; gap:2px; overflow-x:auto; scrollbar-width:none; margin:2px 0 0; padding:4px 0 0 34px; border-left:0; border-top:1px dashed var(--line); }
+      nav.stats-on .nav-sub { display:flex; }
+      .nav-sub a { padding:5px 9px; font-size:13px; }
+      nav a.nav-parent.active { background:var(--soft); }
       main { padding:16px 14px 32px; }
       .site-foot { padding:12px 14px 20px; }
       header.ph { padding:11px 16px 12px; min-height:0; gap:8px; }
@@ -335,10 +350,6 @@
       .ch-range input { flex:1 1 0; width:0; max-width:none; padding:0 6px; }
     }
     /* 날씨 통계: 탭·질문 카드·통계 화면(stats.js) */
-    .st-tabs { display:flex; gap:4px; overflow-x:auto; scrollbar-width:none; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:5px; box-shadow:var(--shadow-sm); }
-    .st-tabs a { flex:none; padding:8px 14px; border-radius:10px; text-decoration:none; color:var(--fg); font-weight:600; font-size:14px; white-space:nowrap; }
-    .st-tabs a:hover { background:var(--soft); color:var(--pri-dark); }
-    .st-tabs a.on { background:var(--pri); color:#fff; }
     .st-panel { display:grid; gap:16px; min-width:0; }
     .st-panel[hidden] { display:none; }
     #dash, #dash > *, .st-panel > * { min-width:0; }
@@ -439,9 +450,7 @@
     .sx-presets button { height:28px; padding:0 10px; font-size:12.5px; background:var(--soft); color:var(--pri-dark); border-radius:999px; font-weight:500; }
     .sx-badge.est { background:#fff4e5; color:#b45309; }
     @media (max-width:560px) {
-      .st-tabs { flex-wrap:wrap; overflow-x:visible; }
-      .st-tabs a { padding:7px 6px; font-size:13.5px; flex:1 1 30%; text-align:center; }
-      .sx-q { font-size:16px; }
+          .sx-q { font-size:16px; }
       .sx-key { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .sx-key b { font-size:17px; }
       .sx-bar-row { grid-template-columns:72px 1fr auto; }
@@ -508,9 +517,17 @@
         </span>
       </a>
       <nav>
-        <div class="nav-group" role="group" aria-labelledby="navLookup">
+        <div class="nav-group nav-main" role="group" aria-labelledby="navLookup">
           <p class="nav-label" id="navLookup">조회</p>
-          <a href="#/" data-page="dash">날씨 통계</a>
+          <a href="#/stats/overview" data-page="dash" class="nav-parent">날씨 통계</a>
+          <div class="nav-sub" id="navStats" role="group" aria-label="날씨 통계 하위 메뉴">
+            <a href="#/stats/overview" data-sub="overview">한눈에 보기</a>
+            <a href="#/stats/yearly" data-sub="yearly">연도별 비교</a>
+            <a href="#/stats/region" data-sub="region">지역별 비교</a>
+            <a href="#/stats/life" data-sub="life">생활 속 날씨</a>
+            <a href="#/stats/records" data-sub="records">날씨 기록</a>
+          </div>
+          <a href="#/questions" data-page="questions">질문으로 보는 날씨</a>
           <a href="#/hourly-weather" data-page="hourly">시간별 날씨</a>
           <a href="#/daily-weather" data-page="daily">일별 날씨</a>
           <a href="#/view-settings" data-page="download">보기 설정</a>
@@ -540,13 +557,6 @@
       <main>
         <p class="login-note" id="loginNote" role="status" hidden><span id="loginNoteText"></span><button type="button" id="loginNoteClose">닫기</button></p>
         <section class="page" id="dash">
-          <nav class="st-tabs" id="stTabs" aria-label="날씨 통계 메뉴">
-            <a href="#/" data-tab="overview">한눈에 보기</a>
-            <a href="#/stats/yearly" data-tab="yearly">연도별 비교</a>
-            <a href="#/stats/region" data-tab="region">지역별 비교</a>
-            <a href="#/stats/life" data-tab="life">생활 속 날씨</a>
-            <a href="#/stats/records" data-tab="records">날씨 기록</a>
-          </nav>
           <div class="st-panel" id="tabOverview">
           <p class="muted dash-note" id="dashNote" hidden></p>
           <div class="card">
@@ -570,17 +580,22 @@
             </div>
             <div class="legend" id="chartLegend"></div>
           </div>
-          <div class="card q-wrap">
-            <div class="chart-head"><div><h2>질문으로 보는 날씨 통계</h2><p class="muted" id="qCardsNote">선택한 지점의 1990~1999년 평균과 최근 완료된 10개 연도 평균을 비교합니다.</p></div></div>
-            <div class="q-cards" id="qCards"></div>
-          </div>
-          <p class="sec-title">시스템 <span id="stRef"></span> · <a class="st-link" href="#/gaps">지점별 미적재 현황 ›</a></p>
-          <div class="grid4" id="dashCards"></div>
+          <a class="card q-link" id="qLink" href="#/questions">
+            <span><b>질문으로 보는 날씨</b><small>예전보다 더워졌을까? 비가 더 자주 올까? 더위가 일찍 올까? — 우리 동네 질문 카드 모아 보기</small></span><span class="go" aria-hidden="true">›</span>
+          </a>
           </div>
           <div class="st-panel" id="tabYearly" hidden></div>
           <div class="st-panel" id="tabRegion" hidden></div>
           <div class="st-panel" id="tabLife" hidden></div>
           <div class="st-panel" id="tabRecords" hidden></div>
+          <div class="st-panel" id="tabQuestions" hidden>
+            <div class="card"><h2 class="sx-q">질문으로 보는 날씨<small>일상적인 질문을 1990년부터의 관측으로 답합니다. 앞으로의 예보·확률이 아닙니다.</small></h2><div class="sx-ctl" id="qxCtl"></div></div>
+            <div class="card q-wrap">
+              <div class="chart-head"><div><h2>우리 동네는 어떻게 달라졌을까</h2><p class="muted" id="qCardsNote">선택한 지점의 1990~1999년 평균과 최근 완료된 10개 연도 평균을 비교합니다.</p></div></div>
+              <div class="q-cards" id="qCards"></div>
+            </div>
+            <div class="card" id="qxLife"></div>
+          </div>
         </section>
         <section class="page" id="hourly">
           <div class="card">
@@ -732,6 +747,8 @@
           </div>
         </section>
         <section class="page" id="jobs">
+          <p class="sec-title">적재 현황 · <a class="st-link" href="#/gaps">지점별 미적재 현황 ›</a></p>
+          <div class="grid4" id="dashCards"></div>
           <div class="card">
             <p class="muted" id="jMsg"></p>
             <div style="overflow:auto"><table><thead><tr><th>시각</th><th>자료</th><th>지점</th><th>상태</th><th>수신/신규/갱신</th><th>메시지</th></tr></thead><tbody id="jBody"></tbody></table></div>
@@ -942,10 +959,6 @@
       dashState.from = f; dashState.to = t; dashState.months = null;
       syncHash(); renderDashControls(); loadSeries();
     }
-    function renderStRef() {
-      const d = dashCache || {};
-      $("stRef").textContent = d.latestOfficialHour ? `· 공식 최신 ${d.latestOfficialHour.slice(0, 16)} 기준, 24시간 넘게 뒤처진 지점은 빨간 점(지연)` : "";
-    }
     function renderDashControls() {
       const list = dashStations();
       $("stSel").innerHTML = list.map((s) => {
@@ -969,7 +982,6 @@
     }
     function renderDash() {
       pickDefaultStation();
-      renderStRef();
       renderDashControls();
       renderSysCards();
       loadSeries();
@@ -1873,6 +1885,7 @@
     // ---------- 상단 띠: 화면 이름·설명, 상태 칩 ----------
     const PAGE_HEAD = {
       dash: ["조회", "날씨 통계", "1990년부터 쌓인 관측 자료로 보는 우리 동네 날씨"],
+      questions: ["조회", "질문으로 보는 날씨", "예전보다 더워졌을까? 비가 더 자주 올까? — 일상적인 질문을 과거 관측으로"],
       hourly: ["조회", "시간별 날씨", "지점·기간별 한 시간 단위 관측값 — 레이아웃으로 컬럼을 고르고 그리드·카드로 보기"],
       daily: ["조회", "일별 날씨", "하루 단위 관측값 — 레이아웃으로 컬럼을 고르고 그리드·카드로 보기"],
       download: ["조회", "보기 설정", "시간별·일별 날씨에 보여 줄 컬럼 구성(레이아웃) 만들기·저장"],
@@ -1889,12 +1902,15 @@
       $("phGroup").textContent = g; $("phTitle").textContent = t; $("phDesc").textContent = d;
       document.title = `${t} · 누니날씨`;
     }
+    let currentPage = "dash";
     function renderHeadChips() {
       const d = dashCache;
       if (!d) { $("phChips").innerHTML = ""; return; }
       const chips = [];
+      const adminView = ADMIN_PAGES.has(currentPage); // 수집·저장소 상태 칩은 관리 화면에서만(조회 화면은 공식 최신 시각만)
       const md = (v) => String(v || "").slice(5, 16); // 'YYYY-MM-DD HH:MM' → 'MM-DD HH:MM'
       if (d.latestOfficialHour) chips.push(`<li><span class="chip" title="기상청 공식 자료가 나오는 최신 시각 (${esc(d.timezone || "Asia/Seoul")})"><i></i><span><span class="wide">공식 </span>최신 ${esc(md(d.latestOfficialHour))}</span></span></li>`);
+      if (!adminView) { $("phChips").innerHTML = chips.join(""); return; }
       const pg = d.storage === "postgresql" || d.storage === "mysql"; // 이름은 예전 그대로: DB 연결 여부
       chips.push(`<li${pg ? ` class="opt"` : ""}><span class="chip ${pg ? "c-ok" : "c-warn"}" title="저장소: ${esc(d.storage || "json")}"><i></i>${pg ? "DB 연결됨" : "JSON 모드"}</span></li>`);
       chips.push(`<li><a class="chip ${d.keyRegistered ? "c-ok" : "c-bad"}" href="#/provider" title="공공데이터포털 인증키 ${d.keyRegistered ? "등록됨 " + esc(d.keyHint || "") : "미등록"}"><i></i>인증키 ${d.keyRegistered ? "등록됨" : "없음"}</a></li>`);
@@ -2074,9 +2090,13 @@
     });
     function show(name) {
       setPageHead(name);
-      const target = isLockedPage(name) ? "locked" : name;
+      const target = isLockedPage(name) ? "locked" : name === "questions" ? "dash" : name; // 질문으로 보는 날씨 = 날씨 통계 화면 안의 패널
+      currentPage = name;
       document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p.id === target));
-      document.querySelectorAll("nav a").forEach((a) => a.classList.toggle("active", a.dataset.page === name));
+      document.querySelectorAll("nav a[data-page]").forEach((a) => a.classList.toggle("active", a.dataset.page === name));
+      if (name !== "dash") document.querySelectorAll("nav a[data-sub]").forEach((a) => { a.classList.remove("active"); a.removeAttribute("aria-current"); });
+      document.querySelector("aside nav").classList.toggle("stats-on", name === "dash");
+      renderHeadChips();
       renderAuth(); // 로그인 버튼의 돌아올 화면(next) 갱신
       if (target === "locked") { renderLocked(name); return; }
       if (name === "users") loadUsers();
@@ -2094,9 +2114,18 @@
         const [p0, q0] = location.hash.replace("#", "").split("?");
         if (ROUTE_ALIAS[p0]) history.replaceState(history.state, "", `#${ROUTE_ALIAS[p0]}${q0 !== undefined ? `?${q0}` : ""}`);
       }
+      {
+        // 예전 '생활 속 날씨 › 질문 모아 보기'(#/stats/life?view=cards) → 질문으로 보는 날씨
+        const [p1, q1] = location.hash.replace("#", "").split("?");
+        const qp = new URLSearchParams(q1 || "");
+        if (p1 === "/stats/life" && qp.get("view") === "cards") {
+          qp.delete("view");
+          history.replaceState(history.state, "", `#/questions${qp.toString() ? `?${qp}` : ""}`);
+        }
+      }
       const h = location.hash.replace("#", "").split("?")[0] || "/";
-      const statsTab = { "/": "overview", "/stats/yearly": "yearly", "/stats/region": "region", "/stats/life": "life", "/stats/records": "records" }[h] || (h.startsWith("/stats/") ? "overview" : null);
-      const map = { "/": "dash", "/stats/yearly": "dash", "/stats/region": "dash", "/stats/life": "dash", "/stats/records": "dash", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/users": "users" };
+      const statsTab = { "/": "overview", "/stats/overview": "overview", "/stats/yearly": "yearly", "/stats/region": "region", "/stats/life": "life", "/stats/records": "records", "/questions": "questions" }[h] || (h.startsWith("/stats/") ? "overview" : null);
+      const map = { "/": "dash", "/stats/overview": "dash", "/questions": "questions", "/stats/yearly": "dash", "/stats/region": "dash", "/stats/life": "dash", "/stats/records": "dash", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/users": "users" };
       let name = map[h] || "dash";
       if (name === "users" && !me.authEnabled) name = "dash";
       show(name);
@@ -2121,7 +2150,7 @@
         renderCollectHint();
       }
       if (name === "gaps" && dashCache) routeGaps();
-      if (name === "dash" && window.Stats) window.Stats.route(statsTab || "overview");
+      if ((name === "dash" || name === "questions") && window.Stats) window.Stats.route(statsTab || "overview");
       if (name === "dash" && dashCache && (statsTab || "overview") === "overview") {
         // 주소의 ?station=&hours= 를 반영(직접 입력·뒤로가기)
         const before = dashKey();
@@ -2727,12 +2756,12 @@
     // views.js(시간별·일별 날씨)가 읽기만 하는 연결점
     window.NW = { me: () => me, stations: () => (dashCache && dashCache.stations) || [], loginHref: () => loginHref(), fromPicker, toPicker };
     window.addEventListener("hashchange", route);
-    setPageHead(({ "/hourly": "hourly", "/daily": "daily", "/download": "download", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider" })[location.hash.replace("#", "").split("?")[0]] || "dash");
+    setPageHead(({ "/questions": "questions", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider" })[location.hash.replace("#", "").split("?")[0]] || "dash");
     showLoginNote();
     // 대시보드 자료가 늦거나 실패해도 다른 화면은 그대로 뜨게
     Promise.allSettled([loadMe(), loadDash()]).then(route);
   </script>
   <script src="/views.js?v=3"></script>
-  <script src="/stats.js?v=7"></script>
+  <script src="/stats.js?v=8"></script>
 </body>
 </html>

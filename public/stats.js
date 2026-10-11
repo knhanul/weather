@@ -14,8 +14,11 @@
   const STATUS = { complete: "온전", partial: "자료 부족", none: "자료 없음", ongoing: "진행 중", future: "아직 없음", nodate: "그 해엔 없는 날짜" };
   const PERIOD_KINDS = [["year", "연 전체"], ["month", "월 전체"], ["week", "월 안의 날짜 구간"], ["season", "계절"], ["range", "직접 지정"]];
   const SEASON_IDS = ["spring", "summer", "autumn", "winter"];
-  const TABS = ["overview", "yearly", "region", "life", "records"];
-  const PANEL = { overview: "tabOverview", yearly: "tabYearly", region: "tabRegion", life: "tabLife", records: "tabRecords" };
+  const TABS = ["overview", "yearly", "region", "life", "records", "questions"];
+  const PANEL = { overview: "tabOverview", yearly: "tabYearly", region: "tabRegion", life: "tabLife", records: "tabRecords", questions: "tabQuestions" };
+  // 왼쪽 메뉴 '날씨 통계' 하위 메뉴 이름(화면 제목에도 씀). questions = 따로 있는 주 메뉴 '질문으로 보는 날씨'
+  const TAB_LABEL = { overview: "한눈에 보기", yearly: "연도별 비교", region: "지역별 비교", life: "생활 속 날씨", records: "날씨 기록" };
+  const TAB_DESC = { overview: "최근 기온·강수 그래프와 지점별 관측", yearly: "같은 달·기간을 해마다 비교", region: "관측지점 2~4곳의 날씨 특징과 변화", life: "더위·비·산책·출퇴근·기념일처럼 생활과 가까운 통계", records: "지점별 역대 기록과 그날의 날씨" };
   const SOURCE = "기상청 ASOS 공식 일자료";
 
   const state = {
@@ -142,19 +145,23 @@
   }
   function updateTabLinks() {
     const st = state.station || (typeof dashState !== "undefined" ? dashState.station : null);
-    document.querySelectorAll("#stTabs a[data-tab]").forEach((a) => {
-      const t = a.dataset.tab;
-      a.classList.toggle("on", t === state.tab);
-      if (t === state.tab) a.setAttribute("aria-current", "page");
+    const onStats = state.tab !== "questions" && !!document.querySelector("#dash.on") && !document.querySelector('nav a[data-page="questions"].active');
+    document.querySelectorAll("nav a[data-sub]").forEach((a) => {
+      const t = a.dataset.sub;
+      const cur = onStats && t === state.tab;
+      a.classList.toggle("active", cur);
+      if (cur) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
       if (!st) return;
-      if (t === "overview") a.href = `#/?station=${encodeURIComponent(st)}`;
+      if (t === "overview") a.href = `#/stats/overview?station=${encodeURIComponent(st)}`;
       if (t === "yearly") a.href = `#/stats/yearly?${new URLSearchParams({ station: st, metric: state.metric, period: state.period || defaultPeriod(), from: String(state.from), to: String(state.to || asOfYear()) })}`;
-      if (t === "life") a.href = `#/stats/life?${new URLSearchParams({ view: "cards", station: st })}`;
+      if (t === "life") a.href = `#/stats/life?${new URLSearchParams({ view: life.view === "cards" ? "heat" : life.view, station: st })}`;
       if (t === "records") a.href = `#/stats/records?${new URLSearchParams({ view: "records", station: st })}`;
       if (t === "region" && state.rStations) a.href = `#/stats/region?${new URLSearchParams({ stations: state.rStations.join(","), view: state.rView })}`;
     });
+    if (st) for (const a of document.querySelectorAll('nav a[data-page="questions"], #qLink')) a.href = questionsHref(st);
   }
+  const questionsHref = (st) => `#/questions?station=${encodeURIComponent(st)}`;
 
   // ------------------------------------------------------------ 공통 조건 고르기
   function parsePeriodKey(key) {
@@ -409,7 +416,7 @@
   async function loadCards() {
     const host = $id("qCards");
     if (!host) return;
-    const st = (typeof dashState !== "undefined" && dashState.station) || state.station || "108";
+    const st = (state.tab === "questions" && state.station) || (typeof dashState !== "undefined" && dashState.station) || state.station || "108";
     const my = ++reqs.h;
     host.innerHTML = stateHtml("질문 카드를 계산하는 중…");
     let r;
@@ -884,7 +891,7 @@
   ];
   const REC_VIEWS = [["records", "기록 순위"], ["day", "매년 같은 날"], ["date", "그날의 날씨"]];
   const PRESET_DAYS = [["01-01", "새해 첫날"], ["03-01", "삼일절"], ["05-05", "어린이날"], ["06-06", "현충일"], ["08-15", "광복절"], ["10-03", "개천절"], ["10-09", "한글날"], ["12-25", "성탄절"], ["02-29", "2/29"]];
-  const life = { view: "cards", kind: "wet", md: "05-05", wperiod: "year", tperiod: "range:06-01:09-30", o: { tmin: 10, tmax: 25, dry: true, wind: 5, h1: 6, h2: 9, hum: null }, am: [7, 9], pm: [17, 19], weekdays: true };
+  const life = { view: "heat", kind: "wet", md: "05-05", wperiod: "year", tperiod: "range:06-01:09-30", o: { tmin: 10, tmax: 25, dry: true, wind: 5, h1: 6, h2: 9, hum: null }, am: [7, 9], pm: [17, 19], weekdays: true };
   const rec = { view: "records", period: "all", date: null };
   const reqL = { n: 0 };
   const hoursOpts = Array.from({ length: 24 }, (_, h) => [h, `${h}시`]);
@@ -901,6 +908,7 @@
     return q;
   }
   function lifeHref(view) {
+    if (view === "cards") return questionsHref(state.station); // '질문 모아 보기'는 주 메뉴 '질문으로 보는 날씨'로 옮김
     const q = lifeQuery({ view });
     return `#/stats/life?${q}`;
   }
@@ -913,7 +921,7 @@
   function readLifeHash() {
     const q = hp();
     const v = q.get("view");
-    if (LIFE_VIEWS.some(([x]) => x === v)) life.view = v;
+    if (LIFE_VIEWS.some(([x]) => x === v) && v !== "cards") life.view = v;
     if (["wet", "dry"].includes(q.get("kind"))) life.kind = q.get("kind");
     const md = q.get("date");
     if (md && /^\d{2}-\d{2}$/.test(md)) life.md = md;
@@ -1330,6 +1338,12 @@
   // ------------------------------------------------------------ 라우팅
   function showTab(tab) {
     state.tab = tab;
+    if (TAB_LABEL[tab] && document.querySelector("#dash.on") && !document.querySelector('nav a[data-page="questions"].active')) {
+      $id("phGroup").textContent = "날씨 통계";
+      $id("phTitle").textContent = TAB_LABEL[tab];
+      $id("phDesc").textContent = TAB_DESC[tab];
+      document.title = `${TAB_LABEL[tab]} · 날씨 통계 · 누니날씨`;
+    }
     for (const t of TABS) {
       const el = $id(PANEL[t]);
       if (el) el.hidden = t !== tab;
@@ -1342,11 +1356,7 @@
     if (tab === "overview") {
       const st = (typeof dashState !== "undefined" && dashState.station) || null;
       if (st) state.station = st;
-      const host = $id("qCards");
-      if (host && (host.dataset.st !== String(st) || !host.innerHTML)) {
-        host.dataset.st = String(st);
-        loadCards();
-      }
+      updateTabLinks();
       return;
     }
     const panel = $id(PANEL[tab]);
@@ -1378,22 +1388,58 @@
       recShell();
       renderRecCtl();
       loadRec();
+    } else if (tab === "questions") {
+      questionsShell();
+      loadQuestions();
+    }
+  }
+  // ------------------------------------------------------------ 질문으로 보는 날씨(주 메뉴): 질문 카드 + 생활 속 질문 카드
+  function questionsShell() {
+    $id("qxCtl").innerHTML = stSelect("qxSt");
+    const p = $id("tabQuestions");
+    if (p.dataset.ready) return;
+    p.dataset.ready = "1";
+    p.addEventListener("change", (e) => {
+      if (e.target.id !== "qxSt") return;
+      state.station = e.target.value;
+      history.replaceState(null, "", questionsHref(state.station));
+      loadQuestions();
+    });
+  }
+  const reqQ = { n: 0 };
+  async function loadQuestions() {
+    const st = state.station;
+    if (location.hash !== questionsHref(st)) history.replaceState(null, "", questionsHref(st));
+    updateTabLinks();
+    const host = $id("qCards");
+    if (host.dataset.st !== String(st) || !host.innerHTML || host.querySelector("#qRetry")) {
+      host.dataset.st = String(st);
+      loadCards();
+    }
+    const out = $id("qxLife");
+    if (out.dataset.st === String(st) && out.innerHTML) return;
+    const my = ++reqQ.n;
+    out.innerHTML = stateHtml("생활 속 질문을 계산하는 중…");
+    try {
+      const r = await getJson(`/api/stats/highlights?station=${encodeURIComponent(st)}&set=life`);
+      if (my !== reqQ.n) return;
+      out.dataset.st = String(st);
+      lifeCards(out, r);
+    } catch (e) {
+      if (my !== reqQ.n) return;
+      out.innerHTML = errorHtml(e.message, "qxRetry");
+      $id("qxRetry").onclick = loadQuestions;
     }
   }
   function onStation(id) {
     state.station = id;
-    if (state.tab === "overview") {
-      const host = $id("qCards");
-      if (host) host.dataset.st = String(id);
-      loadCards();
-    }
     updateTabLinks();
   }
   window.Stats = { route, onStation };
   // 본문 스크립트의 첫 route() 가 이 파일보다 먼저 돌았으면 지금 탭을 맞춘다
   if (typeof route === "function") {
     const h = location.hash.replace("#", "").split("?")[0] || "/";
-    const tab = { "/": "overview", "/stats/yearly": "yearly", "/stats/region": "region", "/stats/life": "life", "/stats/records": "records" }[h];
+    const tab = { "/": "overview", "/stats/overview": "overview", "/questions": "questions", "/stats/yearly": "yearly", "/stats/region": "region", "/stats/life": "life", "/stats/records": "records" }[h];
     if (tab && document.querySelector("#dash.on")) window.Stats.route(tab);
   }
 })();
