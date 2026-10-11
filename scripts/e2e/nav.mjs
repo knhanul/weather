@@ -23,7 +23,7 @@ const navState = (page) => page.evaluate(() => ({ hash: location.hash, title: do
   let s = await navState(page);
   const sub = await page.$$eval("#navStats a", (a) => a.map((x) => x.textContent.trim()));
   ok(JSON.stringify(sub) === JSON.stringify(["한눈에 보기", "연도별 비교", "지역별 비교", "생활 속 날씨", "날씨 기록"]), `하위 메뉴 ${sub}`);
-  const main = await page.$$eval("aside .nav-main > a", (a) => a.map((x) => x.textContent.trim()));
+  const main = await page.$$eval("aside .nav-main > a, aside .nav-main > .nav-row > a", (a) => a.map((x) => x.textContent.trim()));
   ok(JSON.stringify(main) === JSON.stringify(["날씨 통계", "질문으로 보는 날씨", "시간별 날씨", "일별 날씨", "보기 설정"]), `조회 주 메뉴 ${main}`);
   ok(s.active.includes("한눈에 보기") && s.active.includes("날씨 통계") && s.title === "한눈에 보기" && s.group === "날씨 통계", `#/ = 한눈에 보기 ${JSON.stringify(s)}`);
   ok(!(await page.$("#stTabs")), "본문 탭 줄 없음");
@@ -75,24 +75,6 @@ const navState = (page) => page.evaluate(() => ({ hash: location.hash, title: do
   await page.goto(`${BASE}/#/hourly-weather`, { waitUntil: "networkidle" });
   s = await navState(page);
   ok(JSON.stringify(s.active) === JSON.stringify(["시간별 날씨"]), `다른 화면에선 통계 하위 메뉴 꺼짐 ${s.active}`);
-  await ctx.close();
-}
-{
-  const { ctx, page } = await ctxFor(BASE, true);
-  await page.goto(`${BASE}/#/stats/overview`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(1200);
-  const m = await page.evaluate(() => ({ ovf: document.documentElement.scrollWidth - innerWidth, iw: innerWidth, sub: getComputedStyle(document.getElementById("navStats")).display, vis: [...document.querySelectorAll("aside .nav-main > a, #navStats a")].every((a) => { const r = a.getBoundingClientRect(); return r.width > 0 && r.right <= innerWidth + 1; }) }));
-  ok(m.iw === 390 && m.ovf <= 1 && m.sub === "flex" && m.vis, `모바일: 넘침 없음·통계 하위 메뉴 줄 보임·주 메뉴 모두 화면 안 ${JSON.stringify(m)}`);
-  await page.screenshot({ path: `${SH}/nav-overview-mobile.png` });
-  await page.tap('#navStats a:text-is("연도별 비교")');
-  await page.waitForTimeout(1500);
-  ok(/^#\/stats\/yearly/.test(await page.evaluate(() => location.hash)), "모바일: 하위 메뉴 탭 → 연도별 비교");
-  await page.screenshot({ path: `${SH}/nav-yearly-mobile.png` });
-  await page.tap('aside a[data-page="questions"]');
-  await page.waitForSelector("#qxLife .q-card", { timeout: 40000 });
-  const sub2 = await page.evaluate(() => getComputedStyle(document.getElementById("navStats")).display);
-  ok(sub2 === "none", "모바일: 질문으로 보는 날씨에서는 통계 하위 메뉴 줄 접힘");
-  await page.screenshot({ path: `${SH}/nav-questions-mobile.png` });
   await ctx.close();
 }
 // 관리자: 수집이력 화면 위에 적재 현황 카드, 관리 화면 머리 칩 그대로 (로컬 테스트 세션, 관리자)

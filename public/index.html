@@ -2,12 +2,15 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>누니날씨 · nuni weather</title>
   <meta name="description" content="누니날씨(nuni weather) — 기상청 공식 ASOS 관측 자료를 수집·조회·다운로드하는 공통 기상데이터 플랫폼" />
   <meta name="theme-color" content="#026EF8" />
   <meta name="application-name" content="누니날씨" />
   <meta name="apple-mobile-web-app-title" content="누니날씨" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" href="/brand/favicon.ico" sizes="16x16 32x32 48x48" />
   <link rel="icon" href="/brand/icon.svg" type="image/svg+xml" />
   <link rel="icon" href="/brand/favicon-32.png" type="image/png" sizes="32x32" />
@@ -294,26 +297,6 @@
     .foot-logo img { height:18px; width:auto; display:block; }
     .foot-logo span { font-size:13px; font-weight:700; color:var(--pri-2); letter-spacing:-.01em; line-height:1; padding-bottom:0; }
     @media (max-width:800px) {
-      .layout { display:block; }
-      aside { width:auto; padding:0 12px; border-right:0; border-bottom:1px solid var(--line); }
-      .aside-in { position:static; max-height:none; overflow:visible; padding:10px 0 8px; }
-      .brand { padding:0 4px 8px; gap:8px; }
-      .brand-icon { width:30px; height:30px; }
-      .brand-text { flex-direction:row; align-items:flex-end; gap:8px; }
-      .brand-ko img { height:22px; } .brand-ko b { font-size:18.4px; }
-      .brand-en { font-size:10px; padding-bottom:1px; }
-      nav { display:grid; gap:4px; }
-      .nav-group { display:flex; align-items:center; gap:2px; overflow-x:auto; scrollbar-width:none; }
-      .nav-group + .nav-group { margin-top:0; padding-top:4px; border-top:1px solid var(--line); }
-      .nav-label { flex-shrink:0; width:34px; margin:0; padding:0 4px; }
-      nav a { white-space:nowrap; flex-shrink:0; padding:6px 10px; margin:0; font-size:14px; }
-      nav { grid-template-columns:minmax(0, 1fr); }
-      .nav-group { min-width:0; }
-      .nav-group.nav-main { flex-wrap:wrap; overflow-x:visible; row-gap:2px; }
-      .nav-sub { order:99; flex:1 1 100%; display:none; flex-wrap:wrap; gap:2px; margin:2px 0 0; padding:4px 0 0 34px; border-left:0; border-top:1px dashed var(--line); }
-      nav.stats-on .nav-sub { display:flex; }
-      .nav-sub a { padding:5px 9px; font-size:13px; }
-      nav a.nav-parent.active { background:var(--soft); }
       main { padding:16px 14px 32px; }
       .site-foot { padding:12px 14px 20px; }
       header.ph { padding:11px 16px 12px; min-height:0; gap:8px; }
@@ -324,7 +307,6 @@
       header.ph.has-auth .ph-auth { align-self:start; }
       .kakao-btn { height:32px; padding:0 11px; font-size:13px; gap:6px; } .kakao-btn svg { width:16px; height:16px; }
       .me b { max-width:90px; } button.logout { height:26px; padding:0 8px; }
-      nav a.locked { display:inline-flex; justify-content:flex-start; gap:3px; } .nav-lock { width:12px; height:12px; }
       .chip { height:24px; padding:0 8px; font-size:11.5px; gap:5px; } .chip small { font-size:11.5px; }
       .ph-chips { gap:4px; } .chip { padding:0 7px; } .chip .wide { display:none; }
     }
@@ -506,11 +488,19 @@
   </style>
   <link rel="stylesheet" href="/chart-full.css?v=3" />
   <link rel="stylesheet" href="/views.css?v=3" />
+  <link rel="stylesheet" href="/drawer.css?v=1" />
 </head>
 <body>
+  <div class="appbar" id="appbar">
+    <button type="button" class="ab-menu" id="abMenu" aria-label="메뉴 열기" aria-controls="drawer" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <a class="ab-brand" href="#/stats/overview" aria-label="누니날씨 한눈에 보기"><img src="/brand/icon.svg" alt="" width="24" height="24" /></a>
+    <p class="ab-title" id="abTitle">날씨 통계</p>
+  </div>
+  <div class="drawer-backdrop" id="drBackdrop"></div>
   <div class="layout">
-    <aside>
+    <aside id="drawer">
       <div class="aside-in">
+      <button type="button" class="dr-close" id="drClose" aria-label="메뉴 닫기">✕</button>
       <a class="brand" href="#/" aria-label="누니날씨 (nuni weather) 날씨 통계">
         <img class="brand-icon" src="/brand/icon.svg" alt="" width="38" height="38" />
         <span class="brand-text">
@@ -521,7 +511,7 @@
       <nav>
         <div class="nav-group nav-main" role="group" aria-labelledby="navLookup">
           <p class="nav-label" id="navLookup">조회</p>
-          <a href="#/stats/overview" data-page="dash" class="nav-parent">날씨 통계</a>
+          <div class="nav-row"><a href="#/stats/overview" data-page="dash" class="nav-parent">날씨 통계</a><button type="button" class="nav-exp" id="navExp" aria-controls="navStats" aria-expanded="false" aria-label="날씨 통계 하위 메뉴 펼치기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
           <div class="nav-sub" id="navStats" role="group" aria-label="날씨 통계 하위 메뉴">
             <a href="#/stats/overview" data-sub="overview">한눈에 보기</a>
             <a href="#/stats/yearly" data-sub="yearly">연도별 비교</a>
@@ -544,6 +534,7 @@
           <a href="#/users" data-page="users" id="navUsers" hidden>사용자</a>
         </div>
       </nav>
+      <div class="dr-auth" id="drAuth"></div>
       </div>
     </aside>
     <div class="wrap">
@@ -2765,5 +2756,6 @@
   </script>
   <script src="/views.js?v=3"></script>
   <script src="/stats.js?v=8"></script>
+  <script src="/drawer.js?v=1"></script>
 </body>
 </html>
