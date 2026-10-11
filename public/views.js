@@ -165,6 +165,7 @@
         </div>
         <a class="vw-edit" href="${esc(editHref)}">${login ? "레이아웃 보기" : "레이아웃 만들기·편집"} <span aria-hidden="true">›</span> <small>보기 설정</small></a>
       </div>
+      <div class="vw-dlw" data-vw-dl hidden></div>
       ${s.note ? `<p class="vw-note warn">${esc(s.note)}</p>` : ""}
       ${login ? `<p class="vw-note">지금은 기본 프리셋만 고를 수 있습니다. <a href="${esc(NW().loginHref())}">카카오 로그인</a>하면 원하는 컬럼으로 내 레이아웃을 만들고, 고른 레이아웃·보기 방식이 내 계정에 저장됩니다.</p>` : ""}`;
   }
@@ -194,6 +195,30 @@
     const n = Date.parse(`${String(d).slice(0, 10)}T00:00:00Z`);
     return Number.isFinite(n) ? `${String(d).slice(0, 10)} (${WD[new Date(n).getUTCDay()]})` : String(d);
   };
+  // 내려받기(CSV): 지금 조회한 지점·기간 전체를 지금 레이아웃의 컬럼 순서로. 기존 /api/export 를 그대로 쓴다(상한 없음, 비로그인도 프리셋으로 가능).
+  const DL_SLOW_ROWS = 100000;
+  const DL_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+  function exportHref(kind, keys) {
+    const d = st[kind].cache.d;
+    const q = new URLSearchParams({ kind, stationId: d.stationId, from: d.from, to: d.to, columns: keys.join(",") });
+    return `/api/export?${q}`;
+  }
+  function renderDl(kind, keys) {
+    const box = $(P[kind].bar).querySelector("[data-vw-dl]");
+    if (!box) return;
+    const c = st[kind].cache;
+    if (!c || !c.d.total) {
+      box.hidden = true;
+      box.innerHTML = "";
+      return;
+    }
+    const d = c.d;
+    const n = d.total.toLocaleString("ko-KR");
+    const span = `${d.from.slice(0, kind === "hourly" ? 16 : 10)} ~ ${d.to.slice(0, kind === "hourly" ? 16 : 10)}`;
+    box.hidden = false;
+    box.innerHTML = `<a class="vw-dl" href="${esc(exportHref(kind, keys))}" download data-rows="${d.total}">${DL_ICON}CSV 내려받기</a>
+      <span class="vw-dl-note${d.total > DL_SLOW_ROWS ? " warn" : ""}">${esc(d.stationId)} 지점 · ${esc(span)} 전체 <b>${n}행</b> · 컬럼 ${keys.length}개(지금 레이아웃 순서)${d.pages > 1 ? ` · 화면은 ${PAGE_SIZE}행씩, 파일은 기간 전체` : ""}${d.total > DL_SLOW_ROWS ? " · 행이 많아 파일을 만드는 데 시간이 걸릴 수 있습니다" : ""} · 행 수 상한 없음</span>`;
+  }
   function render(kind) {
     const s = st[kind];
     const p = P[kind];
@@ -211,6 +236,7 @@
     $(p.next).disabled = d.page >= d.pages;
     out.dataset.view = s.view;
     out.dataset.cols = keys.join(",");
+    renderDl(kind, keys);
     if (!d.rows.length) {
       out.innerHTML = `<p class="vw-empty">이 지점·기간에 자료가 없습니다.</p>`;
       return;
@@ -265,6 +291,8 @@
       $(p.msg).innerHTML = `<span class="bad">불러오지 못했습니다: ${esc(e.message)}</span>`;
       $(p.out).innerHTML = "";
       $(p.pager).hidden = true;
+      s.cache = null;
+      renderDl(kind, []);
       return;
     }
     if (seq !== s.seq) return;

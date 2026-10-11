@@ -49,8 +49,11 @@
 .dl-login p { margin: 0; flex: 1 1 260px; }
 #download.dl-readonly .dl-field-label { cursor: default; opacity: .8; }
 #download.dl-readonly .dl-order-chip { cursor: default; }
-@media (max-width: 560px) {
-  #xHourlyDates, #xDailyDates { width: 100%; }
-  #xHourlyDates > div, #xDailyDates > div { flex: 1 1 100%; min-width: 0; }
-  #xHourlyDates input, #xDailyDates input { width: 100%; min-width: 0; box-sizing: border-box; }
-}
+.vw-dlw { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 8px 0 0; }
+.vw-dlw[hidden] { display: none; }
+.vw-dl { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 10px; background: var(--pri); color: var(--pri-fg); font-weight: 700; font-size: 14px; text-decoration: none; }
+.vw-dl:hover { background: var(--pri-dark); }
+.vw-dl svg { width: 16px; height: 16px; }
+.vw-dl-note { font-size: 12.5px; color: var(--muted); }
+.vw-dl-note.warn { color: var(--warn); }
+@media (max-width: 560px) { .vw-dl { flex: 1 1 100%; justify-content: center; } }

@@ -453,8 +453,6 @@
       .sx-ctl .sx-inline select, .sx-ctl .sx-inline input.sx-num { flex:1 1 0; min-width:0; width:auto; }
     }
     /* 다운로드 화면 스타일 */
-    .dl-quick-ranges { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
-    .dl-quick-ranges span { font-size:12px; color:var(--muted); font-weight:600; }
     .dl-chip-btn { height:28px; padding:0 10px; border-radius:999px; font-size:12px; font-weight:500; background:var(--soft); color:var(--pri-dark); border:1px solid var(--line); cursor:pointer; transition:background .15s; }
     .dl-chip-btn:hover:not(:disabled) { background:var(--soft-2); }
     .dl-layout-row { display:flex; flex-wrap:wrap; gap:10px 14px; align-items:flex-end; }
@@ -491,20 +489,12 @@
     .dl-order-btn:disabled { opacity:.3; cursor:not-allowed; }
     .dl-order-del { width:20px; height:20px; padding:0; display:inline-grid; place-items:center; border:none; background:transparent; color:#94a3b8; font-size:13px; font-weight:700; cursor:pointer; border-radius:4px; }
     .dl-order-del:hover { background:var(--bad-bg); color:var(--bad); }
-    .dl-actions-bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-top:8px; }
-    .dl-download-btn { height:44px; padding:0 22px; font-size:15px; font-weight:700; display:inline-flex; align-items:center; gap:8px; border-radius:10px; background:var(--pri); color:#fff; box-shadow:0 4px 12px rgba(2,110,248,.35); cursor:pointer; }
-    .dl-download-btn:hover:not(:disabled) { background:var(--pri-dark); box-shadow:0 6px 16px rgba(2,110,248,.45); }
-    .dl-download-btn:disabled { opacity:.5; cursor:not-allowed; box-shadow:none; }
-    .dl-preview-table-wrap { overflow-x:auto; margin-top:12px; border:1px solid var(--line); border-radius:10px; background:#fff; max-height:480px; }
-    .dl-preview-table th { white-space:nowrap; font-size:12px; padding:8px 12px; background:#f4f8fe; border-bottom:1px solid var(--line); text-align:left; position:sticky; top:0; z-index:1; }
-    .dl-preview-table th .th-col { font-family:monospace; font-size:10.5px; color:var(--muted); font-weight:400; display:block; }
-    .dl-preview-table td { white-space:nowrap; font-size:12.5px; padding:7px 12px; border-bottom:1px solid #edf2f9; font-variant-numeric:tabular-nums; }
     .null-val { color:#94a3b8; font-family:monospace; font-weight:500; font-size:12px; }
     .col-count-badge { display:inline-flex; align-items:center; height:26px; padding:0 10px; background:var(--soft); color:var(--pri-dark); font-size:12px; font-weight:700; border-radius:999px; }
     .sm-btn { height:30px; padding:0 10px; font-size:12px; }
   </style>
   <link rel="stylesheet" href="/chart-full.css?v=3" />
-  <link rel="stylesheet" href="/views.css?v=2" />
+  <link rel="stylesheet" href="/views.css?v=3" />
 </head>
 <body>
   <div class="layout">
@@ -630,69 +620,21 @@
           </div>
         </section>
         <section class="page" id="download">
-          <!-- 1. 조회 범위 설정 카드 -->
-          <div class="card">
-            <div class="card-head">
-              <h2>미리보기·내려받기 범위</h2>
-              <span class="badge" id="dlStorageBadge" style="background:var(--soft);color:var(--pri-dark);font-size:12px;font-weight:600;">DB 확인 중…</span>
-            </div>
-            <p class="muted" style="margin-top:2px;">여기서 만든 레이아웃은 시간별 날씨·일별 날씨 화면의 레이아웃 목록에 나오고, 같은 컬럼 구성으로 원자료 CSV 도 내려받을 수 있습니다. 결측값(미관측)은 0이 아닌 NULL 그대로 보존됩니다.</p>
-            <div class="row" style="align-items:flex-end;">
-              <div style="min-width:160px;">
-                <label for="xKind">자료 종류</label>
-                <select id="xKind">
-                  <option value="hourly">시간별 관측 (ASOS 시간)</option>
-                  <option value="daily">일별 관측 (ASOS 일)</option>
-                </select>
-              </div>
-              <div style="min-width:180px;">
-                <label for="xStation">관측지점</label>
-                <select id="xStation"></select>
-              </div>
-              <!-- 시간별 날짜/시각 (datetime-local, 1시간 단위) -->
-              <div id="xHourlyDates" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
-                <div>
-                  <label for="xFrom">시작 일시 (시간)</label>
-                  <input id="xFrom" type="datetime-local" step="3600" />
-                </div>
-                <div>
-                  <label for="xTo">종료 일시 (시간)</label>
-                  <input id="xTo" type="datetime-local" step="3600" />
-                </div>
-              </div>
-              <!-- 일별 날짜 (date, 임의 시각 없는 순수 일자 기준) -->
-              <div id="xDailyDates" style="display:none; gap:10px; flex-wrap:wrap; align-items:flex-end;">
-                <div>
-                  <label for="xFromDaily">시작 일자</label>
-                  <input id="xFromDaily" type="date" />
-                </div>
-                <div>
-                  <label for="xToDaily">종료 일자</label>
-                  <input id="xToDaily" type="date" />
-                </div>
-              </div>
-            </div>
-            <!-- 빠른 기간 선택 버튼 바 -->
-            <div class="dl-quick-ranges" style="margin-top:12px;">
-              <span>빠른 기간:</span>
-              <button type="button" class="dl-chip-btn" data-hours="24">24시간</button>
-              <button type="button" class="dl-chip-btn" data-hours="72">3일</button>
-              <button type="button" class="dl-chip-btn" data-hours="168">7일</button>
-              <button type="button" class="dl-chip-btn" data-hours="720">30일</button>
-              <button type="button" class="dl-chip-btn" data-days="today">오늘</button>
-              <button type="button" class="dl-chip-btn" data-days="thismonth">이번 달</button>
-              <button type="button" class="dl-chip-btn" data-days="365">1년</button>
-            </div>
-          </div>
-
           <!-- 2. 레이아웃 저장·불러오기 카드 -->
           <div class="card">
             <div class="card-head">
               <h2>레이아웃(보기 구성) 관리</h2>
               <span class="muted" style="font-size:12px;" id="xLayoutWhere">선택한 자료 종류와 컬럼·순서를 브라우저에 저장</span>
             </div>
-            <p class="muted" style="margin-top:2px;">자주 쓰는 컬럼 조합과 순서를 이름 붙여 저장하고 다시 불러올 수 있습니다. 날짜와 지점 같은 매번 바뀌는 조회 조건은 레이아웃과 분리되어 유지됩니다.</p>
+            <p class="muted" style="margin-top:2px;">자주 쓰는 컬럼 조합과 순서를 이름 붙여 저장해 두면 <a href="#/hourly-weather">시간별 날씨</a>·<a href="#/daily-weather">일별 날씨</a> 화면의 레이아웃 목록에 나오고, 그 화면에서 같은 컬럼 순서로 CSV 를 내려받을 수 있습니다. 지점과 기간은 그 화면에서 고릅니다.</p>
             <div class="dl-layout-row" style="margin-top:8px;">
+              <div>
+                <label for="xKind" style="display:block; font-size:12px; margin-bottom:4px; font-weight:600;">자료 종류</label>
+                <select id="xKind">
+                  <option value="hourly">시간별 날씨 (ASOS 시간)</option>
+                  <option value="daily">일별 날씨 (ASOS 일)</option>
+                </select>
+              </div>
               <div>
                 <label for="xLayoutSelect" style="display:block; font-size:12px; margin-bottom:4px; font-weight:600;">저장된 레이아웃 / 프리셋</label>
                 <select id="xLayoutSelect"></select>
@@ -741,30 +683,6 @@
             </div>
             <p class="muted" style="margin-top:2px;">시간별·일별 날씨 그리드의 열 순서이자 카드의 항목 순서, 그리고 내려받는 CSV 의 열 순서입니다. 키보드로도 [▲]/[▼]를 눌러 좌우 순서를 자유롭게 조정할 수 있습니다.</p>
             <div id="xOrderWrap" class="dl-order-wrap" role="list" aria-label="선택된 컬럼 순서 목록"></div>
-          </div>
-
-          <!-- 5. 미리보기 및 다운로드 카드 -->
-          <div class="card">
-            <div class="card-head" style="flex-wrap:wrap; gap:10px;">
-              <div>
-                <h2 style="margin:0;">미리보기 및 CSV 내려받기</h2>
-                <p class="muted" id="xPreviewMeta" style="margin:2px 0 0; font-size:13px;">조회 중…</p>
-              </div>
-              <div class="dl-actions-bar">
-                <button type="button" id="xDownloadBtn" class="dl-download-btn">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  선택한 컬럼으로 CSV 다운로드
-                </button>
-                <button id="xGo" style="display:none;" aria-hidden="true"></button>
-              </div>
-            </div>
-            <div id="xAlertBox" role="alert" hidden style="margin-top:8px;"></div>
-            <div class="dl-preview-table-wrap">
-              <table class="dl-preview-table">
-                <thead id="xPreviewThead"></thead>
-                <tbody id="xPreviewTbody"></tbody>
-              </table>
-            </div>
           </div>
         </section>
         <section class="page" id="collect">
@@ -900,15 +818,11 @@
       seriesCache = new Map();
       renderHeadChips();
       renderDash();
-      fillStations($("hStation")); fillStations($("dStation")); fillStations($("xStation"));
+      fillStations($("hStation")); fillStations($("dStation"));
       $("hFrom").value = toPicker(d.latestOfficialHour.slice(0,10) + " 00:00:00");
       $("hTo").value = toPicker(d.latestOfficialHour);
       $("dFrom").value = new Date(Date.parse(d.latestOfficialHour.slice(0, 10) + "T00:00:00Z") - 6 * 86400000).toISOString().slice(0, 10); // 일별 날씨 기본: 최근 7일
       $("dTo").value = d.latestOfficialHour.slice(0,10);
-      $("xFrom").value = $("hFrom").value;
-      $("xTo").value = $("hTo").value;
-      if ($("xFromDaily")) $("xFromDaily").value = $("dFrom").value;
-      if ($("xToDaily")) $("xToDaily").value = $("dTo").value;
       $("pStatus").textContent = `저장 ${d.storage||"json"} · 키 ${d.keyRegistered ? "등록됨 " + (d.keyHint||"") : "미등록"} · 공식 최신 ${d.latestOfficialHour}`;
       refreshCollectForm();
       return true;
@@ -2227,7 +2141,6 @@
       layouts: {},
       currentLayoutId: "preset:default",
       draggedIndex: null,
-      previewDebounce: null,
       filterText: ""
     };
 
@@ -2336,10 +2249,6 @@
           const res = await fetch("/api/export/fields");
           if (res.ok) {
             dlState.catalogs = await res.json();
-            const badge = $("dlStorageBadge");
-            if (badge) {
-              badge.textContent = dlState.catalogs.storage === "mysql" ? "MySQL(NAS) 연결됨" : dlState.catalogs.storage === "postgresql" ? "PostgreSQL 연결됨" : "로컬 JSON 파일 저장소";
-            }
           }
         } catch (e) {
           console.error("Failed to load export fields", e);
@@ -2347,18 +2256,6 @@
       }
 
       const modeChanged = await loadCustomLayouts();
-
-      if ($("xStation") && $("xStation").options.length === 0 && dashCache) {
-        fillStations($("xStation"));
-      }
-
-      const latest = dashCache?.latestOfficialHour;
-      if (latest) {
-        if (!$("xFrom").value) $("xFrom").value = toPicker(latest.slice(0, 10) + " 00:00:00");
-        if (!$("xTo").value) $("xTo").value = toPicker(latest);
-        if ($("xFromDaily") && !$("xFromDaily").value) $("xFromDaily").value = latest.slice(0, 10);
-        if ($("xToDaily") && !$("xToDaily").value) $("xToDaily").value = latest.slice(0, 10);
-      }
 
       if (!dlState.initialized) {
         dlState.initialized = true;
@@ -2372,8 +2269,6 @@
       if ((wantKind === "hourly" || wantKind === "daily") && wantKind !== dlState.kind) {
         dlState.kind = wantKind;
         $("xKind").value = wantKind;
-        $("xHourlyDates").style.display = wantKind === "hourly" ? "flex" : "none";
-        $("xDailyDates").style.display = wantKind === "hourly" ? "none" : "flex";
         kindChanged = true;
       }
       const wantLayout = hpw.get("layout");
@@ -2388,7 +2283,6 @@
         renderColGroups();
         renderOrderChips();
         updateColCounter();
-        triggerPreview();
       }
     }
 
@@ -2466,7 +2360,6 @@
       renderColGroups();
       renderOrderChips();
       updateColCounter();
-      triggerPreview();
     }
 
     function renderColGroups() {
@@ -2574,199 +2467,12 @@
       counter.textContent = `선택된 컬럼 ${sel}개 / 전체 ${total}개`;
     }
 
-    function triggerPreview() {
-      clearTimeout(dlState.previewDebounce);
-      dlState.previewDebounce = setTimeout(fetchPreview, 250);
-    }
-
-    async function fetchPreview() {
-      const meta = $("xPreviewMeta");
-      const thead = $("xPreviewThead");
-      const tbody = $("xPreviewTbody");
-      const alertBox = $("xAlertBox");
-      const dlBtn = $("xDownloadBtn");
-
-      if (!meta || !thead || !tbody) return;
-
-      if (dlState.orderedKeys.length === 0) {
-        meta.textContent = "선택된 컬럼이 없습니다.";
-        thead.innerHTML = "";
-        tbody.innerHTML = "";
-        if (alertBox) {
-          alertBox.hidden = false;
-          alertBox.className = "bad g-err";
-          alertBox.textContent = "다운로드할 컬럼을 최소 1개 이상 선택해 주세요.";
-        }
-        if (dlBtn) dlBtn.disabled = true;
-        return;
-      }
-
-      if (dlBtn) dlBtn.disabled = false;
-      if (alertBox) alertBox.hidden = true;
-      meta.textContent = "데이터 불러오는 중…";
-
-      const stationId = $("xStation")?.value || "";
-      const isHourly = dlState.kind === "hourly";
-      const from = isHourly ? dtVal("xFrom") : ($("xFromDaily")?.value || "");
-      const to = isHourly ? dtVal("xTo") : ($("xToDaily")?.value || "");
-
-      const q = new URLSearchParams({
-        kind: dlState.kind,
-        stationId,
-        from,
-        to,
-        columns: dlState.orderedKeys.join(",")
-      });
-
-      try {
-        const res = await fetch("/api/export/preview?" + q);
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          meta.textContent = "조회 실패";
-          if (alertBox) {
-            alertBox.hidden = false;
-            alertBox.className = "bad g-err";
-            alertBox.textContent = err.message || "미리보기를 불러오지 못했습니다.";
-          }
-          thead.innerHTML = "";
-          tbody.innerHTML = "";
-          return;
-        }
-
-        const data = await res.json();
-
-        if (data.totalCount === 0) {
-          meta.textContent = "조회 결과 0건";
-          if (alertBox) {
-            alertBox.hidden = false;
-            alertBox.className = "muted";
-            alertBox.style.padding = "10px";
-            alertBox.style.background = "var(--soft)";
-            alertBox.style.borderRadius = "8px";
-            alertBox.textContent = "지정된 조건(기간·관측소)에 일치하는 관측 자료가 DB에 없습니다.";
-          }
-          thead.innerHTML = "";
-          tbody.innerHTML = "";
-          return;
-        }
-
-        meta.textContent = `DB 결과 총 ${Number(data.totalCount).toLocaleString()}건 중 상위 ${data.previewCount}건 미리보기 (선택 컬럼 ${data.columns.length}개)`;
-
-        if (data.missingColumns && data.missingColumns.length > 0) {
-          if (alertBox) {
-            alertBox.hidden = false;
-            alertBox.className = "warn";
-            alertBox.style.padding = "8px 12px";
-            alertBox.style.background = "var(--warn-bg)";
-            alertBox.style.borderRadius = "8px";
-            alertBox.style.fontSize = "12.5px";
-            alertBox.textContent = `※ 컬럼 [${data.missingColumns.join(", ")}]은(는) 현재 DB 테이블에 존재하지 않아 NULL로 채워집니다.`;
-          }
-        }
-
-        let thHtml = "<tr>";
-        for (const col of data.columns) {
-          thHtml += `<th>`;
-          thHtml += `  <span>${esc(col.name_ko || col.key)}</span>`;
-          thHtml += `  <span class="th-col">${esc(col.key)}${col.unit ? ` (${esc(col.unit)})` : ""}</span>`;
-          thHtml += `</th>`;
-        }
-        thHtml += "</tr>";
-        thead.innerHTML = thHtml;
-
-        let tbHtml = "";
-        for (const row of data.rows) {
-          tbHtml += "<tr>";
-          for (const col of data.columns) {
-            const val = row[col.key];
-            if (val === null || val === undefined || val === "") {
-              tbHtml += `<td><span class="null-val" title="미관측/결측값 (NULL)">—</span></td>`;
-            } else {
-              tbHtml += `<td>${esc(val)}</td>`;
-            }
-          }
-          tbHtml += "</tr>";
-        }
-        tbody.innerHTML = tbHtml;
-      } catch (e) {
-        meta.textContent = "통신 오류";
-        if (alertBox) {
-          alertBox.hidden = false;
-          alertBox.className = "bad g-err";
-          alertBox.textContent = "서버와 통신하는 중 오류가 발생했습니다: " + e.message;
-        }
-      }
-    }
-
     function setupDownloadEvents() {
       $("xKind").onchange = () => {
         dlState.kind = $("xKind").value;
-        const isHourly = dlState.kind === "hourly";
-        $("xHourlyDates").style.display = isHourly ? "flex" : "none";
-        $("xDailyDates").style.display = isHourly ? "none" : "flex";
 
         applyLayout(userDefaultLayoutId(dlState.kind));
       };
-
-      $("xStation").onchange = triggerPreview;
-      $("xFrom").onchange = triggerPreview;
-      $("xTo").onchange = triggerPreview;
-      if ($("xFromDaily")) $("xFromDaily").onchange = triggerPreview;
-      if ($("xToDaily")) $("xToDaily").onchange = triggerPreview;
-
-      document.querySelectorAll(".dl-quick-ranges button[data-hours], .dl-quick-ranges button[data-days]").forEach((btn) => {
-        btn.onclick = () => {
-          const hours = btn.dataset.hours ? Number(btn.dataset.hours) : null;
-          const days = btn.dataset.days;
-          const isHourly = dlState.kind === "hourly";
-          const refMs = dashCache?.latestOfficialHour ? wallMs(dashCache.latestOfficialHour) : (Date.now() - 9 * HOUR);
-
-          if (hours) {
-            const startMs = refMs - hours * HOUR;
-            if (isHourly) {
-              $("xFrom").value = toPicker(fmtWall(startMs));
-              $("xTo").value = toPicker(fmtWall(refMs));
-            } else {
-              $("xFromDaily").value = fmtWall(startMs).slice(0, 10);
-              $("xToDaily").value = fmtWall(refMs).slice(0, 10);
-            }
-          } else if (days === "today") {
-            const todayStr = fmtWall(refMs).slice(0, 10);
-            if (isHourly) {
-              $("xFrom").value = toPicker(`${todayStr} 00:00:00`);
-              $("xTo").value = toPicker(fmtWall(refMs));
-            } else {
-              $("xFromDaily").value = todayStr;
-              $("xToDaily").value = todayStr;
-            }
-          } else if (days === "thismonth") {
-            const d = new Date(refMs);
-            const y = d.getUTCFullYear();
-            const m = p2(d.getUTCMonth() + 1);
-            const mStart = `${y}-${m}-01`;
-            const todayStr = fmtWall(refMs).slice(0, 10);
-            if (isHourly) {
-              $("xFrom").value = toPicker(`${mStart} 00:00:00`);
-              $("xTo").value = toPicker(fmtWall(refMs));
-            } else {
-              $("xFromDaily").value = mStart;
-              $("xToDaily").value = todayStr;
-            }
-          } else if (days === "365") {
-            const startMs = refMs - 365 * 24 * HOUR;
-            const dStart = fmtWall(startMs).slice(0, 10);
-            const dEnd = fmtWall(refMs).slice(0, 10);
-            if (isHourly) {
-              $("xFrom").value = toPicker(`${dStart} 00:00:00`);
-              $("xTo").value = toPicker(fmtWall(refMs));
-            } else {
-              $("xFromDaily").value = dStart;
-              $("xToDaily").value = dEnd;
-            }
-          }
-          triggerPreview();
-        };
-      });
 
       $("xLayoutSelect").onchange = () => {
         const val = $("xLayoutSelect").value;
@@ -2887,7 +2593,6 @@
         renderColGroups();
         renderOrderChips();
         updateColCounter();
-        triggerPreview();
       };
 
       $("xBtnClear").onclick = () => {
@@ -2900,7 +2605,6 @@
         renderColGroups();
         renderOrderChips();
         updateColCounter();
-        triggerPreview();
       };
 
       $("xColFilter").oninput = (e) => {
@@ -2923,7 +2627,6 @@
         markCustomLayout();
         renderOrderChips();
         updateColCounter();
-        triggerPreview();
       };
 
       $("xOrderWrap").onclick = (e) => {
@@ -2939,14 +2642,12 @@
           dlState.orderedKeys[idx - 1] = tmp;
           markCustomLayout();
           renderOrderChips();
-          triggerPreview();
         } else if (act === "down" && idx < dlState.orderedKeys.length - 1) {
           const tmp = dlState.orderedKeys[idx];
           dlState.orderedKeys[idx] = dlState.orderedKeys[idx + 1];
           dlState.orderedKeys[idx + 1] = tmp;
           markCustomLayout();
           renderOrderChips();
-          triggerPreview();
         } else if (act === "del") {
           const key = btn.dataset.key;
           dlState.selectedKeys.delete(key);
@@ -2955,7 +2656,6 @@
           renderColGroups();
           renderOrderChips();
           updateColCounter();
-          triggerPreview();
         }
       };
 
@@ -2997,7 +2697,6 @@
         dlState.draggedIndex = null;
         markCustomLayout();
         renderOrderChips();
-        triggerPreview();
       });
 
       orderWrap.addEventListener("dragend", () => {
@@ -3012,34 +2711,6 @@
         $("xLayoutSelect").value = "custom_current";
         updateLayoutButtons();
       }
-
-      $("xDownloadBtn").onclick = executeDownload;
-      $("xGo").onclick = executeDownload;
-    }
-
-    function executeDownload() {
-      if (dlState.orderedKeys.length === 0) {
-        alert("다운로드할 컬럼을 최소 1개 이상 선택해 주세요.");
-        return;
-      }
-      const stationId = $("xStation")?.value || "";
-      const isHourly = dlState.kind === "hourly";
-      const from = isHourly ? dtVal("xFrom") : ($("xFromDaily")?.value || "");
-      const to = isHourly ? dtVal("xTo") : ($("xToDaily")?.value || "");
-
-      if (!from || !to) {
-        alert("시작일과 종료일을 모두 선택해 주세요.");
-        return;
-      }
-
-      const q = new URLSearchParams({
-        kind: dlState.kind,
-        stationId,
-        from,
-        to,
-        columns: dlState.orderedKeys.join(",")
-      });
-      location.href = "/api/export?" + q;
     }
     $("saveKey").onclick = async () => {
       const res = await fetch("/api/key", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ apiKey: $("apiKey").value }) });
@@ -3061,7 +2732,7 @@
     // 대시보드 자료가 늦거나 실패해도 다른 화면은 그대로 뜨게
     Promise.allSettled([loadMe(), loadDash()]).then(route);
   </script>
-  <script src="/views.js?v=2"></script>
+  <script src="/views.js?v=3"></script>
   <script src="/stats.js?v=7"></script>
 </body>
 </html>
