@@ -155,7 +155,7 @@
     setBanner("offer");
   }
   const MSG = {
-    offer: "내 위치에서 가장 가까운 관측소를 기본으로 볼 수 있어요. 위치는 이 기기에서 거리 계산에만 쓰고 저장하거나 보내지 않습니다.",
+    offer: '<span class="geo-long">내 위치에서 가장 가까운 관측소를 기본으로 볼 수 있어요. 위치는 이 기기에서 거리 계산에만 쓰고 저장하거나 보내지 않습니다.</span><span class="geo-short">가까운 관측소로 볼까요?<small>위치는 거리 계산에만 쓰고 저장·전송 안 함</small></span>',
     busy: "위치를 확인하는 중…",
     denied: "위치 사용이 허용되지 않았습니다. 기본 지점(서울 108)을 그대로 씁니다. 지점은 언제든 직접 고를 수 있습니다.",
     timeout: "위치를 확인하지 못했습니다(시간 초과). 기본 지점을 그대로 씁니다.",
@@ -169,7 +169,7 @@
     el.hidden = false;
     el.className = `geo-banner geo-${kind}`;
     const btns = kind === "offer"
-      ? `<button type="button" class="geo-use" data-geo="use">내 위치로 가까운 지점 선택</button><button type="button" class="geo-x sec" data-geo="no">괜찮아요</button>`
+      ? `<button type="button" class="geo-use" data-geo="use"><span class="geo-wide">내 위치로 가까운 지점 선택</span><span class="geo-narrow">위치 사용</span></button><button type="button" class="geo-x sec" data-geo="no">괜찮아요</button>`
       : kind === "busy" ? "" : kind === "timeout" || kind === "unavailable" ? `<button type="button" class="geo-use sec" data-geo="use">다시 시도</button><button type="button" class="geo-x sec" data-geo="no">닫기</button>` : `<button type="button" class="geo-x sec" data-geo="no">닫기</button>`;
     el.innerHTML = `<span class="geo-ico" aria-hidden="true">📍</span><span class="geo-txt">${MSG[kind]}</span>${btns ? `<span class="geo-btns">${btns}</span>` : ""}`;
   }
@@ -192,7 +192,7 @@
     if (!show) { el.hidden = true; return; }
     const nm = nameOf(s.id);
     const label = `${nm || "관측소"}(${s.id})`;
-    el.innerHTML = `<span class="geo-ico" aria-hidden="true">📍</span><span>${lastGeo && lastGeo.id === s.id ? `현재 위치에서 가장 가까운 관측소: <b>${label}</b>, 약 ${kmText(lastGeo.km)}` : `위치로 고른 기본 관측소: <b>${label}</b>`} · 다른 지점을 고르면 그 지점이 기본이 됩니다.</span><button type="button" class="geo-x" data-geo="note-x" aria-label="알림 닫기">✕</button>`;
+    el.innerHTML = `<span class="geo-ico" aria-hidden="true">📍</span><span>${lastGeo && lastGeo.id === s.id ? `현재 위치에서 가장 가까운 관측소: <b>${label}</b>, 약 ${kmText(lastGeo.km)}` : `위치로 고른 기본 관측소: <b>${label}</b>`} <span class="geo-long"> · 다른 지점을 고르면 그 지점이 기본이 됩니다.</span></span><button type="button" class="geo-x" data-geo="note-x" aria-label="알림 닫기">✕</button>`;
     el.hidden = false;
     if (!nm) stationList().then(() => nameOf(s.id) && renderNote()).catch(() => {});
   }

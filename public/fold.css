@@ -1,0 +1,52 @@
+/* 좁은 화면에서 조회 조건 접기(fold.js) + 첫 화면 여백 줄이기. 넓은 화면은 아무것도 바뀌지 않음. */
+.fold-bar, .ab-meta, .geo-short, .geo-narrow { display:none; }
+@media (max-width:800px) {
+  .fold-collapsed { display:none !important; }
+  .fold-bar { display:flex; align-items:center; gap:8px; min-height:44px; box-sizing:border-box; }
+  .fold-bar.fold-card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:6px 6px 6px 12px; box-shadow:var(--shadow-sm); }
+  .fold-bar.fold-in-card { margin:2px 0 8px; padding:4px 4px 4px 10px; border-radius:10px; background:var(--soft); }
+  .fold-bar.open.fold-card { border-bottom-left-radius:4px; border-bottom-right-radius:4px; }
+  .fold-sum { flex:1; min-width:0; font-size:13.5px; font-weight:600; color:var(--fg); line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .fold-btn { flex:none; display:inline-flex; align-items:center; gap:3px; height:34px; padding:0 10px; font-size:13px; white-space:nowrap; }
+  .fold-btn svg { width:16px; height:16px; transition:transform .15s; }
+  .fold-bar.open .fold-btn svg { transform:rotate(180deg); }
+
+  /* 앱 막대 오른쪽: 공식 최신 시각 */
+  .ab-meta { display:block; flex:none; margin-left:auto; font-size:11.5px; font-weight:600; opacity:.9; white-space:nowrap; }
+  /* 조회 화면: 파란 머리(설명·칩) 숨김 — 제목은 앱 막대, 최신 시각은 위 .ab-meta. 관리 화면은 상태 칩이 있어 그대로 */
+  body:not([data-admin="1"]) header.ph { display:none; }
+  main { padding-top:10px; gap:10px; }
+  .card { padding:13px; }
+
+  /* 위치 안내: 한 줄짜리 짧은 문구 */
+  .geo-banner, .geo-note { margin:0 0 2px; padding:6px 6px 6px 10px; gap:4px 8px; font-size:12.5px; flex-wrap:nowrap; }
+  .geo-banner .geo-txt { flex:1 1 auto; }
+  .geo-banner .geo-long, .geo-note .geo-long, .geo-banner .geo-wide { display:none; }
+  .geo-banner .geo-short, .geo-banner .geo-narrow { display:inline; }
+  .geo-banner .geo-short small { display:block; font-size:11.5px; color:var(--muted); }
+  .geo-banner .geo-btns { flex:none; flex-wrap:nowrap; gap:4px; }
+  .geo-banner button, .geo-note button { height:30px; padding:0 9px; font-size:12.5px; white-space:nowrap; }
+  .geo-banner .geo-x, .geo-note .geo-x { width:30px; padding:0; }
+  .geo-note > span:nth-child(2) { flex:1 1 auto; }
+
+  /* 한눈에 보기: 그래프 머리·요약 숫자 촘촘하게 */
+  #tabOverview .chart-head { flex-wrap:nowrap; align-items:flex-start; gap:8px; }
+  #tabOverview .chart-head h2 { font-size:16px; }
+  #tabOverview #chartRange { font-size:12px; margin-top:2px; }
+  #chartStats { font-size:12.5px; gap:2px 12px; margin:4px 0 6px; }
+  /* 질문으로 보는 날씨: 지점 고르기만 남기고 제목 설명은 숨김(앱 막대에 제목) */
+  #tabQuestions > .card:first-child .sx-q { display:none; }
+  #tabQuestions > .card:first-child { padding:8px 13px 10px; }
+  #tabQuestions .q-wrap .chart-head h2 { font-size:16px; }
+  /* 설명 문단은 결과 아래로 */
+  #daily .card, #download > .card:has(#xColGroups) { display:flex; flex-direction:column; }
+  #daily .card > p.muted:first-child { order:10; margin:10px 0 0; }
+  #download > .card:has(#xColGroups) > p.muted { order:10; margin:10px 0 0; }
+  /* 미적재 현황: 아무것도 고르지 않았을 때는 아래 고정 막대 숨김 */
+  .g-selbar:has(#gSelGo:disabled) { display:none; }
+}
+@media (max-width:800px) {
+  /* 관리 화면: 상태 칩만 남김(설명 한 줄과 '최신' 칩은 앱 막대와 겹침) */
+  body[data-admin="1"] header.ph .ph-desc, body[data-admin="1"] #phChips li:first-child { display:none; }
+  body[data-admin="1"] header.ph { padding-top:8px; padding-bottom:8px; }
+}

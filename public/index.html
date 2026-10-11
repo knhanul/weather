@@ -498,12 +498,14 @@
   <link rel="stylesheet" href="/chart-full.css?v=3" />
   <link rel="stylesheet" href="/views.css?v=3" />
   <link rel="stylesheet" href="/drawer.css?v=1" />
+  <link rel="stylesheet" href="/fold.css?v=1" />
 </head>
 <body>
   <div class="appbar" id="appbar">
     <button type="button" class="ab-menu" id="abMenu" aria-label="메뉴 열기" aria-controls="drawer" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
     <a class="ab-brand" href="#/stats/overview" aria-label="누니날씨 한눈에 보기"><img src="/brand/icon.svg" alt="" width="24" height="24" /></a>
     <p class="ab-title" id="abTitle">날씨 통계</p>
+    <span class="ab-meta" id="abMeta" aria-label="공식 최신 관측 시각"></span>
   </div>
   <div class="drawer-backdrop" id="drBackdrop"></div>
   <div class="layout">
@@ -2099,6 +2101,8 @@
       setPageHead(name);
       const target = isLockedPage(name) ? "locked" : name === "questions" ? "dash" : name; // 질문으로 보는 날씨 = 날씨 통계 화면 안의 패널
       currentPage = name;
+      document.body.dataset.page = name;
+      document.body.dataset.admin = ADMIN_PAGES.has(name) ? "1" : "0"; // 좁은 화면: 관리 화면만 파란 머리(상태 칩) 유지(fold.css)
       document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p.id === target));
       document.querySelectorAll("nav a[data-page]").forEach((a) => a.classList.toggle("active", a.dataset.page === name));
       if (name !== "dash") document.querySelectorAll("nav a[data-sub]").forEach((a) => { a.classList.remove("active"); a.removeAttribute("aria-current"); });
@@ -2787,5 +2791,6 @@
   <script src="/views.js?v=4"></script>
   <script src="/stats.js?v=9"></script>
   <script src="/drawer.js?v=1"></script>
+  <script src="/fold.js?v=1"></script>
 </body>
 </html>
