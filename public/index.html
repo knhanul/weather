@@ -307,8 +307,10 @@
       .nav-group + .nav-group { margin-top:0; padding-top:4px; border-top:1px solid var(--line); }
       .nav-label { flex-shrink:0; width:34px; margin:0; padding:0 4px; }
       nav a { white-space:nowrap; flex-shrink:0; padding:6px 10px; margin:0; font-size:14px; }
+      nav { grid-template-columns:minmax(0, 1fr); }
+      .nav-group { min-width:0; }
       .nav-group.nav-main { flex-wrap:wrap; overflow-x:visible; row-gap:2px; }
-      .nav-sub { order:99; flex:1 1 100%; display:none; gap:2px; overflow-x:auto; scrollbar-width:none; margin:2px 0 0; padding:4px 0 0 34px; border-left:0; border-top:1px dashed var(--line); }
+      .nav-sub { order:99; flex:1 1 100%; display:none; flex-wrap:wrap; gap:2px; margin:2px 0 0; padding:4px 0 0 34px; border-left:0; border-top:1px dashed var(--line); }
       nav.stats-on .nav-sub { display:flex; }
       .nav-sub a { padding:5px 9px; font-size:13px; }
       nav a.nav-parent.active { background:var(--soft); }
