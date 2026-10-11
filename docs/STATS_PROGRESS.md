@@ -89,3 +89,12 @@
 | admin-jobs | 205 (24.3%) | 146 (17.3%) |
 | admin-stations | 230 (27.3%) | 168 (19.9%) |
 | admin-provider | 170 (20.1%) | 111 (13.2%) |
+
+## t129u — 1일 결측 규칙 (2026-10-11)
+
+- 규칙(stats-engine.mjs `MAX_MISSING_DAYS = 1`, `missingOk`): 2일 이상 구간에서 그 지표의 자료 없는 날이 정확히 1일이면 status 는 complete 그대로 두고 `missing`·`missingDates` 를 붙여 그래프·순위·평균·1990년대 대비에 넣는다. 값은 남은 날로만(평균 = 남은 날 평균, 합계·일수 = 남은 날 합·수) — 채우거나 추정하지 않음. 2일 이상은 partial(자료 부족) 그대로. 하루짜리 구간은 허용 안 함. 진행 중 구간 규칙은 그대로.
+- 적용: aggregate → yearRow(연도별·지역별·질문 카드·1990년대 대비), overlay, thresholdDatesYear(더위), longestRunYear(연속 — 결측일에서 끊는 건 그대로), tropicalYear(열대야, 판정 못 한 밤 1밤). 날짜별(기록·그날·매년 같은 날·주말 비율)은 원래 일 단위라 변화 없음.
+- 표시: API 상태 '1일 결측(YYYY-MM-DD)', 표·CSV 에 '결측일' 칸, CSV 머리·요약에 '1일 결측을 포함해 계산한 연도', 화면은 툴팁 '1일 결측(월/일) · 나머지 날로 계산'과 파란 안내 띠, 자료 부족 안내는 '2일 이상 결측'. 계산 기준(RULES·LIFE_RULES)·docs/STATS_RULES.md 고침.
+- 운영 자료에서 새로 들어간 해: 108 2017(10/12 최고), 108 2022(8/8 최저), 112 2011(10/16 행 전체), 143 2013(9/30), 143 2024(2/21), 159 2023(5/24) + 열대야 1밤 결측 9건(1998-09-10 등).
+- 회귀: 운영(31e6cb5)과 시험 컨테이너 1,340개 통계 API 응답 비교 — 기존 연도 행 48,126개·지역 행 1,720개 그대로, 바뀐 건 위 1일 결측 해 122행(전에는 partial)과 그 해가 들어가 달라진 평균·증감뿐.
+- 검증: node --test scripts/*.test.mjs (기존 무관 실패 7개 그대로), scripts/e2e/missing1.mjs ALL PASS(스크린샷 /workspace/shots/missing1-*.png), fold·dl·drawer·geo·chart-full ALL PASS, nav·views 비로그인 부분 PASS.
