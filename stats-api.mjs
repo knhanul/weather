@@ -4,7 +4,7 @@ import {
   StatsError, parsePeriod, periodLabel, getMetric, metricInfo, METRIC_ORDER, SEASONS, WEEKS, RULES, BASELINE, RECENT,
   yearlyCompare, overlay, regionYearly, regionPeriod, regionMonthly, REGION_PERIOD_METRICS, toCsv, deltaText, yearRows, decadeDelta, daysInMonth,
   thresholdDates, streaks, RUN_KINDS, weekdayShare, sameDayHistory, records, RECORDS, parseOutdoor, outdoorShare, OUTDOOR_DEFAULT, parseHours,
-  commuteShare, tropicalNights, LIFE_RULES, posToMd, isLeap,
+  commuteShare, tropicalNights, LIFE_RULES, posToMd, isLeap, missingLabel, missingText,
 } from "./stats-engine.mjs";
 
 // 지금 달(Asia/Seoul) — now 를 넘기면 그 시각 기준(테스트용)
@@ -12,6 +12,10 @@ export const seoulMonth = (now = new Date()) => +new Intl.DateTimeFormat("en-CA"
 
 const STATUS_KO = { complete: "온전", partial: "자료 부족", none: "자료 없음", ongoing: "진행 중", future: "아직 없음", nodate: "그 해엔 없는 날짜" };
 const SOURCE = "기상청 ASOS 공식 일자료";
+// 상태 글: 1일 결측이면 '1일 결측(2017-10-12)'(값은 비교에 넣음), 진행 중이면 그날까지
+const STATUS_TXT = (x, unit = "일") => (x.status === "ongoing" ? `진행 중(${x.until}까지)` : missingLabel(x) ? missingLabel(x).replace("일 결측", `${unit} 결측`) : STATUS_KO[x.status] || x.status);
+const MISS_COL = { key: "missingDates", label: "결측일" };
+const missCell = (x) => (x.status === "complete" && x.missingDates ? x.missingDates.join(" ") : "");
 const ymdRe = /^\d{4}-\d{2}-\d{2}$/;
 
 function minDate(a, b) {
@@ -69,10 +73,12 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
       { key: "value", label: `${m.label}(${m.unit})` },
       ...(ext ? [{ key: "date", label: "날짜" }] : []),
       { key: "status", label: "상태" },
+      { key: "missingDates", label: "결측일" },
     ];
     const rows = r.rows.map((x) => ({
       year: x.year, start: x.start ?? "", end: x.end ?? "", days: x.days, obs: x.obs, value: x.value, date: x.date ?? "",
-      status: x.status === "ongoing" ? `진행 중(${x.until}까지)` : STATUS_KO[x.status] || x.status,
+      status: STATUS_TXT(x),
+      missingDates: x.status === "complete" && x.missingDates ? x.missingDates.join(" ") : "",
     }));
     return { columns, rows, station: stationLabel(st) };
   }
@@ -122,6 +128,12 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
     return json(res, { ok: true, station: { station_id: st.station_id, station_name: st.station_name }, source: SOURCE, timezone: "Asia/Seoul", dataVersion: statsData.version(), ...r, table });
   }
 
+  // 지역별: 계산에 넣은 1일 결측(지점·날짜별로 한 번씩)
+  function missLines(list) {
+    const seen = new Map();
+    for (const x of list) for (const d of x.dates) seen.set(`${x.station_id} ${d}`, true);
+    return seen.size ? [`1일 결측을 포함해 계산한 지점·날짜: ${[...seen.keys()].join(", ")} — 빠진 날은 채우지 않고 나머지 날로만 계산`] : [];
+  }
   async function region(url, res) {
     const ids = [...new Set(String(url.searchParams.get("stations") || "").split(",").map((s) => s.trim()).filter(Boolean))];
     if (ids.length < 2 || ids.length > 4) throw new StatsError("관측지점을 2~4곳 고르세요");
@@ -146,10 +158,10 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
         rows: r.stations[0].rows.map((row, i) => ({
           year: row.year,
           ...Object.fromEntries(r.stations.map((s) => [`s${s.station_id}`, s.rows[i].value])),
-          common: row.common ? "예" : "아니오(" + r.stations.filter((s) => !s.rows[i].common || s.rows[i].status !== "complete").map((s) => `${s.station_id} ${STATUS_KO[s.rows[i].status] || s.rows[i].status}`).join(", ") + ")",
+          common: row.common ? `예${r.stations.some((s) => s.rows[i].missingDates) ? `(${r.stations.filter((s) => s.rows[i].missingDates).map((s) => `${s.station_id} ${missingLabel(s.rows[i])}`).join(", ")})` : ""}` : "아니오(" + r.stations.filter((s) => !s.rows[i].common || s.rows[i].status !== "complete").map((s) => `${s.station_id} ${STATUS_KO[s.rows[i].status] || s.rows[i].status}`).join(", ") + ")",
         })),
       };
-      meta = [`기간 ${r.period.label} · 항목 ${r.metric.label}(${r.metric.unit}) · 공통 연도 ${r.commonYears.length}개`];
+      meta = [`기간 ${r.period.label} · 항목 ${r.metric.label}(${r.metric.unit}) · 공통 연도 ${r.commonYears.length}개`, ...r.stations.map((s) => missingText(s.missing1)).filter(Boolean).map((t, k) => `${r.stations.filter((s) => s.missing1.length)[k].station_id}: ${t}`)];
     } else if (view === "monthly") {
       const metric = metricParam(url);
       r = regionMonthly(stores, metric, { fromYear, toYear, asOf });
@@ -157,7 +169,7 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
         columns: [{ key: "month", label: "월" }, ...sts.map((s) => ({ key: `s${s.station_id}`, label: `${label.get(String(s.station_id))} ${r.metric.label}(${r.metric.unit})` }))],
         rows: r.months.map((mo) => ({ month: mo.month, ...Object.fromEntries(mo.values.map((v) => [`s${v.station_id}`, v.value])) })),
       };
-      meta = [`월별 평균 · 항목 ${r.metric.label}(${r.metric.unit}) · 공통 연도 ${r.commonYears.length}개(${r.commonYears[0] ?? "-"}~${r.commonYears[r.commonYears.length - 1] ?? "-"})`];
+      meta = [`월별 평균 · 항목 ${r.metric.label}(${r.metric.unit}) · 공통 연도 ${r.commonYears.length}개(${r.commonYears[0] ?? "-"}~${r.commonYears[r.commonYears.length - 1] ?? "-"})`, ...missLines(r.months.flatMap((mo) => mo.values.flatMap((v) => v.missing1.map((x) => ({ ...x, station_id: v.station_id })))))];
     } else if (view === "period") {
       const p = periodParam(url, asOf);
       r = regionPeriod(stores, p, { fromYear, toYear, asOf });
@@ -178,7 +190,7 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
           ...Object.fromEntries(x.stations.flatMap((s) => [[`m${s.station_id}`, s.mean], [`d${s.station_id}`, s.delta.available ? s.delta.delta : ""]])),
         })),
       };
-      meta = [`기간 ${r.period.label} · 지표마다 모든 지점에 자료가 온전한 공통 연도의 평균`];
+      meta = [`기간 ${r.period.label} · 지표마다 모든 지점에 자료가 온전한 공통 연도의 평균`, ...missLines(r.metrics.flatMap((x) => x.stations.flatMap((s) => (s.missing1 || []).map((y) => ({ ...y, station_id: s.station_id })))))];
     } else throw new StatsError("보기는 period·monthly·yearly 중 하나입니다");
     if (url.searchParams.get("format") === "csv") {
       return sendCsv(res, `weather-stats-region-${view}-${ids.map(fileKey).join("_")}`, table, [
@@ -250,7 +262,6 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
     const { fromYear, toYear } = yearsParam(url, +asOf.slice(0, 4));
     return { st, hs, asOf, fromYear, toYear, station: { station_id: st.station_id, station_name: st.station_name, region: st.region || null } };
   }
-  const STATUS_TXT = (x) => (x.status === "ongoing" ? `진행 중(${x.until}까지)` : STATUS_KO[x.status] || x.status);
   const head = (kind, st, extra) => [`누니날씨 날씨 통계 · ${kind} (원자료 다운로드가 아닌 집계 결과)`, `지점 ${stationLabel(st)} · ${extra} · 출처 ${SOURCE} · 시간대 Asia/Seoul`];
 
   async function lifeHeat(url, res) {
@@ -258,8 +269,8 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
     const p = parsePeriod(url.searchParams.get("period") || "year");
     const r = thresholdDates(c.store, "hot30_days", p, c);
     const table = {
-      columns: [{ key: "year", label: "연도" }, { key: "first", label: "첫 30℃ 이상" }, { key: "last", label: "마지막 30℃ 이상" }, { key: "count", label: "일수(일)" }, { key: "obs", label: "관측일수" }, { key: "days", label: "구간 일수" }, { key: "status", label: "상태" }],
-      rows: r.rows.map((x) => ({ year: x.year, first: x.first || "", last: x.last || "", count: x.count, obs: x.obs, days: x.days, status: x.status === "complete" && !x.first ? "온전(그런 날 없음)" : STATUS_TXT(x) })),
+      columns: [{ key: "year", label: "연도" }, { key: "first", label: "첫 30℃ 이상" }, { key: "last", label: "마지막 30℃ 이상" }, { key: "count", label: "일수(일)" }, { key: "obs", label: "관측일수" }, { key: "days", label: "구간 일수" }, { key: "status", label: "상태" }, MISS_COL],
+      rows: r.rows.map((x) => ({ year: x.year, first: x.first || "", last: x.last || "", count: x.count, obs: x.obs, days: x.days, status: x.status === "complete" && !x.first ? `${missingLabel(x) || "온전"}(그런 날 없음)` : STATUS_TXT(x), missingDates: missCell(x) })),
     };
     return csvOr(url, res, `weather-stats-heat-${fileKey(c.st.station_id)}`, table, [...head("더위가 일찍 올까(최고기온 30℃ 이상 첫날·마지막 날)", c.st, `기간 ${r.period.label} · 연도 ${c.fromYear}~${c.toYear} · 자료 ${c.asOf}까지`), ...r.text], { station: c.station, ...r, rules: LIFE_RULES.heat });
   }
@@ -270,10 +281,10 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
     const p = parsePeriod(url.searchParams.get("period") || "year");
     const r = streaks(c.store, kind, p, c);
     const table = {
-      columns: [{ key: "year", label: "연도" }, { key: "len", label: `가장 긴 ${r.kindLabel}(일)` }, { key: "runStart", label: "시작" }, { key: "runEnd", label: "끝" }, { key: "obs", label: "관측일수" }, { key: "days", label: "구간 일수" }, { key: "status", label: "상태" }],
-      rows: r.rows.map((x) => ({ year: x.year, len: x.len, runStart: x.status === "complete" ? x.runStart || "" : "", runEnd: x.status === "complete" ? x.runEnd || "" : "", obs: x.obs, days: x.days, status: STATUS_TXT(x) })),
+      columns: [{ key: "year", label: "연도" }, { key: "len", label: `가장 긴 ${r.kindLabel}(일)` }, { key: "runStart", label: "시작" }, { key: "runEnd", label: "끝" }, { key: "obs", label: "관측일수" }, { key: "days", label: "구간 일수" }, { key: "status", label: "상태" }, MISS_COL],
+      rows: r.rows.map((x) => ({ year: x.year, len: x.len, runStart: x.status === "complete" ? x.runStart || "" : "", runEnd: x.status === "complete" ? x.runEnd || "" : "", obs: x.obs, days: x.days, status: STATUS_TXT(x), missingDates: missCell(x) })),
     };
-    const lines = [...head(`가장 오래 이어진 때(${r.kindLabel})`, c.st, `기간 ${r.period.label} · 연도 ${c.fromYear}~${c.toYear} · 자료 ${c.asOf}까지`), `보유 기간 최장: ${r.top.map((t) => `${t.rank}위 ${t.len}일(${t.start}~${t.end})`).join(" / ")}`];
+    const lines = [...head(`가장 오래 이어진 때(${r.kindLabel})`, c.st, `기간 ${r.period.label} · 연도 ${c.fromYear}~${c.toYear} · 자료 ${c.asOf}까지`), `보유 기간 최장: ${r.top.map((t) => `${t.rank}위 ${t.len}일(${t.start}~${t.end})`).join(" / ")}`, ...r.text];
     return csvOr(url, res, `weather-stats-streaks-${kind}-${fileKey(c.st.station_id)}`, table, lines, { station: c.station, ...r, rules: LIFE_RULES.streaks });
   }
   async function lifeWeekend(url, res) {
@@ -340,8 +351,8 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
     const c = await hourlyCtx(url);
     const r = tropicalNights(c.hs, p, c);
     const table = {
-      columns: [{ key: "year", label: "연도" }, { key: "value", label: "열대야 추정(일)" }, { key: "countValid", label: "판정한 밤 중 25℃ 이상" }, { key: "obs", label: "판정한 밤" }, { key: "days", label: "구간 밤 수" }, { key: "warm", label: "가장 더운 밤(정시 최저)" }, { key: "status", label: "상태" }],
-      rows: r.rows.map((x) => ({ year: x.year, value: x.value, countValid: x.countValid ?? null, obs: x.obs ?? 0, days: x.days ?? 0, warm: x.warmestNight ? `${x.warmestNight.date} ${x.warmestNight.min}℃` : "", status: STATUS_TXT(x) })),
+      columns: [{ key: "year", label: "연도" }, { key: "value", label: "열대야 추정(일)" }, { key: "countValid", label: "판정한 밤 중 25℃ 이상" }, { key: "obs", label: "판정한 밤" }, { key: "days", label: "구간 밤 수" }, { key: "warm", label: "가장 더운 밤(정시 최저)" }, { key: "status", label: "상태" }, { key: "missingDates", label: "판정 못 한 밤" }],
+      rows: r.rows.map((x) => ({ year: x.year, value: x.value, countValid: x.countValid ?? null, obs: x.obs ?? 0, days: x.days ?? 0, warm: x.warmestNight ? `${x.warmestNight.date} ${x.warmestNight.min}℃` : "", status: STATUS_TXT(x, "밤"), missingDates: missCell(x) })),
     };
     return csvOr(url, res, `weather-stats-tropical-${fileKey(c.st.station_id)}`, table, [...head("열대야(추정, 시간자료 집계)", c.st, `기간 ${r.period.label} · 연도 ${c.fromYear}~${c.toYear} · 자료 ${r.asOf}까지`), ...r.text], { station: c.station, ...r, hourly: true, rules: LIFE_RULES.tropical });
   }
