@@ -2157,14 +2157,14 @@
         renderCollectHint();
       }
       if (name === "gaps" && dashCache) routeGaps();
-      if ((name === "dash" || name === "questions") && window.Stats) window.Stats.route(statsTab || "overview");
+      // 한눈에 보기: 주소의 ?station=&hours= 를 먼저 반영(직접 입력·뒤로가기·위치로 고른 지점) → 그다음 통계 쪽이 그 지점을 이어받음
       if (name === "dash" && dashCache && (statsTab || "overview") === "overview") {
-        // 주소의 ?station=&hours= 를 반영(직접 입력·뒤로가기)
         const before = dashKey();
         pickDefaultStation();
         if (dashKey() !== before) { renderDashControls(); loadSeries(); }
         else drawChart(false);
       }
+      if ((name === "dash" || name === "questions") && window.Stats) window.Stats.route(statsTab || "overview");
       if (window.NWStation) NWStation.routed(name);
     }
     // ---------- 기상 자료 다운로드 (개선) ----------
