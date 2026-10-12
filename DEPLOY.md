@@ -451,3 +451,11 @@ sed -i '/^AUTH_PROVIDER=/d' /etc/weather-hub.env && systemctl restart weather-hu
 - 표(`migrations/mysql/0006_kma_forecast.sql`, 새 표만): `kma_vilage_fcst`, `kma_ultra_fcst` (키 nx, ny, base_datetime, fcst_datetime, category), `kma_ultra_ncst` (키 nx, ny, base_datetime, category). 값은 문자열 그대로(`강수없음` 등) + `raw`(기상청 item JSON). 시각은 KST 벽시계, `collected_at` 은 UTC. 발표마다 따로 보관 — 같은 키만 덮어쓴다. `kma_fcst_releases` = 다 받은 발표(격자별, 행 수) — 지점별 최신 발표는 여기서 기본 키로 찾는다.
 - 수집: `POST /api/collect-forecast` `{ dataset: KMA_VILAGE_FCST | KMA_ULTRA_FCST | KMA_ULTRA_NCST, hours: 1~72 (기본 24) }`. 수집 토큰(COLLECT_TOKEN) 또는 관리자 세션. 최근 hours 시간의 발표 중 `kma_fcst_releases` 에 없는 것만 격자마다 받는다(페이지 1000행, 네트워크·5xx 3회 재시도). 기상청 03 NO_DATA(아직 발표 전)·10(제공 기간 지남)은 "아직 없음"으로 세고 실패 아님. 그 밖의 오류(게이트웨이 403 등)는 실패 → 하나라도 실패면 PARTIAL/FAILED. 실행 1번 = `collect_jobs` 1행(station_id 비움).
 - 일정: n8n `nuniWeatherForecast` (server-ops `n8n/workflows/`).
+
+## 17. 기상청 중기예보 적재 (2026-10-13, 화면 변경 없음)
+
+- 서비스 `MidFcstInfoService`(같은 `KMA_API_KEY`): `getMidFcst`(중기전망 글), `getMidLandFcst`(육상 날씨·강수확률), `getMidTa`(최저·최고기온과 범위). 해상(`getMidSeaFcst`)은 받지 않음. 코드 `kma-mid.mjs`.
+- 지점 → 구역: `kma_mid_regions` (앱 시작 때 `MID_REGIONS` 로 없는 지점만 넣음). 전망 109/133/143/156/159/184, 육상 11B00000/11C20000/11H10000/11F20000/11H20000/11G00000, 기온 11B10101 서울 · 11B20201 인천 · 11B20601 수원 · 11C20401 대전 · 11H10701 대구 · 11F20501 광주 · 11H20201 부산 · 11G00201 제주 (8지점 × 3종 모두 응답 00 확인).
+- 표(`migrations/mysql/0007_kma_mid.sql`): `kma_mid_items` 키 (dataset, region_id, tm_fc, item_key) — item_key 는 기상청 이름 그대로(wf4Am, taMin4Low, wfSv), metric/day_offset/ampm 으로 나눠 둠, 값은 문자열. `kma_mid_releases` = 다 받은 발표 + 원문 JSON.
+- 수집: `POST /api/collect-forecast {dataset: KMA_MID_FCST | KMA_MID_LAND | KMA_MID_TA, hours (기본 36)}`. 기상청은 최근 24시간 발표만 준다(어제 06시 = 03 NO_DATA, 그 전 = 99 "최대 조회 기간") → 둘 다 "제공 기간 지남"으로 세고 실패 아님. 06시 발표 = 4~10일, 18시 발표 = 5~10일.
+- 일정: n8n `nuniWeatherMid` (06:15·18:15).
