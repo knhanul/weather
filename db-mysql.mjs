@@ -245,6 +245,7 @@ export async function init(url) {
   fullFields = await hasFullFieldColumns();
   await ensureIndex("observations_daily", "observations_daily_date", "(observation_date)");
   await ensureStationGrid().catch((e) => console.error("station grid setup failed", e?.code || e?.message));
+  await ensureMidRegions().catch((e) => console.error("mid regions setup failed", e?.code || e?.message));
   statsReady = await loadStatsReady();
   // 요약표가 없으면 뒤에서 지점별로 채운다(그동안은 예전 전체 집계). 다 되면 집계를 다시 계산.
   if (!statsReady && process.env.MYSQL_STATS_BUILD !== "0") {
@@ -1027,6 +1028,41 @@ export async function forecastMarkRelease(dataset, grid, base, n) {
     `INSERT INTO kma_fcst_releases (dataset, nx, ny, base_datetime, row_count) VALUES (?,?,?,?,?)
      ON DUPLICATE KEY UPDATE row_count = VALUES(row_count), collected_at = CURRENT_TIMESTAMP`,
     [dataset, grid.nx, grid.ny, base, n],
+    { retry: false },
+  );
+}
+
+// ---- 기상청 중기예보(kma-mid.mjs) 저장 — 2026-10-13 ----
+export async function ensureMidRegions() {
+  const { MID_REGIONS } = await import("./kma-mid.mjs");
+  for (const [id, r] of Object.entries(MID_REGIONS)) {
+    await q("INSERT IGNORE INTO kma_mid_regions (station_id, mid_stn_id, land_reg_id, ta_reg_id) VALUES (?,?,?,?)", [id, r.mid_stn_id, r.land_reg_id, r.ta_reg_id], { retry: false });
+  }
+}
+export async function midRegions() {
+  return q(`SELECT m.station_id, m.mid_stn_id, m.land_reg_id, m.ta_reg_id FROM kma_mid_regions m JOIN weather_stations s ON s.station_id = m.station_id WHERE s.enabled = 1 ORDER BY m.station_id`);
+}
+export async function midCompleted(dataset, fromTmFc) {
+  const r = await q("SELECT region_id, tm_fc FROM kma_mid_releases WHERE dataset = ? AND tm_fc >= ?", [dataset, fromTmFc]);
+  return new Set(r.map((x) => `${x.region_id}|${wallStr(x.tm_fc)}`));
+}
+export async function midUpsert(rows) {
+  if (!rows.length) return { inserted: 0, updated: 0 };
+  const cols = ["dataset", "region_id", "tm_fc", "item_key", "metric", "day_offset", "ampm", "value"];
+  const res = await q(
+    `INSERT INTO kma_mid_items (${cols.join(", ")}) VALUES ${rows.map(() => `(${cols.map(() => "?").join(",")})`).join(",")}
+     ON DUPLICATE KEY UPDATE value = VALUES(value), metric = VALUES(metric), day_offset = VALUES(day_offset), ampm = VALUES(ampm), collected_at = CURRENT_TIMESTAMP`,
+    rows.flatMap((r) => cols.map((c) => r[c])),
+    { retry: false },
+  );
+  const up = Math.max(0, Math.min(rows.length, (res?.affectedRows ?? rows.length) - rows.length));
+  return { inserted: rows.length - up, updated: up };
+}
+export async function midMark(dataset, region, tmFc, n, raw) {
+  await q(
+    `INSERT INTO kma_mid_releases (dataset, region_id, tm_fc, row_count, raw) VALUES (?,?,?,?,?)
+     ON DUPLICATE KEY UPDATE row_count = VALUES(row_count), raw = VALUES(raw), collected_at = CURRENT_TIMESTAMP`,
+    [dataset, region, tmFc, n, raw],
     { retry: false },
   );
 }

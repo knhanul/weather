@@ -631,6 +631,9 @@ export async function gapOfficialDaysPg(stationIds, fromDate, toDate) {
 export const forecastReady = () => Boolean(my);
 export function forecastStore() {
   if (!my) throw new Error("단기예보 적재는 MySQL 저장소(DB_DRIVER=mysql)에서만 합니다");
-  return { completedReleases: my.forecastCompletedReleases, upsert: my.forecastUpsert, markRelease: my.forecastMarkRelease, grids: my.forecastGrids };
+  return {
+    completedReleases: my.forecastCompletedReleases, upsert: my.forecastUpsert, markRelease: my.forecastMarkRelease, grids: my.forecastGrids,
+    midRegions: my.midRegions, completedMid: my.midCompleted, upsertMid: my.midUpsert, markMid: my.midMark,
+  };
 }
 

@@ -19,6 +19,7 @@ import { createStatsData } from "./stats-data.mjs";
 import { createStatsApi } from "./stats-api.mjs";
 import { createStatsHourly } from "./stats-hourly.mjs";
 import { collectForecast, FORECAST_KINDS } from "./kma-forecast.mjs";
+import { collectMid, MID_KINDS } from "./kma-mid.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(__dirname, "data");
@@ -1125,6 +1126,18 @@ async function collectForecastJob({ dataset, hours = 24, trigger = "MANUAL" }) {
   try {
     if (!key) throw new Error("인증키가 없습니다.");
     const store = db.forecastStore();
+    if (MID_KINDS[dataset]) {
+      // 중기예보: 구역(지점들이 같은 구역을 나눠 씀)마다 발표 06·18시
+      const col = MID_KINDS[dataset].regionCol;
+      const regions = [...new Set((await store.midRegions()).map((r) => r[col]))];
+      if (!regions.length) throw new Error("중기 구역이 있는 사용 중 지점이 없습니다");
+      const r = await collectMid({ dataset, key, regions, store, hours, log: (m) => console.error(`forecast ${dataset} ${m}`) });
+      Object.assign(job, { from: r.from, to: r.to, received: r.received, inserted: r.inserted, updated: r.updated, chunks: r.chunks });
+      job.status = r.failed === 0 ? "COMPLETED" : r.releases > 0 ? "PARTIAL" : "FAILED";
+      job.message = `구역 ${regions.length}곳 · 새 발표 ${r.releases} · 이미 받음 ${r.skipped} · 아직 없음/제공 기간 지남 ${r.none} · 실패 ${r.failed}` + (r.errors.length ? ` · ${r.errors.join(" / ")}` : "");
+      await saveJobs(job);
+      return job;
+    }
     const grids = (await store.grids()).map((g) => ({ nx: Number(g.nx), ny: Number(g.ny) }));
     const uniq = [...new Map(grids.map((g) => [`${g.nx}|${g.ny}`, g])).values()];
     if (!uniq.length) throw new Error("격자(nx, ny)가 있는 사용 중 지점이 없습니다");
@@ -1385,8 +1398,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/collect-forecast") {
       const body = await readBody(req);
       const dataset = String(body.dataset || "");
-      if (!FORECAST_KINDS[dataset]) return json(res, { ok: false, message: `dataset 은 ${Object.keys(FORECAST_KINDS).join(" / ")} 중 하나` }, 400);
-      const hours = body.hours == null ? 24 : Number(body.hours);
+      if (!FORECAST_KINDS[dataset] && !MID_KINDS[dataset]) return json(res, { ok: false, message: `dataset 은 ${[...Object.keys(FORECAST_KINDS), ...Object.keys(MID_KINDS)].join(" / ")} 중 하나` }, 400);
+      const hours = body.hours == null ? (MID_KINDS[dataset] ? 36 : 24) : Number(body.hours);
       if (!Number.isInteger(hours) || hours < 1 || hours > 72) return json(res, { ok: false, message: "hours 는 1~72" }, 400);
       const job = await collectForecastJob({ dataset, hours, trigger: req._collectToken ? "SCHEDULED" : "MANUAL" });
       return json(res, job, job.status === "FAILED" ? 400 : 200);
