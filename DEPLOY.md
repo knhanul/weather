@@ -443,3 +443,11 @@ sed -i '/^AUTH_PROVIDER=/d' /etc/weather-hub.env && systemctl restart weather-hu
 
 - 기간 바로가기에 3·6·9·12·18·24개월 추가(끝 = 공식 최신 날짜, 주소 `#/?station=108&months=12`). 직접 지정 최대 366일 → 731일(24개월).
 - 30일 넘는 기간(`/api/series?from&to`, `resolution: "day"`, `source: "official_daily"`)은 시간자료 평균 대신 `observations_daily` 공식 일자료(일평균·최고·최저·강수·습도·풍속). 공식 일자료가 없는 날은 점이 없다(그래프 끊김, 시간자료로 메우지 않음). `expected`/`present` 는 날 수. 30일 이하·24시간~30일 바로가기는 그대로 시간자료.
+
+## 16. 기상청 단기예보 적재 (2026-10-12, 화면 변경 없음)
+
+- 서비스: 기상청 단기예보 조회서비스 `VilageFcstInfoService_2.0` (같은 `KMA_API_KEY`). 코드 `kma-forecast.mjs`, 저장 `db-mysql.mjs`(MySQL 전용).
+- 지점 격자: `weather_stations.nx, ny` 칸 추가(앱 시작 때 없으면 추가, 비어 있으면 `station-coords.mjs` 위경도 → LCC DFS 변환으로 채움). 108 서울 = 60,127.
+- 표(`migrations/mysql/0006_kma_forecast.sql`, 새 표만): `kma_vilage_fcst`, `kma_ultra_fcst` (키 nx, ny, base_datetime, fcst_datetime, category), `kma_ultra_ncst` (키 nx, ny, base_datetime, category). 값은 문자열 그대로(`강수없음` 등) + `raw`(기상청 item JSON). 시각은 KST 벽시계, `collected_at` 은 UTC. 발표마다 따로 보관 — 같은 키만 덮어쓴다. `kma_fcst_releases` = 다 받은 발표(격자별, 행 수) — 지점별 최신 발표는 여기서 기본 키로 찾는다.
+- 수집: `POST /api/collect-forecast` `{ dataset: KMA_VILAGE_FCST | KMA_ULTRA_FCST | KMA_ULTRA_NCST, hours: 1~72 (기본 24) }`. 수집 토큰(COLLECT_TOKEN) 또는 관리자 세션. 최근 hours 시간의 발표 중 `kma_fcst_releases` 에 없는 것만 격자마다 받는다(페이지 1000행, 네트워크·5xx 3회 재시도). 기상청 03 NO_DATA(아직 발표 전)·10(제공 기간 지남)은 "아직 없음"으로 세고 실패 아님. 그 밖의 오류(게이트웨이 403 등)는 실패 → 하나라도 실패면 PARTIAL/FAILED. 실행 1번 = `collect_jobs` 1행(station_id 비움).
+- 일정: n8n `nuniWeatherForecast` (server-ops `n8n/workflows/`).
