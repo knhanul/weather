@@ -626,3 +626,11 @@ export async function gapOfficialDaysPg(stationIds, fromDate, toDate) {
   );
   return r.rows;
 }
+
+// 기상청 단기예보 적재(MySQL 전용). PostgreSQL·JSON 저장소에서는 쓰지 않는다.
+export const forecastReady = () => Boolean(my);
+export function forecastStore() {
+  if (!my) throw new Error("단기예보 적재는 MySQL 저장소(DB_DRIVER=mysql)에서만 합니다");
+  return { completedReleases: my.forecastCompletedReleases, upsert: my.forecastUpsert, markRelease: my.forecastMarkRelease, grids: my.forecastGrids };
+}
+

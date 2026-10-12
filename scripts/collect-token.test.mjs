@@ -14,11 +14,11 @@ const mk = (e = env) => createAuth({ env: e, store: createJsonStore(path.join(tm
 const req = (method, p, headers = {}) => ({ method, url: p, headers });
 const guard = (a, method, p, headers) => a.guard(req(method, p, headers), new URL(`http://weather-hub:8080${p}`));
 
-test("valid token opens only the two collect endpoints", async () => {
+test("valid token opens only the collect endpoints", async () => {
   const a = mk();
   assert.match(a.startupLine, /collect token on \(internal only\)/);
   assert.ok(!a.startupLine.includes(TOKEN));
-  for (const p of ["/api/collect", "/api/collect-daily"]) {
+  for (const p of ["/api/collect", "/api/collect-daily", "/api/collect-forecast"]) {
     const r = req("POST", p, { authorization: `Bearer ${TOKEN}` });
     assert.equal(await a.guard(r, new URL(`http://x${p}`)), null);
     assert.equal(r._collectToken, true);

@@ -18,6 +18,7 @@ import { handlePrefs, createPgPrefsStore, createMysqlPrefsStore, createJsonPrefs
 import { createStatsData } from "./stats-data.mjs";
 import { createStatsApi } from "./stats-api.mjs";
 import { createStatsHourly } from "./stats-hourly.mjs";
+import { collectForecast, FORECAST_KINDS } from "./kma-forecast.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(__dirname, "data");
@@ -1116,6 +1117,29 @@ function machineCollectError(req, body) {
   return null;
 }
 
+// 기상청 단기예보(단기예보·초단기예보·초단기실황) 적재. 최근 hours 시간 안의 발표 중 아직 다 받지 않은 것을 지점 격자마다 받는다
+// (기상청은 실황을 최근 1일만 제공 → 매번 지난 24시간을 다시 훑어 짧은 장애는 저절로 메워진다). 실행 1번 = collect_jobs 1행.
+async function collectForecastJob({ dataset, hours = 24, trigger = "MANUAL" }) {
+  const key = await getKey();
+  const job = { id: Date.now(), dataset, status: "RUNNING", trigger, station_id: null, from: null, to: null, received: 0, inserted: 0, updated: 0, chunks: 0, message: "" };
+  try {
+    if (!key) throw new Error("인증키가 없습니다.");
+    const store = db.forecastStore();
+    const grids = (await store.grids()).map((g) => ({ nx: Number(g.nx), ny: Number(g.ny) }));
+    const uniq = [...new Map(grids.map((g) => [`${g.nx}|${g.ny}`, g])).values()];
+    if (!uniq.length) throw new Error("격자(nx, ny)가 있는 사용 중 지점이 없습니다");
+    const r = await collectForecast({ dataset, key, grids: uniq, store, hours, log: (m) => console.error(`forecast ${dataset} ${m}`) });
+    Object.assign(job, { from: r.from, to: r.to, received: r.received, inserted: r.inserted, updated: r.updated, chunks: r.chunks });
+    job.status = r.failed === 0 ? "COMPLETED" : r.releases > 0 ? "PARTIAL" : "FAILED";
+    job.message = `격자 ${uniq.length}곳 · 새 발표 ${r.releases} · 이미 받음 ${r.skipped} · 아직 없음/제공 기간 지남 ${r.none} · 실패 ${r.failed}` + (r.errors.length ? ` · ${r.errors.join(" / ")}` : "");
+  } catch (err) {
+    job.status = "FAILED";
+    job.message = err instanceof Error ? err.message : String(err);
+  }
+  await saveJobs(job);
+  return job;
+}
+
 seedIfEmpty();
 
 // 날씨 통계(/api/stats/*): 지점별 공식 일자료를 메모리에 두고 서버에서 집계(stats-engine.mjs). 저장(upsertDaily)하면 그 지점을 비운다.
@@ -1356,6 +1380,15 @@ const server = http.createServer(async (req, res) => {
         from: body.from || addHours(latest, -7 * 24),
         to: body.to || latest,
       });
+      return json(res, job, job.status === "FAILED" ? 400 : 200);
+    }
+    if (req.method === "POST" && url.pathname === "/api/collect-forecast") {
+      const body = await readBody(req);
+      const dataset = String(body.dataset || "");
+      if (!FORECAST_KINDS[dataset]) return json(res, { ok: false, message: `dataset 은 ${Object.keys(FORECAST_KINDS).join(" / ")} 중 하나` }, 400);
+      const hours = body.hours == null ? 24 : Number(body.hours);
+      if (!Number.isInteger(hours) || hours < 1 || hours > 72) return json(res, { ok: false, message: "hours 는 1~72" }, 400);
+      const job = await collectForecastJob({ dataset, hours, trigger: req._collectToken ? "SCHEDULED" : "MANUAL" });
       return json(res, job, job.status === "FAILED" ? 400 : 200);
     }
     if (req.method === "POST" && url.pathname === "/api/collect") {

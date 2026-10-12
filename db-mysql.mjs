@@ -244,6 +244,7 @@ export async function init(url) {
   if (applied.length) console.log(`mysql migrations applied: ${applied.join(", ")}`);
   fullFields = await hasFullFieldColumns();
   await ensureIndex("observations_daily", "observations_daily_date", "(observation_date)");
+  await ensureStationGrid().catch((e) => console.error("station grid setup failed", e?.code || e?.message));
   statsReady = await loadStatsReady();
   // 요약표가 없으면 뒤에서 지점별로 채운다(그동안은 예전 전체 집계). 다 되면 집계를 다시 계산.
   if (!statsReady && process.env.MYSQL_STATS_BUILD !== "0") {
@@ -967,3 +968,66 @@ export async function gapOfficialDaysPg(stationIds, fromDate, toDate) {
     [...stationIds, fromDate, toDate],
   );
 }
+
+// ---- 기상청 단기예보(kma-forecast.mjs) 저장 — 2026-10-12, 적재만 ----
+// weather_stations 에 격자 칸(nx, ny) 추가(없을 때만, 칸 추가만) 후 좌표에서 계산해 비어 있는 칸만 채운다.
+async function ensureColumn(table, col, def) {
+  const r = await q("SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ? LIMIT 1", [table, col]);
+  if (r.length) return false;
+  await q(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`, [], { retry: false });
+  console.log(`mysql column added: ${table}.${col}`);
+  return true;
+}
+export async function ensureStationGrid() {
+  await ensureColumn("weather_stations", "nx", "SMALLINT NULL");
+  await ensureColumn("weather_stations", "ny", "SMALLINT NULL");
+  const [{ STATION_COORDS }, { latLonToGrid }] = await Promise.all([import("./station-coords.mjs"), import("./kma-forecast.mjs")]);
+  for (const s of await q("SELECT station_id FROM weather_stations WHERE nx IS NULL OR ny IS NULL")) {
+    const c = STATION_COORDS[String(s.station_id)];
+    if (!c) continue;
+    const g = latLonToGrid(c.latitude, c.longitude);
+    await q("UPDATE weather_stations SET nx = ?, ny = ? WHERE station_id = ? AND (nx IS NULL OR ny IS NULL)", [g.nx, g.ny, s.station_id], { retry: false });
+  }
+}
+export async function forecastGrids() {
+  return q("SELECT station_id, nx, ny FROM weather_stations WHERE enabled = 1 AND nx IS NOT NULL AND ny IS NOT NULL ORDER BY station_id");
+}
+const FC_TABLE = { KMA_VILAGE_FCST: "kma_vilage_fcst", KMA_ULTRA_FCST: "kma_ultra_fcst", KMA_ULTRA_NCST: "kma_ultra_ncst" };
+const wallStr = (d) => (d instanceof Date ? d.toISOString().slice(0, 19).replace("T", " ") : String(d).slice(0, 19));
+export async function forecastCompletedReleases(dataset, fromBase) {
+  const r = await q("SELECT nx, ny, base_datetime FROM kma_fcst_releases WHERE dataset = ? AND base_datetime >= ?", [dataset, fromBase]);
+  return new Set(r.map((x) => `${x.nx}|${x.ny}|${wallStr(x.base_datetime)}`));
+}
+export async function forecastUpsert(dataset, rows) {
+  const table = FC_TABLE[dataset];
+  if (!table) throw new Error(`알 수 없는 dataset ${dataset}`);
+  const ncst = dataset === "KMA_ULTRA_NCST";
+  const cols = ncst ? ["nx", "ny", "base_datetime", "category", "obsr_value", "raw"] : ["nx", "ny", "base_datetime", "fcst_datetime", "category", "fcst_value", "raw"];
+  const vcol = ncst ? "obsr_value" : "fcst_value";
+  let inserted = 0, updated = 0;
+  for (let i = 0; i < rows.length; i += 500) {
+    const part = rows.slice(i, i + 500);
+    const params = part.flatMap((r) => (ncst ? [r.nx, r.ny, r.base_datetime, r.category, r.value, r.raw] : [r.nx, r.ny, r.base_datetime, r.fcst_datetime, r.category, r.value, r.raw]));
+    const ph = `(${cols.map(() => "?").join(",")})`;
+    const res = await q(
+      `INSERT INTO ${table} (${cols.join(", ")}) VALUES ${part.map(() => ph).join(",")}
+       ON DUPLICATE KEY UPDATE ${vcol} = VALUES(${vcol}), raw = VALUES(raw), collected_at = CURRENT_TIMESTAMP`,
+      params,
+      { retry: false },
+    );
+    // affectedRows: 새 행 1, 바뀐 행 2(같은 키 = 같은 발표의 같은 항목만)
+    const up = Math.max(0, Math.min(part.length, (res?.affectedRows ?? part.length) - part.length));
+    updated += up;
+    inserted += part.length - up;
+  }
+  return { inserted, updated };
+}
+export async function forecastMarkRelease(dataset, grid, base, n) {
+  await q(
+    `INSERT INTO kma_fcst_releases (dataset, nx, ny, base_datetime, row_count) VALUES (?,?,?,?,?)
+     ON DUPLICATE KEY UPDATE row_count = VALUES(row_count), collected_at = CURRENT_TIMESTAMP`,
+    [dataset, grid.nx, grid.ny, base, n],
+    { retry: false },
+  );
+}
+

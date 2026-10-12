@@ -20,8 +20,8 @@ const SESSION_DAYS = 30;
 const STATE_MAX_AGE = 600; // 10분
 // 관리 화면에서만 쓰는 조회 API (공개 화면에는 필요 없음)
 const ADMIN_GET = new Set(["/api/gaps", "/api/jobs"]);
-// 기계(자동 수집, 예: n8n) 토큰으로 호출할 수 있는 경로 — 수집 실행 두 개뿐
-export const COLLECT_PATHS = new Set(["/api/collect", "/api/collect-daily"]);
+// 기계(자동 수집, 예: n8n) 토큰으로 호출할 수 있는 경로 — 수집 실행 세 개뿐(관측 시간·일자료, 단기예보)
+export const COLLECT_PATHS = new Set(["/api/collect", "/api/collect-daily", "/api/collect-forecast"]);
 const COLLECT_TOKEN_MIN = 32;
 
 const b64u = (buf) => Buffer.from(buf).toString("base64url");
