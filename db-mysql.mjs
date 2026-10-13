@@ -1067,3 +1067,36 @@ export async function midMark(dataset, region, tmFc, n, raw) {
   );
 }
 
+
+// ---- 실시간·예보 분석(rt-api.mjs) 읽기 전용 조회 — 2026-10-13. 시각은 모두 KST 벽시계 문자열('YYYY-MM-DD HH:MM:SS').
+const wall19 = (d) => (d instanceof Date ? d.toISOString().slice(0, 19).replace("T", " ") : d == null ? null : String(d).slice(0, 19));
+const utcIso = (d) => (d instanceof Date ? d.toISOString() : d == null ? null : String(d));
+export async function rtGridOf(stationId) {
+  const r = await q("SELECT s.station_id, s.station_name, s.nx, s.ny, m.mid_stn_id, m.land_reg_id, m.ta_reg_id FROM weather_stations s LEFT JOIN kma_mid_regions m ON m.station_id = s.station_id WHERE s.station_id = ?", [String(stationId)]);
+  return r[0] || null;
+}
+export async function rtNcst(nx, ny, from, to) {
+  const r = await q("SELECT base_datetime, category, obsr_value, collected_at FROM kma_ultra_ncst WHERE nx = ? AND ny = ? AND base_datetime >= ? AND base_datetime <= ? ORDER BY base_datetime", [nx, ny, from, to]);
+  return r.map((x) => ({ base: wall19(x.base_datetime), category: x.category, value: x.obsr_value, collectedAt: utcIso(x.collected_at) }));
+}
+export async function rtLatestRelease(dataset, nx, ny) {
+  const r = await q("SELECT base_datetime, row_count, collected_at FROM kma_fcst_releases WHERE dataset = ? AND nx = ? AND ny = ? ORDER BY base_datetime DESC LIMIT 1", [dataset, nx, ny]);
+  return r[0] ? { base: wall19(r[0].base_datetime), rows: r[0].row_count, collectedAt: utcIso(r[0].collected_at) } : null;
+}
+const RT_FC_TABLE = { KMA_VILAGE_FCST: "kma_vilage_fcst", KMA_ULTRA_FCST: "kma_ultra_fcst" };
+export async function rtFcst(dataset, nx, ny, base) {
+  const t = RT_FC_TABLE[dataset];
+  if (!t) throw new Error(`알 수 없는 예보 ${dataset}`);
+  const r = await q(`SELECT fcst_datetime, category, fcst_value FROM ${t} WHERE nx = ? AND ny = ? AND base_datetime = ? ORDER BY fcst_datetime`, [nx, ny, base]);
+  return r.map((x) => ({ base, fcst: wall19(x.fcst_datetime), category: x.category, value: x.fcst_value }));
+}
+// 그 날 최고·최저(TMX·TMN) 예보가 들어 있는 가장 최근 발표(오늘 낮 발표에는 오늘 TMX 가 없을 수 있음)
+export async function rtDayExtremes(nx, ny, ymd) {
+  const r = await q(
+    "SELECT category, base_datetime, fcst_value FROM kma_vilage_fcst WHERE nx = ? AND ny = ? AND fcst_datetime >= ? AND fcst_datetime < ? + INTERVAL 1 DAY AND category IN ('TMX','TMN') ORDER BY base_datetime DESC",
+    [nx, ny, `${ymd} 00:00:00`, `${ymd} 00:00:00`],
+  );
+  const out = {};
+  for (const x of r) if (!out[x.category]) out[x.category] = { value: x.fcst_value, base: wall19(x.base_datetime) };
+  return out;
+}

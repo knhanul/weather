@@ -636,4 +636,9 @@ export function forecastStore() {
     midRegions: my.midRegions, completedMid: my.midCompleted, upsertMid: my.midUpsert, markMid: my.midMark,
   };
 }
+// 실시간·예보 분석 읽기(MySQL 전용, rt-api.mjs). 다른 저장소에서는 null → 화면에 '실황 자료 없음'.
+export function rtStore() {
+  if (!my) return null;
+  return { gridOf: my.rtGridOf, ncst: my.rtNcst, latestRelease: my.rtLatestRelease, fcst: my.rtFcst, dayExtremes: my.rtDayExtremes };
+}
 

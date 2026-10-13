@@ -17,6 +17,7 @@ import { withCoords } from "./station-coords.mjs";
 import { handlePrefs, createPgPrefsStore, createMysqlPrefsStore, createJsonPrefsStore } from "./view-prefs.mjs";
 import { createStatsData } from "./stats-data.mjs";
 import { createStatsApi } from "./stats-api.mjs";
+import { createRtApi } from "./rt-api.mjs";
 import { createStatsHourly } from "./stats-hourly.mjs";
 import { collectForecast, FORECAST_KINDS } from "./kma-forecast.mjs";
 import { collectMid, MID_KINDS } from "./kma-mid.mjs";
@@ -1183,6 +1184,9 @@ const handleStats = createStatsApi({
   json,
 });
 
+// 실시간·예보 분석(/api/rt/*): 새 엔드포인트. 과거 3개 기준 평균은 위 statsHourly·statsData 메모리를 그대로 쓴다(새 DB 표 없음).
+const handleRt = createRtApi({ rt: () => db.rtStore(), statsHourly, statsData, stations, json });
+
 // 카카오 로그인(관리 기능 보호). 서버 시작 시 DB 연결 뒤에 만든다. 키가 없으면 꺼진 상태(기존과 동일).
 let auth = createAuth({ env: {} });
 let layoutStore = null;
@@ -1217,6 +1221,7 @@ const server = http.createServer(async (req, res) => {
       }
     }
     if (url.pathname.startsWith("/api/stats/") && (await handleStats(req, res, url))) return;
+    if (url.pathname.startsWith("/api/rt/") && (await handleRt(req, res, url))) return;
     if (req.method === "GET" && url.pathname === "/api/hourly") {
       return json(res, await queryHourly(Object.fromEntries(url.searchParams)));
     }
