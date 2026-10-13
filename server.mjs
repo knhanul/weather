@@ -21,6 +21,7 @@ import { createRtApi } from "./rt-api.mjs";
 import { createStatsHourly } from "./stats-hourly.mjs";
 import { collectForecast, FORECAST_KINDS } from "./kma-forecast.mjs";
 import { collectMid, MID_KINDS } from "./kma-mid.mjs";
+import { forecastStatus } from "./rt-admin.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(__dirname, "data");
@@ -1375,6 +1376,17 @@ const server = http.createServer(async (req, res) => {
       } catch (err) {
         return json(res, { ok: false, storage, db: "down", message: err?.code || "DB 응답 없음" }, 503);
       }
+    }
+    if (req.method === "GET" && url.pathname === "/api/admin/forecast-status") {
+      // 관리자 전용(auth.guard 가 /api/admin/* 를 막음). DB 읽기만 — 기상청 호출 없음
+      if (!db.forecastReady()) return json(res, { ok: false, message: "예보 적재는 MySQL 저장소에서만 합니다" }, 400);
+      const hours = Math.min(72, Math.max(6, Number(url.searchParams.get("hours")) || 48));
+      const nowMs = Date.now();
+      const store = db.forecastStore();
+      const fromWall = new Date(nowMs - (hours + 13) * 3600000 + 9 * 3600000).toISOString().slice(0, 19).replace("T", " ");
+      const [grids, regions, releases] = await Promise.all([store.grids(), store.midRegions(), db.rtStore().releasesSince(fromWall)]);
+      const uniq = [...new Map(grids.map((g) => [`${Number(g.nx)}|${Number(g.ny)}`, { nx: Number(g.nx), ny: Number(g.ny) }])).values()];
+      return json(res, forecastStatus({ nowMs, hours, grids: uniq, regions, releases }));
     }
     if (req.method === "GET" && url.pathname === "/api/jobs") {
       return json(res, await listJobs());

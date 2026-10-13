@@ -91,3 +91,9 @@
 @media (max-width:800px) { .rtx-ov-g, .rtx-2 { grid-template-columns:1fr; } #rtx { gap:10px; margin-top:10px; } #rtxOv { margin-bottom:10px; } .rtx-ov-i > b { font-size:20px; } }
 
 #hourly > .card[hidden], #daily > .card[hidden], .rtx-raw[hidden] { display: none !important; }
+.rts-sub { font-size:12.5px; font-weight:400; color:var(--muted); margin-left:6px; }
+.rts-why summary { cursor:pointer; font-size:13px; color:var(--muted); margin-top:8px; }
+.rts-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; } @media (max-width:760px) { .rts-2 { grid-template-columns:1fr; } }
+.rts-col h3 { font-size:15px; margin:0 0 6px; } .rts-lead { margin:0 0 6px; } .rts-lead b { color:var(--pri-dark); }
+.rts-sim { margin:0 0 6px; padding-left:20px; font-size:13.5px; } .rts-sim li { margin:2px 0; } .rts-sim small { color:var(--muted); display:block; }
+.rtad-miss summary { cursor:pointer; margin-top:8px; } .rtad-miss ul { margin:4px 0; padding-left:20px; font-size:13px; max-height:240px; overflow:auto; } .rtad-log { margin-top:8px; font-size:13.5px; }

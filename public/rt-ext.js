@@ -113,6 +113,11 @@
     hourly: [["asos", "ASOS 관측(기존)"], ["KMA_ULTRA_NCST", "초단기실황"], ["KMA_ULTRA_FCST", "초단기예보"], ["KMA_VILAGE_FCST", "단기예보"]],
     daily: [["asos", "ASOS 관측(기존)"], ["KMA_MID_TA", "중기기온 예보"], ["KMA_MID_LAND", "중기육상 예보"]],
   };
+  // 직접 연 주소의 src= 는 기존 화면이 주소를 다시 쓰기 전에 기억해 둔다
+  const pendSrc = {};
+  const grab = () => { const h = location.hash.replace("#", "").split("?")[0]; const pg = { "/hourly-weather": "hourly", "/daily-weather": "daily" }[h]; const s = hashP().get("src"); if (pg && s) pendSrc[pg] = s; };
+  grab();
+  window.addEventListener("hashchange", grab, true);
   function rawSetup(page) {
     const sec = $(page);
     if (!sec || sec.dataset.rtRaw) return;
@@ -137,7 +142,7 @@
       panel.hidden = k === "asos";
       const p = hashP();
       if (k === "asos") p.delete("src"); else p.set("src", k);
-      history.replaceState(history.state, "", `${location.hash.split("?")[0]}${p.toString() ? `?${p}` : ""}`);
+      if (location.hash.includes(page === "hourly" ? "hourly-weather" : "daily-weather")) history.replaceState(history.state, "", `${location.hash.split("?")[0]}${p.toString() ? `?${p}` : ""}`);
       if (k === "asos") return;
       const date = panel.querySelector("input[type=date]")?.value || new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
       const st = sel();
@@ -151,7 +156,7 @@
       } catch (e) { panel.querySelector(".rt-load").outerHTML = `<p class="rt-ins">${esc(e.message)}</p>`; }
     }
     bar.addEventListener("click", (e) => { const b = e.target.closest("[data-src]"); if (b) show(b.dataset.src); });
-    const s0 = hashP().get("src");
+    const s0 = hashP().get("src") || pendSrc[page]; delete pendSrc[page];
     if (s0 && RAW[page].some((x) => x[0] === s0)) show(s0);
   }
   function rawTick() { if (document.querySelector("#hourly.on")) rawSetup("hourly"); if (document.querySelector("#daily.on")) rawSetup("daily"); }

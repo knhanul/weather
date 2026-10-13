@@ -106,7 +106,7 @@
         </section>`
       : `<section class="card rt-now"><p class="result bad">${esc(c.message || "오늘 실황 자료가 없습니다")}</p></section>`;
     const story = d.stories.length ? `<section class="card rt-stories" aria-label="오늘의 날씨 이야기"><h2>오늘의 날씨 이야기</h2>${d.stories.map((s) => `<article class="rt-story"><h3>${esc(s.title)} <b>${esc(s.value)}</b></h3><p>${esc(s.text)}</p><p class="rt-basis-row">${s.periods.filter((p) => ids.includes(idOf(p.label))).map((p) => `<span>${esc(p.label.replace(" 평균", ""))} ${p.mean != null ? `${p.mean}℃(${sg(p.diff)})` : p.percentile != null ? `${p.percentile}백분위` : "비교 데이터 부족"}</span>`).join("")}</p><p class="rt-note">근거: ${esc(s.basis)} · 기준 ${esc(s.asOf || "")}</p></article>`).join("")}</section>` : "";
-    $("rtOut").innerHTML = head + story + chartCard(d, ids) + distCard(d, ids) + dayCard(d, ids) + otherCard(d, ids) + methodCard(d);
+    $("rtOut").innerHTML = head + `<div id="rtsBox">${story}</div>` + chartCard(d, ids) + `<div id="rtsSim"></div>` + distCard(d, ids) + dayCard(d, ids) + otherCard(d, ids) + methodCard(d);
     bindChart();
   }
   const idOf = (label) => (/1990|이후/.test(label) ? "all" : /10년/.test(label) ? "r10" : "r5");

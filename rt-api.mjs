@@ -12,6 +12,7 @@ const fin = (v) => (Number.isFinite(v) ? v : null);
 // 지연 판정(분): 실황은 정시 + 약 15분에 받는다 → 90분 넘으면 '지연', 초단기예보 2시간, 단기예보 4시간(3시간 간격 + 여유)
 export const STALE_MIN = { NCST: 90, ULTRA: 120, VILAGE: 240 };
 const wallMs = (w) => Date.parse(`${w.replace(" ", "T")}Z`) - 9 * 3600000; // KST 벽시계 → 실제 시각
+import { similarDays, dayVals, selectStories, unusualFromPct, unusualFromRank, unusualFromDiff, STORY_RULE, SIM_WINDOW } from "./rt-stories.mjs";
 import { PTY, SKY, windDir, rainText } from "./rt-api-shared.mjs";
 export { PTY, SKY, windDir, rainText };
 export function freshness(baseWall, nowMs, limitMin) {
@@ -416,6 +417,69 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     }
     return s.sort((a, b) => b.weight - a.weight).map(({ weight, ...x }) => x);
   }
+
+  // ---------------------------------------------------------------- 6단계: 과거 유사일·이야기 엔진
+  const U = (id) => new URL(`http://x/?station=${encodeURIComponent(id)}`);
+  async function similar(id, day) {
+    const st = await stationParam(U(id));
+    const sid = String(st.station_id);
+    const hs = await statsHourly.get(st.station_id);
+    const k = kst(now());
+    const head = { ok: true, station: { id: sid, name: st.station_name }, day };
+    if (day === "yesterday") {
+      const date = dnToYmdLocal(ymdToDn(k.ymd) - 1);
+      const dn = ymdToDn(date);
+      const tgt = { date, ta: dayVals(hs, dn, "ta"), hm: dayVals(hs, dn, "hm"), rn: dayVals(hs, dn, "rn") };
+      const r = similarDays(hs, tgt, { mode: "full" });
+      return { ...head, source: `대상일·후보일 모두 ASOS ${st.station_name}(${sid}) 정시 관측`, kind: "관측(하루 전체)", ...r };
+    }
+    const t = await todayOf(sid);
+    const ta = (t.hours || []).map((h) => (h.obs == null ? NaN : h.obs));
+    const r = similarDays(hs, { date: k.ymd, ta, hm: [], rn: [] }, { mode: "partial" });
+    const last = r.hoursUsed.length ? r.hoursUsed[r.hoursUsed.length - 1] : null;
+    return { ...head, source: `오늘: 초단기실황(격자 ${t.grid?.nx},${t.grid?.ny}) 정시 기온 / 과거: ASOS ${st.station_name}(${sid}) 정시 관측 — 위치가 같지 않을 수 있음`, kind: `진행 중 — 0시~${last ?? "-"}시 관측만 비교(예보 미포함)`, partial: true, stale: t.current?.freshness?.state === "stale", ...r };
+  }
+  const dnToYmdLocal = (dn) => { const d = new Date(dn * 86400000); return d.toISOString().slice(0, 10); };
+  const published = new Map(); // 지점 → [{date, keys}] (서버 메모리, 최근 3일 — 재시작하면 비워짐)
+  async function storiesRt(id) {
+    const st = await stationParam(U(id));
+    const sid = String(st.station_id), nm = st.station_name;
+    const k = kst(now());
+    const [t, f, y, g, l, rc, sm] = await Promise.all([todayOf(sid), forecastOf(sid), ytd(U(sid)), cached("R", () => regions()), life(U(sid)), recordsRt(U(sid)), cached(`S|${sid}|today`, () => similar(sid, "today"))]);
+    const C = [];
+    const sg = (d) => (d > 0 ? `+${d}` : `${d}`);
+    const c = t.current;
+    const fresh = c?.freshness?.state === "fresh";
+    if (c?.values && c.compare?.ta && fresh) {
+      const [all, , r5] = c.compare.ta;
+      if (all.mean != null) C.push({ key: "now-anomaly", phenomenon: "지금 기온", kind: "관측", unusual: unusualFromPct(all.percentile) ?? unusualFromDiff(all.diff, 5), samples: all.samples, minSamples: MIN_SAMPLES_RANK, info: 0.8, title: `지금 ${nm} ${c.values.ta}℃, 같은 시각 평소보다 ${sg(all.diff)}℃`, text: `${c.hour}시 실황 ${c.values.ta}℃ — ${all.range}년 같은 시기(±${WINDOW_DAYS}일) 같은 시각 평균 ${all.mean}℃${all.percentile != null ? `, 백분위 ${all.percentile}` : ""}.`, basis: `초단기실황 ${c.time.slice(0, 16)} vs ASOS 정시 관측` });
+      if (all.mean != null && r5?.mean != null) { const d = round1(r5.mean - all.mean); C.push({ key: "r5-vs-all", phenomenon: "최근 5년 변화", kind: "관측", unusual: unusualFromDiff(d, 1.5), samples: r5.validYears, minSamples: 4, info: 0.6, title: `최근 5년 이 시기·시각은 장기 평균보다 ${sg(d)}℃`, text: `${c.hour}시 기준 최근 5년(${r5.range}) 평균 ${r5.mean}℃, 1990년 이후(${all.range}) 평균 ${all.mean}℃.`, basis: "ASOS 정시 관측, 해마다 평균 후 같은 무게" }); }
+    }
+    const w = f.week;
+    if (w?.anomaly?.[0]?.diff != null) { const a = w.anomaly[0]; C.push({ key: `week-${w.from}`, phenomenon: "이번 주 기온", kind: w.fcDays ? "예보" : "관측", unusual: unusualFromDiff(a.diff, 3), samples: a.values, minSamples: 5, info: 0.7, title: `이번 주(${w.from.slice(5)}~${w.to.slice(5)}) 기온, 예년보다 ${sg(a.diff)}℃${w.fcDays ? " 전망" : ""}`, text: `관측 ${w.obsDays}일 + 예보 ${w.fcDays}일의 최고·최저기온을 ${a.range}년 같은 날 평균과 비교한 평균 차이.`, basis: "지난 날 ASOS 공식 일자료, 오늘부터 단기·중기예보" }); }
+    for (const d of w?.days || []) {
+      const a = d.maxCmp?.[0];
+      if (d.source === "관측" && a?.newHigh) C.push({ key: `rec-obs-${d.date}`, phenomenon: "기록", kind: "관측", unusual: 1, samples: a.samples, minSamples: MIN_SAMPLES_RANK, info: 1, title: `${d.date.slice(5)} 최고기온 ${d.max}℃, 같은 시기 과거 최고(${a.max.value}℃, ${a.max.date})보다 높음`, text: `${a.range}년 같은 시기(±${WINDOW_DAYS}일) 최고기온 ${a.samples}개 중 가장 높습니다(관측 확정).`, basis: "ASOS 공식 일자료" });
+    }
+    for (const d of f.days || []) if (d.nearRecord) C.push({ key: `rec-fc-${d.date}`, phenomenon: "기록", kind: "예보", unusual: 0.9, samples: d.maxCmp?.[0]?.samples ?? 0, minSamples: MIN_SAMPLES_RANK, info: 0.9, title: `${d.date.slice(5)} 최고 ${d.max}℃ 예보 — 같은 시기 기록(${d.nearRecord.record.value}℃) 근접`, text: "예보값이라 기록 경신은 관측으로만 확정합니다.", basis: `${d.maxSource} ${String(d.maxBase || "").slice(0, 16)} 발표` });
+    const row = (g.rows || []).find((r) => r.id === sid);
+    if (row?.percentile != null) { const rk = (g.rankAnomaly || []).find((r) => r.id === sid); C.push({ key: "region-anomaly", phenomenon: "지역 이상기온", kind: "관측", unusual: unusualFromPct(row.percentile), samples: MIN_SAMPLES_RANK, minSamples: MIN_SAMPLES_RANK, info: 0.5, title: `${nm}, 평소 대비 이례성 전국 ${rk?.rank ?? "-"}위/${(g.rankAnomaly || []).length}`, text: `지금 ${row.temp}℃, 같은 시기·시각 평균 대비 ${sg(row.diffs?.all)}℃(백분위 ${row.percentile}).`, basis: "각 지점 격자 실황 vs 각 ASOS 관측소(백분위는 표본 60개 이상일 때만 계산)" }); }
+    for (const it of y.items || []) { const a = it.periods?.[0]; if (a?.rankHigh && a.status !== "insufficient") C.push({ key: `ytd-${it.id}`, phenomenon: it.id === "rain" ? "올해 누적 강수" : "올해 누적 기온", kind: "관측", unusual: unusualFromRank(a.rankHigh, a.of), samples: a.validYears, minSamples: Math.ceil(a.yearsInPeriod * MIN_YEAR_SHARE), info: 0.6, title: `올해 ${it.label} ${it.value}${it.unit}, 1990년 이후 ${a.of}개 해 중 많은/높은 쪽 ${a.rankHigh}위`, text: `1/1~${y.asOf.slice(5)} 같은 누적 기간 평균 ${a.mean}${it.unit}(${sg(a.diff)}${it.unit}).`, basis: "ASOS 공식 일자료, 끝난 날까지" }); }
+    const hs = (l.items || []).find((x) => x.id === "heat-start");
+    const p5 = hs?.periods?.find((p) => p.id === "r5");
+    if (p5?.diffDays != null) C.push({ key: "heat-start", phenomenon: "계절 시작", kind: "관측", unusual: unusualFromDiff(p5.diffDays, 10), samples: p5.hitYears, minSamples: 4, info: 0.5, title: `올해 더위 시작, 최근 5년 평균보다 ${Math.abs(p5.diffDays)}일 ${p5.diffDays < 0 ? "이름" : "늦음"}`, text: hs.basis || "", basis: "ASOS 공식 일자료" });
+    const r1h = rc.rain1h, rp = r1h?.periods?.[0];
+    if (r1h?.value > 0 && rp?.max) C.push({ key: `rain1h-${r1h.time}`, phenomenon: "강수", kind: "관측", unusual: Math.min(1, r1h.value / rp.max.value), samples: rp.samples, minSamples: MIN_SAMPLES_RANK, info: 0.7, title: `지금 1시간 강수 ${r1h.value}mm`, text: `${rp.range}년 같은 시기 이 시각 최대 ${rp.max.value}mm(${rp.max.date}).`, basis: "초단기실황 vs ASOS 정시 관측" });
+    if (sm.ok && sm.top?.[0]) { const b = sm.top[0]; C.push({ key: `similar-${b.date}`, phenomenon: "과거 유사일", kind: "관측", unusual: 0.4, samples: sm.valid, minSamples: 30, info: 0.5, title: `오늘 기온 변화와 가장 비슷했던 날은 ${b.date.slice(0, 4)}년 ${Number(b.date.slice(5, 7))}월 ${Number(b.date.slice(8, 10))}일`, text: `0시~${sm.hoursUsed[sm.hoursUsed.length - 1]}시 관측만 비교(진행 중), 시간별 기온 RMSE ${b.rmse}℃. 후보 ${sm.valid}일 중.`, basis: sm.formula }); }
+    // 최근 게시 이력(어제·그제 고른 key) — 같은 이야기가 날마다 반복되지 않게
+    const hist = (published.get(sid) || []).filter((h) => h.date >= dnToYmdLocal(ymdToDn(k.ymd) - 3));
+    const recent = new Set(hist.filter((h) => h.date !== k.ymd).flatMap((h) => h.keys));
+    const sel = selectStories(C, { recent });
+    const todayH = hist.find((h) => h.date === k.ymd);
+    if (todayH) todayH.keys = [...new Set([...todayH.keys, ...sel.stories.map((x) => x.key)])]; else hist.push({ date: k.ymd, keys: sel.stories.map((x) => x.key) });
+    published.set(sid, hist);
+    return { ok: true, station: { id: sid, name: nm }, now: k.text, stale: !fresh, staleNote: fresh ? null : `실황 ${c?.freshness?.text || "없음"} — 지금 기온 이야기는 뺐습니다`, candidates: C.length, stories: sel.stories, dropped: sel.dropped, rule: { ...STORY_RULE, text: "표본 부족 제외 → 이례성 0.3 미만 제외 → 점수 = 0.6×이례성 + 0.4×정보 가치, 예보 ×0.9, 최근 3일 안에 고른 이야기 ×0.5 → 같은 현상은 하나만 → 최대 4개. 이례성: 백분위 |p−50|/50, 순위 양끝 근접도, 차이는 기준폭(기온 3℃·5년 변화 1.5℃·10일)으로 나눔. 과거 유사일은 고정 0.4." } };
+  }
   const sign = (d) => (d > 0 ? `+${d}` : `${d}`);
   const round1 = (v) => Math.round(v * 10) / 10;
 
@@ -430,6 +494,8 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
       if (url.pathname === "/api/rt/life") return json(res, await life(url)), true;
       if (url.pathname === "/api/rt/records") return json(res, await recordsRt(url)), true;
       if (url.pathname === "/api/rt/raw") { const r = await raw(url, res); if (r) json(res, r); return true; }
+      if (url.pathname === "/api/rt/similar") { const id = String(url.searchParams.get("station") || "108").trim(); const day = url.searchParams.get("day") === "yesterday" ? "yesterday" : "today"; return json(res, await cached(`S|${id}|${day}`, () => similar(id, day))), true; }
+      if (url.pathname === "/api/rt/stories") { const id = String(url.searchParams.get("station") || "108").trim(); return json(res, await storiesRt(id)), true; }
       if (url.pathname === "/api/rt/baseline") return json(res, await baseline(url)), true;
       return json(res, { ok: false, message: "없는 주소" }, 404), true;
     } catch (e) {
