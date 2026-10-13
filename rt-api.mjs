@@ -3,7 +3,8 @@
 //            fcst(예보) = 초단기예보·단기예보(격자, 발표시각 base ≠ 대상시각 fcst). 강수확률(POP)은 더하지 않고 비교 엔진에도 넣지 않는다.
 // 같은 시각에 여러 값이 있으면: 실황 > 초단기예보(최신 발표) > 단기예보(최신 발표).
 import { basePeriods, hourlyCompare, dailyCompare, kst, createBaselineCache, HOURLY_FIELDS, DAILY_FIELDS, diffWord, WINDOW_DAYS, MIN_YEAR_SHARE, MIN_IN_YEAR_SHARE, MIN_SAMPLES_RANK } from "./rt-baseline.mjs";
-import { StatsError, hourlyLastDay } from "./stats-engine.mjs";
+import { StatsError, hourlyLastDay, ymdToDn } from "./stats-engine.mjs";
+import { hourlyForecast, shortDaySummary, extremesByDate, midByDate, stitchDays, forecastChanges, addDays } from "./rt-forecast.mjs";
 
 const pad = (n) => String(n).padStart(2, "0");
 const num = (v) => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? NaN : Number(v));
@@ -11,19 +12,8 @@ const fin = (v) => (Number.isFinite(v) ? v : null);
 // 지연 판정(분): 실황은 정시 + 약 15분에 받는다 → 90분 넘으면 '지연', 초단기예보 2시간, 단기예보 4시간(3시간 간격 + 여유)
 export const STALE_MIN = { NCST: 90, ULTRA: 120, VILAGE: 240 };
 const wallMs = (w) => Date.parse(`${w.replace(" ", "T")}Z`) - 9 * 3600000; // KST 벽시계 → 실제 시각
-export const PTY = { 0: "없음", 1: "비", 2: "비/눈", 3: "눈", 4: "소나기", 5: "빗방울", 6: "빗방울눈날림", 7: "눈날림" };
-export const SKY = { 1: "맑음", 3: "구름많음", 4: "흐림" };
-const DIRS = ["북", "북북동", "북동", "동북동", "동", "동남동", "남동", "남남동", "남", "남남서", "남서", "서남서", "서", "서북서", "북서", "북북서"];
-export const windDir = (deg) => (Number.isFinite(deg) ? `${DIRS[Math.round(deg / 22.5) % 16]}풍` : null);
-// 강수량 문자열(기상청 표기: '강수없음', '1mm 미만', '30.0~50.0mm', '50.0mm 이상', 숫자)
-export function rainText(v) {
-  if (v == null) return null;
-  const s = String(v).trim();
-  if (s === "강수없음" || s === "0" || s === "0.0") return { mm: 0, text: "강수 없음" };
-  const n = Number(s.replace(/mm$/, ""));
-  if (Number.isFinite(n)) return { mm: n, text: `${n}mm` };
-  return { mm: null, text: s };
-}
+import { PTY, SKY, windDir, rainText } from "./rt-api-shared.mjs";
+export { PTY, SKY, windDir, rainText };
 export function freshness(baseWall, nowMs, limitMin) {
   if (!baseWall) return { state: "none", text: "자료 없음" };
   const age = Math.round((nowMs - wallMs(baseWall)) / 60000);
@@ -35,6 +25,15 @@ export function freshness(baseWall, nowMs, limitMin) {
 export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json, now = () => Date.now() }) {
   const cache = createBaselineCache();
   const todayCache = new Map();
+  async function cached(key, fn) {
+    const kk = `${key}|${statsHourly.version()}|${statsData.version()}`;
+    const c = todayCache.get(kk);
+    if (c && now() - c.at < 60000) return c.data;
+    const data = await fn();
+    todayCache.set(kk, { at: now(), data });
+    if (todayCache.size > 80) todayCache.delete(todayCache.keys().next().value);
+    return data;
+  }
   async function stationParam(url) {
     const id = String(url.searchParams.get("station") || "108").trim();
     const st = (await stations()).find((s) => String(s.station_id) === id);
@@ -156,6 +155,81 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     return out;
   }
 
+  // GET /api/rt/forecast?station= — 시간별·주간 예보 + 3개 기준 비교 + 이번 주 예년 대비 + 발표별 예보 변화
+  async function forecast(url) {
+    const rt = typeof rtSrc === "function" ? rtSrc() : rtSrc;
+    const st = await stationParam(url);
+    const nowMs = now();
+    const k = kst(nowMs);
+    const out = { ok: true, now: k.text, date: k.ymd, station: { id: String(st.station_id), name: st.station_name }, method, periods: basePeriods(k.ymd) };
+    const g = rt ? await rt.gridOf(st.station_id) : null;
+    if (!g || g.nx == null) return { ...out, message: "이 지점에는 예보 격자가 없습니다", hours: [], days: [], week: null, changes: [] };
+    out.mapping = { grid: `${g.nx},${g.ny}`, midTa: g.ta_reg_id, midLand: g.land_reg_id, note: `단기예보 = 5km 격자(${g.nx},${g.ny}), 중기기온 = 도시 ${g.ta_reg_id}, 중기육상 = 광역 ${g.land_reg_id}. ASOS ${st.station_name}(${st.station_id}) 관측소와 같은 곳이 아닙니다.` };
+    const weekStart = addDays(k.ymd, -((new Date(`${k.ymd}T00:00:00Z`).getUTCDay() + 6) % 7)); // 월요일
+    const [ultraRel, vilRel, ext, ta, land] = await Promise.all([
+      rt.latestRelease("KMA_ULTRA_FCST", g.nx, g.ny), rt.latestRelease("KMA_VILAGE_FCST", g.nx, g.ny),
+      rt.extremesAll(g.nx, g.ny, weekStart < k.ymd ? weekStart : k.ymd, addDays(k.ymd, 12)),
+      g.ta_reg_id ? rt.midItems("KMA_MID_TA", g.ta_reg_id, `${addDays(k.ymd, -3)} 00:00:00`) : [],
+      g.land_reg_id ? rt.midItems("KMA_MID_LAND", g.land_reg_id, `${addDays(k.ymd, -1)} 00:00:00`) : [],
+    ]);
+    const [ultraRows, vilRows] = await Promise.all([ultraRel ? rt.fcst("KMA_ULTRA_FCST", g.nx, g.ny, ultraRel.base) : [], vilRel ? rt.fcst("KMA_VILAGE_FCST", g.nx, g.ny, vilRel.base) : []]);
+    out.releases = {
+      ultra: ultraRel ? { base: ultraRel.base, freshness: freshness(ultraRel.base, nowMs, STALE_MIN.ULTRA) } : null,
+      vilage: vilRel ? { base: vilRel.base, freshness: freshness(vilRel.base, nowMs, STALE_MIN.VILAGE) } : null,
+      midTa: ta.length ? ta.reduce((m, x) => (x.tmFc > m ? x.tmFc : m), "") : null,
+      midLand: land.length ? land.reduce((m, x) => (x.tmFc > m ? x.tmFc : m), "") : null,
+    };
+    if (out.releases.midTa) out.releases.midTaFreshness = freshness(out.releases.midTa, nowMs, 13 * 60);
+    const hs = await statsHourly.get(st.station_id);
+    const store = await statsData.get(st.station_id);
+    const hours = hourlyForecast({ vilRows, ultraRows, fromWall: `${k.ymd} ${pad(k.hour)}:00:00` });
+    for (const h of hours) {
+      const b = hourBase(hs, st.station_id, h.time.slice(0, 10), +h.time.slice(11, 13), "ta", NaN);
+      h.base = Object.fromEntries(b.map((x) => [x.id, x.mean]));
+      h.diff = Object.fromEntries(b.map((x) => [x.id, x.mean != null && h.ta != null ? Math.round((h.ta - x.mean) * 10) / 10 : null]));
+    }
+    out.hours = hours;
+    const extremes = extremesByDate(ext);
+    const mid = midByDate(ta, land);
+    const days = stitchDays({ today: k.ymd, extremes, shortDays: shortDaySummary(hours), mid });
+    const cmpDay = (d, field, v) => brief(dayBase(store, st.station_id, d, field, Number.isFinite(v) ? v : NaN));
+    for (const d of days) {
+      d.maxCmp = cmpDay(d.date, "max", d.max);
+      d.minCmp = cmpDay(d.date, "min", d.min);
+      const rec = d.maxCmp[0];
+      d.nearRecord = d.max != null && rec.max && d.max >= rec.max.value - 1 ? { kind: "high", record: rec.max, note: "예보값 — 기록은 관측으로만 확정" } : null;
+    }
+    out.days = days;
+    // 이번 주(월~일): 지난 날 = 공식 일자료 관측, 오늘부터 = 예보
+    const week = [];
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(weekStart, i);
+      let max = null, min = null, src = null, base = null;
+      if (d < k.ymd) {
+        const j = ymdToDn(d) - store.base;
+        if (j >= 0 && j < store.n && store.present[j]) { max = fin(store.max[j]); min = fin(store.min[j]); src = "관측"; }
+        if (max == null && min == null) {
+          const e = extremes.get(d);
+          const tx = e?.TMX?.at(-1), tn = e?.TMN?.at(-1);
+          if (tx || tn) { max = tx?.value ?? null; min = tn?.value ?? null; src = "예보(관측 아직 없음)"; base = tx?.base || tn?.base; }
+        }
+      } else {
+        const r = days.find((x) => x.date === d);
+        if (r && (r.max != null || r.min != null)) { max = r.max; min = r.min; src = r.maxSource || r.minSource; base = r.maxBase || r.minBase; }
+      }
+      week.push({ date: d, max, min, source: src, base, maxCmp: cmpDay(d, "max", max ?? NaN), minCmp: cmpDay(d, "min", min ?? NaN) });
+    }
+    const anom = out.periods.map((p, idx) => {
+      const ds = [];
+      for (const w of week) for (const [v, c] of [[w.max, w.maxCmp[idx]], [w.min, w.minCmp[idx]]]) if (v != null && c.mean != null) ds.push(v - c.mean);
+      return { id: p.id, label: p.label, range: p.range, diff: ds.length ? Math.round((ds.reduce((a, b) => a + b, 0) / ds.length) * 10) / 10 : null, values: ds.length };
+    });
+    const obsDays = week.filter((w) => w.source === "관측").length, fcDays = week.filter((w) => w.source && w.source !== "관측").length;
+    out.week = { from: weekStart, to: addDays(weekStart, 6), days: week, anomaly: anom, obsDays, fcDays, note: `관측 ${obsDays}일 + 예보 ${fcDays}일. 최고·최저기온 각각의 (값 − 같은 시기 평균)을 평균한 것` };
+    out.changes = forecastChanges(extremes, mid, days.map((d) => d.date)).filter((c) => c.max.length + c.min.length > 1);
+    return out;
+  }
+
   // 오늘의 날씨 이야기(규칙 기반, 수치는 위에서 계산한 값만)
   function stories(o) {
     const s = [];
@@ -202,6 +276,7 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
         if (todayCache.size > 50) todayCache.delete(todayCache.keys().next().value);
         return json(res, data), true;
       }
+      if (url.pathname === "/api/rt/forecast") return json(res, await cached(`F|${url.searchParams.get("station") || "108"}`, () => forecast(url))), true;
       if (url.pathname === "/api/rt/baseline") return json(res, await baseline(url)), true;
       return json(res, { ok: false, message: "없는 주소" }, 404), true;
     } catch (e) {

@@ -1104,3 +1104,30 @@ export async function rtDayExtremes(nx, ny, ymd) {
   for (const x of r) if (!out[x.category]) out[x.category] = { value: x.fcst_value, base: wall19(x.base_datetime) };
   return out;
 }
+// 그 기간(대상 날짜) 최고·최저 예보의 모든 발표(예보 변화·날짜별 최신값). fromYmd ≤ 대상일 < toYmd
+export async function rtExtremesAll(nx, ny, fromYmd, toYmd) {
+  const r = await q("SELECT category, base_datetime, fcst_datetime, fcst_value FROM kma_vilage_fcst WHERE nx = ? AND ny = ? AND fcst_datetime >= ? AND fcst_datetime < ? AND category IN ('TMX','TMN') ORDER BY base_datetime", [nx, ny, `${fromYmd} 00:00:00`, `${toYmd} 00:00:00`]);
+  return r.map((x) => ({ category: x.category, base: wall19(x.base_datetime), fcst: wall19(x.fcst_datetime), value: x.fcst_value }));
+}
+// 중기: 구역의 최근 발표들(tm_fc ≥ from)의 항목
+export async function rtMidItems(dataset, regionId, fromTmFc) {
+  const r = await q("SELECT tm_fc, item_key, metric, day_offset, ampm, value FROM kma_mid_items WHERE dataset = ? AND region_id = ? AND tm_fc >= ? ORDER BY tm_fc", [dataset, regionId, fromTmFc]);
+  return r.map((x) => ({ tmFc: wall19(x.tm_fc), key: x.item_key, metric: x.metric, day: x.day_offset, ampm: x.ampm, value: x.value }));
+}
+// 관리: 최근 받은 발표 기록(단기 계열 / 중기)
+export async function rtReleasesSince(fromWall) {
+  const a = await q("SELECT dataset, nx, ny, base_datetime, row_count, collected_at FROM kma_fcst_releases WHERE base_datetime >= ? ORDER BY base_datetime", [fromWall]);
+  const b = await q("SELECT dataset, region_id, tm_fc, row_count, collected_at FROM kma_mid_releases WHERE tm_fc >= ? ORDER BY tm_fc", [fromWall]);
+  return {
+    short: a.map((x) => ({ dataset: x.dataset, nx: x.nx, ny: x.ny, base: wall19(x.base_datetime), rows: x.row_count, collectedAt: utcIso(x.collected_at) })),
+    mid: b.map((x) => ({ dataset: x.dataset, region: x.region_id, base: wall19(x.tm_fc), rows: x.row_count, collectedAt: utcIso(x.collected_at) })),
+  };
+}
+// 원자료 조회(실황·예보): 그 날(KST) 하루, 격자
+export async function rtRaw(dataset, nx, ny, ymd) {
+  const from = `${ymd} 00:00:00`;
+  if (dataset === "KMA_ULTRA_NCST") return (await q("SELECT base_datetime, category, obsr_value FROM kma_ultra_ncst WHERE nx = ? AND ny = ? AND base_datetime >= ? AND base_datetime < ? + INTERVAL 1 DAY ORDER BY base_datetime, category", [nx, ny, from, from])).map((x) => ({ base: wall19(x.base_datetime), category: x.category, value: x.obsr_value }));
+  const t = RT_FC_TABLE[dataset];
+  if (!t) throw new Error("dataset");
+  return (await q(`SELECT base_datetime, fcst_datetime, category, fcst_value FROM ${t} WHERE nx = ? AND ny = ? AND base_datetime >= ? AND base_datetime < ? + INTERVAL 1 DAY ORDER BY base_datetime, fcst_datetime, category`, [nx, ny, from, from])).map((x) => ({ base: wall19(x.base_datetime), fcst: wall19(x.fcst_datetime), category: x.category, value: x.fcst_value }));
+}
