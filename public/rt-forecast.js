@@ -81,7 +81,9 @@
     h += `<details class="card rt-method"><summary>계산 기준</summary><ul><li>${esc(d.method.rule)}</li><li>${esc(d.method.note)}</li><li>${esc(d.mapping?.note || "")}</li><li>최신 발표: 단기 ${esc(hm(d.releases?.vilage?.base) || "없음")}, 초단기 ${esc(hm(d.releases?.ultra?.base) || "없음")}, 중기기온 ${esc(hm(d.releases?.midTa) || "없음")}, 중기육상 ${esc(hm(d.releases?.midLand) || "없음")}.</li><li>시간별 기온 비교 = 같은 날짜 ±7일·같은 정시 ASOS 평균, 일별 = 공식 일자료 최고·최저기온 평균. 예보값으로 기록 경신을 확정하지 않습니다.</li></ul></details>`;
     $("fcOut").innerHTML = h;
   }
-  const seqTxt = (a) => (a.length ? a.slice(-6).map((x, i, arr) => `<span title="${esc(x.source)}">${esc(hm(x.base))} <b${i && x.value !== arr[i - 1].value ? ` class="${cls(x.value - arr[i - 1].value)}"` : ""}>${x.value}</b>${x.source === "중기예보" ? "<sup>중기</sup>" : ""}</span>`).join(" → ") : "–");
+  // 값이 바뀐 발표만(첫 발표 + 바뀐 회차), 최근 6개
+  const changesOnly = (a) => a.filter((x, i) => i === 0 || x.value !== a[i - 1].value || x.source !== a[i - 1].source);
+  const seqTxt = (a0) => { const a = changesOnly(a0); return a.length ? a.slice(-6).map((x, i, arr) => `<span title="${esc(x.source)}">${esc(hm(x.base))} <b${i && x.value !== arr[i - 1].value ? ` class="${cls(x.value - arr[i - 1].value)}"` : ""}>${x.value}</b>${x.source === "중기예보" ? "<sup>중기</sup>" : ""}</span>`).join(" → ") + (a0.length > a.length ? ` <small>(발표 ${a0.length}회 중 값이 바뀐 회차만)</small>` : "") : "–"; };
   function hourlyCard(d, ids) {
     const hrs = d.hours.slice(0, 72);
     if (!hrs.length) return `<section class="card"><h2>시간별 예보</h2><p class="rt-ins">예보 자료가 없습니다</p></section>`;
