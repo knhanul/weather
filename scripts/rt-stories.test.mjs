@@ -67,6 +67,14 @@ test("유사일(하루 전체): 가중식 = 1×RMSE+0.5|Δ최고|+0.5|Δ최저|+
   // 3일 안 같은 흐름은 하나만
   for (let i = 0; i < r.top.length; i++) for (let j = i + 1; j < r.top.length; j++) assert.ok(Math.abs(ymdToDn(r.top[i].date) - ymdToDn(r.top[j].date)) > 3);
 });
+test("유사일(하루 전체): 대상일 강수가 한 시각 빠지면 강수 항을 빼고 표시(0으로 보지 않음)", () => {
+  const hs = store(2000, "2026-10-12");
+  const dn = ymdToDn("2026-10-12"), get = (f) => Array.from({ length: 24 }, (_, h) => hs[f][(dn - hs.base) * 24 + h] / 10);
+  const rn = get("rn"); rn[5] = NaN;
+  const r = similarDays(hs, { date: "2026-10-12", ta: get("ta"), hm: get("hm"), rn }, { mode: "full" });
+  assert.equal(r.ok, true); assert.equal(r.rainUsed, false); assert.match(r.termsNote, /강수 항/);
+  assert.ok(r.top.every((x) => x.rainMismatch === 0 && x.rain === null));
+});
 test("이야기 선별: 표본 부족·낮은 이례성 제외, 같은 현상 하나, 예보·최근 감점, 최대 4", () => {
   const C = [
     { key: "a", phenomenon: "기록", kind: "예보", unusual: 0.9, samples: 100, minSamples: 60, info: 0.9, text: "x" },

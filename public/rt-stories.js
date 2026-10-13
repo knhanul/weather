@@ -11,10 +11,10 @@
   function simList(r) {
     if (!r.ok) return `<p class="rt-ins">${esc(r.message)}</p>`;
     const b = r.top[0];
-    return `<p class="rts-lead">${r.day === "yesterday" ? "어제" : "오늘"}의 기온 변화와 가장 비슷했던 과거의 날은 <b>${ymdK(b.date)}</b>입니다.</p><ol class="rts-sim">${r.top.map((x) => `<li><b>${esc(x.date)}</b> 점수 ${x.score} <small>RMSE ${x.rmse}℃${x.dMax != null ? ` · 최고 ${x.max}℃(${x.dMax > 0 ? "+" : ""}${x.dMax}) · 최저 ${x.min}℃(${x.dMin > 0 ? "+" : ""}${x.dMin}) · 강수 ${x.rain}mm${x.rainMismatch ? "(강수 여부 다름)" : ""}${x.dHm != null ? ` · 습도 ${x.dHm > 0 ? "+" : ""}${x.dHm}%` : ""}` : ""}</small></li>`).join("")}</ol>`;
+    return `<p class="rts-lead">${r.day === "yesterday" ? "어제" : "오늘"}의 기온 변화와 가장 비슷했던 과거의 날은 <b>${ymdK(b.date)}</b>입니다.</p><ol class="rts-sim">${r.top.map((x) => `<li><b>${esc(x.date)}</b> 점수 ${x.score} <small>RMSE ${x.rmse}℃${x.dMax != null ? ` · 최고 ${x.max}℃(${x.dMax > 0 ? "+" : ""}${x.dMax}) · 최저 ${x.min}℃(${x.dMin > 0 ? "+" : ""}${x.dMin})${x.rain != null ? ` · 강수 ${x.rain}mm${x.rainMismatch ? "(강수 여부 다름)" : ""}` : ""}${x.dHm != null ? ` · 습도 ${x.dHm > 0 ? "+" : ""}${x.dHm}%` : ""}` : ""}</small></li>`).join("")}</ol>`;
   }
   function simHtml(t, y) {
-    const part = (r, title) => `<div class="rts-col"><h3>${title} <span class="rt-badge ${r.partial ? "fc" : "ok"}">${esc(r.kind || "")}</span></h3>${r.stale ? `<p class="rt-ins">실황이 늦어지고 있어 최신 시각이 빠졌을 수 있습니다</p>` : ""}${simList(r)}<p class="rt-note">${esc(r.formula)}. 후보: 1990년~, 해마다 같은 월일 ±${r.window}일 ${r.considered ?? 0}일 중 자료 부족 ${r.excluded ?? 0}일 제외. ${esc(r.source || "")}</p></div>`;
+    const part = (r, title) => `<div class="rts-col"><h3>${title} <span class="rt-badge ${r.partial ? "fc" : "ok"}">${esc(r.kind || "")}</span></h3>${r.stale ? `<p class="rt-ins">실황이 늦어지고 있어 최신 시각이 빠졌을 수 있습니다</p>` : ""}${simList(r)}${r.termsNote ? `<p class="rt-ins">${esc(r.termsNote)}</p>` : ""}<p class="rt-note">${esc(r.formula)}. 후보: 1990년~, 해마다 같은 월일 ±${r.window}일 ${r.considered ?? 0}일 중 자료 부족 ${r.excluded ?? 0}일 제외. ${esc(r.source || "")}</p></div>`;
     return `<section class="card rts-simcard" aria-label="과거 유사일"><h2>과거 유사일</h2><div class="rts-2">${part(t, "오늘(진행 중)")}${part(y, "어제(하루 전체)")}</div></section>`;
   }
   async function fill() {
