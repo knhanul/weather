@@ -114,3 +114,28 @@ test("말: 과장하지 않음", () => {
   assert.equal(diffWord(2), "조금 높음");
   assert.equal(diffWord(-6), "상당히 낮음");
 });
+
+import { ytdCompare, firstHotDay, cumulativeYear } from "../rt-baseline.mjs";
+test("누적(올해 1/1~끝난 날) vs 같은 누적 기간, 1일 결측 허용·2일이면 제외, 첫 30℃ 날", () => {
+  const rows = [];
+  for (let y = 2016; y <= 2026; y++) for (let m = 1; m <= 3; m++) for (let d = 1; d <= 31; d++) {
+    const ds = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    if (Number.isNaN(Date.parse(ds)) || new Date(ds).getUTCDate() !== d) continue;
+    if (y === 2018 && m === 1 && d <= 2) continue; // 2일 빠짐 → 제외
+    if (y === 2019 && m === 1 && d === 5) continue; // 1일 빠짐 → 포함
+    rows.push({ observation_date: ds, avg_temperature: y - 2000, precipitation: 1, max_temperature: y === 2024 && m === 3 && d >= 10 ? 31 : 10 });
+  }
+  const st = buildDailyStore("1", rows);
+  assert.equal(cumulativeYear(st, 2018, "03-01", "avg").ok, false);
+  assert.equal(cumulativeYear(st, 2019, "03-01", "avg").missing, 1);
+  assert.equal(cumulativeYear(st, 2019, "03-01", "rain").value, 59); // 60일 중 1일 빠짐
+  const r = ytdCompare(st, "2026-03-01", "avg");
+  assert.equal(r.value, 26);
+  const r5 = r.periods[2]; // 2021~2025
+  assert.equal(r5.mean, 23);
+  assert.equal(r5.diff, 3);
+  assert.equal(r5.rankHigh, 1);
+  assert.deepEqual(r.periods[1].missingYears, [2018]);
+  assert.equal(firstHotDay(st, 2024, "03-31").date, "2024-03-10");
+  assert.equal(firstHotDay(st, 2024, "03-05").date, null); // 같은 날짜까지만 봄
+});

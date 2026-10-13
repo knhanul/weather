@@ -155,3 +155,68 @@ export function diffWord(d, unitHot = "높", unitCold = "낮") {
   const deg = a < 3 ? "조금 " : a < 5 ? "꽤 " : "상당히 ";
   return `${deg}${d > 0 ? unitHot : unitCold}음`;
 }
+
+// ---------------------------------------------------------------- 5단계 확장(누적·계절 시작·조건 비율)
+import { missingOk, outdoorJudge } from "./stats-engine.mjs";
+const dayVal = (store, field, dn) => {
+  const i = dn - store.base;
+  return i >= 0 && i < store.n && store.present[i] ? store[field][i] : NaN;
+};
+// 해 y 의 1/1 ~ 같은 월일(2/29 → 평년 2/28) 누적: avg = 일평균기온의 평균, rain = 일강수량 합. 결측 1일까지 허용(기존 1일 결측 규칙).
+export function cumulativeYear(store, y, md, field) {
+  const a = ymdToDn(`${y}-01-01`), b = centerDn(y, md);
+  let s = 0, n = 0, miss = 0;
+  for (let dn = a; dn <= b; dn++) {
+    const v = dayVal(store, field, dn);
+    if (Number.isFinite(v)) { s += v; n++; } else miss++;
+  }
+  const days = b - a + 1;
+  if (!missingOk(days, miss)) return { year: y, value: null, days, missing: miss, ok: false };
+  return { year: y, value: field === "rain" ? round(s, 1) : round(s / n, 2), days, missing: miss, ok: true };
+}
+// 올해 1/1 ~ asOf(끝난 마지막 날) 누적 vs 3개 기준의 같은 누적 기간
+export function ytdCompare(store, asOfYmd, field) {
+  const Y = +asOfYmd.slice(0, 4), md = asOfYmd.slice(5, 10);
+  const cur = cumulativeYear(store, Y, md, field);
+  const periods = basePeriods(asOfYmd).map((p) => {
+    const rows = [];
+    for (let y = p.from; y <= p.to; y++) rows.push(cumulativeYear(store, y, md, field));
+    const good = rows.filter((r) => r.ok);
+    const base = { id: p.id, label: p.label, range: p.range, validYears: good.length, yearsInPeriod: p.years, missingYears: rows.filter((r) => !r.ok).map((r) => r.year) };
+    if (good.length < p.minYears) return { ...base, mean: null, diff: null, status: "insufficient", statusText: "비교 데이터 부족" };
+    const mean = good.reduce((s, r) => s + r.value, 0) / good.length;
+    const higher = good.filter((r) => cur.value != null && r.value > cur.value).length;
+    return { ...base, mean: round(mean, 1), diff: cur.value == null ? null : round(cur.value - mean, 1), status: "ok", rankHigh: cur.value == null ? null : higher + 1, of: good.length + 1 };
+  });
+  return { year: Y, from: `${Y}-01-01`, to: asOfYmd, field, value: cur.value == null ? null : round(cur.value, 1), current: cur, periods };
+}
+// 그 해 처음으로 일최고기온 ≥ th 인 날(1/1 ~ 같은 월일까지만 봄 — 진행 중인 해와 공정하게)
+export function firstHotDay(store, y, untilMd, th = 30) {
+  const a = ymdToDn(`${y}-01-01`), b = centerDn(y, untilMd);
+  let miss = 0;
+  for (let dn = a; dn <= b; dn++) {
+    const v = dayVal(store, "max", dn);
+    if (!Number.isFinite(v)) { miss++; continue; }
+    if (v >= th) return { year: y, date: dnToYmd(dn), doy: dn - a + 1 };
+  }
+  return { year: y, date: null, doy: null, missing: miss };
+}
+// 같은 시기 ±7일 같은 정시에 조건(산책·러닝)을 만족한 비율 — 기준별
+export function outdoorWindow(hs, ymd, hour, cond, { periods = basePeriods(ymd), w = WINDOW_DAYS } = {}) {
+  const md = ymd.slice(5, 10);
+  return periods.map((p) => {
+    let valid = 0, okN = 0;
+    for (let y = p.from; y <= p.to; y++) {
+      const { a, b } = windowFor(y, md, p.to, w);
+      for (let dn = a; dn <= b; dn++) {
+        const i = (dn - hs.base) * 24 + hour;
+        if (i < 0 || i >= hs.n) continue;
+        const j = outdoorJudge(hs, i, cond);
+        if (j === null) continue;
+        valid++;
+        if (j) okN++;
+      }
+    }
+    return { id: p.id, label: p.label, range: p.range, samples: valid, share: valid >= MIN_SAMPLES_RANK ? round((okN / valid) * 100, 0) : null };
+  });
+}

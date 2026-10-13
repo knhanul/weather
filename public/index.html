@@ -501,7 +501,7 @@
   <link rel="stylesheet" href="/views.css?v=3" />
   <link rel="stylesheet" href="/drawer.css?v=1" />
   <link rel="stylesheet" href="/fold.css?v=1" />
-  <link rel="stylesheet" href="/rt.css?v=5" />
+  <link rel="stylesheet" href="/rt.css?v=6" />
 </head>
 <body>
   <div class="appbar" id="appbar">
@@ -571,6 +571,7 @@
         <section class="page" id="forecast" aria-label="날씨 예보"></section>
         <section class="page" id="dash">
           <div class="st-panel" id="tabOverview">
+          <div id="rtxOv"></div>
           <p class="muted dash-note" id="dashNote" hidden></p>
           <div class="card">
             <div class="chart-head">
@@ -609,6 +610,7 @@
             </div>
             <div class="card" id="qxLife"></div>
           </div>
+          <div id="rtx" aria-live="polite"></div>
         </section>
         <section class="page" id="hourly">
           <div class="card">
@@ -2805,5 +2807,6 @@
   <script src="/fold.js?v=1"></script>
   <script src="/rt.js?v=2"></script>
   <script src="/rt-forecast.js?v=4"></script>
+  <script src="/rt-ext.js?v=1"></script>
 </body>
 </html>

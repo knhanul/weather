@@ -73,3 +73,19 @@
   .rt-dlist .r1, .rt-dlist .r2 { display:flex; justify-content:space-between; gap:8px; }
   .rt-dlist .r2 span { flex:1; } .rt-dlist small { color:var(--muted); font-size:11.5px; }
 }
+/* 5단계: 기존 메뉴의 실황·예보 카드 */
+#rtx { display:grid; gap:14px; margin-top:14px; } #rtx:empty { display:none; }
+#rtxOv { margin-bottom:14px; } #rtxOv:empty { display:none; }
+.rtx-h { margin:0 0 10px; font-size:16px; } .rtx-h small { display:block; font-size:12px; font-weight:500; color:var(--muted); }
+.rtx-ov-g { display:grid; grid-template-columns:1fr 1fr; gap:12px; } .rtx-ov-i span { font-size:12.5px; color:var(--muted); } .rtx-ov-i > b { display:block; font-size:24px; font-variant-numeric:tabular-nums; }
+.rtx-links { display:flex; gap:16px; margin:8px 0 0; font-weight:600; font-size:14px; } .rtx-links a { text-decoration:none; }
+.rtx-row { border-top:1px solid var(--line); padding:8px 0; } .rtx-row > span { color:var(--muted); font-size:13px; margin-right:8px; } .rtx-row > b { font-size:18px; } .rtx-row > small { color:var(--muted); font-size:12px; }
+.rtx-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:8px; } .rtx-2 h3 { font-size:14px; margin:0 0 4px; } .rtx-2 small { font-size:11.5px; color:var(--muted); }
+.rtx-rank { margin:0; padding-left:20px; font-size:13.5px; font-variant-numeric:tabular-nums; }
+.rtx-qs { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px; }
+.rtx-q { display:block; background:var(--soft); border-radius:12px; padding:10px 12px; color:var(--fg); text-decoration:none; }
+.rtx-q h3 { margin:4px 0; font-size:14.5px; } .rtx-q p { margin:2px 0; } .rtx-a b { font-size:15px; }
+.rtx-src { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:10px; }
+.rtx-raw-ctl { display:flex; flex-wrap:wrap; gap:8px; align-items:center; } .rtx-raw-ctl input { height:32px; }
+.rtx-raw-t { max-height:60vh; overflow:auto; }
+@media (max-width:800px) { .rtx-ov-g, .rtx-2 { grid-template-columns:1fr; } #rtx { gap:10px; margin-top:10px; } #rtxOv { margin-bottom:10px; } .rtx-ov-i > b { font-size:20px; } }
