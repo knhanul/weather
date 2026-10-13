@@ -89,3 +89,5 @@
 .rtx-raw-ctl { display:flex; flex-wrap:wrap; gap:8px; align-items:center; } .rtx-raw-ctl input { height:32px; }
 .rtx-raw-t { max-height:60vh; overflow:auto; }
 @media (max-width:800px) { .rtx-ov-g, .rtx-2 { grid-template-columns:1fr; } #rtx { gap:10px; margin-top:10px; } #rtxOv { margin-bottom:10px; } .rtx-ov-i > b { font-size:20px; } }
+
+#hourly > .card[hidden], #daily > .card[hidden], .rtx-raw[hidden] { display: none !important; }

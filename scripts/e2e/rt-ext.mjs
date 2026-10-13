@@ -24,12 +24,13 @@ for (const [tag, vp, mobile] of [["mobile", { width: 390, height: 844 }, true], 
     await page.goto(`${BASE}/#/${pg}?station=108`, { waitUntil: "networkidle" });
     await page.click(`${id} [data-src="${k}"]`);
     await page.waitForSelector(`${id} .rtx-raw:not([hidden]) tbody tr, ${id} .rtx-raw:not([hidden]) .rt-ins`, { timeout: 60000 }).catch(() => {});
-    const n = await page.locator(`${id} .rtx-raw:not([hidden]) tbody tr").count();
-    const csv = await page.locator(`${id} .rtx-raw:not([hidden]) a[href*='format=csv']").count();
+    const n = await page.locator(`${id} .rtx-raw:not([hidden]) tbody tr`).count();
+    const csv = await page.locator(`${id} .rtx-raw:not([hidden]) a[href*='format=csv']`).count();
     const ovf = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     ok(n > 0 && csv === 1 && ovf <= 1, `${tag} ${pg}: ${k} 원자료 ${n}행, CSV 링크, 넘침 ${ovf}`);
     await page.screenshot({ path: `${SH}/rt-ext-${pg}-${tag}.png` });
     await page.click(`${id} [data-src="asos"]`);
+    await page.waitForTimeout(300);
     ok(await page.locator(`${id} .rtx-raw`).isHidden(), `${tag} ${pg}: ASOS 탭 복귀 시 기존 화면`);
   }
   ok(!errs.length, `${tag}: 콘솔 오류 없음 ${errs.join("|").slice(0, 200)}`);
