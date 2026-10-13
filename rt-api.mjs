@@ -34,6 +34,7 @@ export function freshness(baseWall, nowMs, limitMin) {
 
 export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json, now = () => Date.now() }) {
   const cache = createBaselineCache();
+  const todayCache = new Map();
   async function stationParam(url) {
     const id = String(url.searchParams.get("station") || "108").trim();
     const st = (await stations()).find((s) => String(s.station_id) === id);
@@ -191,7 +192,16 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     if (!url.pathname.startsWith("/api/rt/")) return false;
     if (req.method !== "GET") return json(res, { ok: false, message: "GET 만 됩니다" }, 405), true;
     try {
-      if (url.pathname === "/api/rt/today") return json(res, await today(url)), true;
+      if (url.pathname === "/api/rt/today") {
+        // 같은 지점은 60초 동안 같은 답(실황·예보는 길어야 30분마다 바뀜). 키 = 지점|시간·일 통계 자료판
+        const key = `${url.searchParams.get("station") || "108"}|${statsHourly.version()}|${statsData.version()}`;
+        const c = todayCache.get(key);
+        if (c && now() - c.at < 60000) return json(res, c.data), true;
+        const data = await today(url);
+        todayCache.set(key, { at: now(), data });
+        if (todayCache.size > 50) todayCache.delete(todayCache.keys().next().value);
+        return json(res, data), true;
+      }
       if (url.pathname === "/api/rt/baseline") return json(res, await baseline(url)), true;
       return json(res, { ok: false, message: "없는 주소" }, 404), true;
     } catch (e) {
