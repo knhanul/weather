@@ -1,0 +1,157 @@
+// 과거 3개 기준 평균(1990년 이후·최근 10년·최근 5년) 공통 엔진 — 실시간·예보 분석 전용 새 모듈(기존 통계 계산은 바꾸지 않음).
+// 기준 연도 = 비교 대상 날짜의 연도(Y). 세 기준 모두 Y-1 년까지의 '끝난 해'만 쓴다(그 해·미래 자료가 섞이지 않음):
+//   all = 자료 첫해(HOURLY_FROM, 1990)~Y-1, r10 = Y-10~Y-1, r5 = Y-5~Y-1. 연도는 날짜에서 계산(소스에 고정 연도 없음).
+// 같은 시기: 각 해의 같은 월일(2/29 는 평년에 2/28)을 가운데로 ±7일(15일). 창이 연말·연초를 넘으면 앞뒤 해 날짜도 그 해 몫으로 쓰되,
+//   기준 끝(Y-1 년 12/31) 뒤의 날짜는 잘라 낸다.
+// 연도별 가중: 해마다 그 해 창 안의 유효값 평균을 먼저 내고(해마다 같은 무게), 기준 평균 = 유효한 해 평균들의 산술평균.
+//   유효한 해 = 창 안 유효값이 기대 개수의 절반 이상. 유효한 해가 기준 연도 수의 80% 미만이면 '비교 데이터 부족'(평균을 내지 않음).
+// 결측: 시간자료 NaN(행 없음·품질 9)은 빼고, 0 은 값(무강수 0)으로 쓴다. 강수확률은 이 엔진에 넣지 않는다.
+// 분포(백분위·순위·최고·최저): 유효한 해들의 창 안 값 전체(표본). 표본 60개 미만이면 백분위·순위를 내지 않는다.
+import { ymdToDn, dnToYmd, isLeap, hval, HOURLY_FROM, round } from "./stats-engine.mjs";
+
+export const BASES = [
+  { id: "all", kind: "all" },
+  { id: "r10", short: "최근 10년", years: 10 },
+  { id: "r5", short: "최근 5년", years: 5 },
+];
+export const WINDOW_DAYS = 7;
+export const MIN_YEAR_SHARE = 0.8;
+export const MIN_IN_YEAR_SHARE = 0.5;
+export const MIN_SAMPLES_RANK = 60;
+export const DATA_FROM_YEAR = +HOURLY_FROM.slice(0, 4);
+
+const KST_MS = 9 * 3600000;
+const pad = (n) => String(n).padStart(2, "0");
+// 지금(또는 ms) 의 한국 시각
+export function kst(ms = Date.now()) {
+  const d = new Date(ms + KST_MS);
+  const ymd = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+  return { ymd, year: d.getUTCFullYear(), hour: d.getUTCHours(), minute: d.getUTCMinutes(), text: `${ymd} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}` };
+}
+
+// 비교 날짜(YYYY-MM-DD) → 세 기준기간. 이름은 자료 첫해에서 만든다(1990년 이후).
+export function basePeriods(refYmd, { dataFrom = DATA_FROM_YEAR } = {}) {
+  const Y = +String(refYmd).slice(0, 4);
+  const to = Y - 1;
+  return BASES.map((b) => {
+    const from = b.kind === "all" ? dataFrom : Math.max(dataFrom, Y - b.years);
+    const n = Math.max(0, to - from + 1);
+    const label = b.kind === "all" ? `${dataFrom}년 이후 평균` : `${b.short} 평균`;
+    return { id: b.id, label, from, to, years: n, minYears: Math.max(1, Math.ceil(n * MIN_YEAR_SHARE)), range: `${from}~${to}` };
+  });
+}
+
+// 해 y 에서 월일 md 의 가운데 날(2/29 → 평년 2/28)
+export function centerDn(y, md) {
+  const d = md === "02-29" && !isLeap(y) ? "02-28" : md;
+  return ymdToDn(`${y}-${d}`);
+}
+// 해 y 의 창 [a, b] (기준 끝 날 넘지 않게)
+export function windowFor(y, md, toYear, w = WINDOW_DAYS) {
+  const c = centerDn(y, md);
+  return { a: c - w, b: Math.min(c + w, ymdToDn(`${toYear}-12-31`)) };
+}
+
+// 공통: getVal(dn) → 수 또는 NaN. 기준기간 하나의 연도별 평균·표본.
+function collect(period, md, getVal, expectedPerDay, w) {
+  const years = [];
+  const samples = [];
+  for (let y = period.from; y <= period.to; y++) {
+    const { a, b } = windowFor(y, md, period.to, w);
+    let s = 0, n = 0;
+    const vals = [];
+    for (let dn = a; dn <= b; dn++) {
+      for (const v of getVal(dn)) if (Number.isFinite(v)) { s += v; n++; vals.push({ v, dn }); }
+    }
+    const expected = (b - a + 1) * expectedPerDay;
+    const ok = n > 0 && n >= expected * MIN_IN_YEAR_SHARE;
+    years.push({ year: y, n, expected, mean: n ? s / n : null, ok });
+    if (ok) for (const x of vals) samples.push(x);
+  }
+  return { years, samples };
+}
+
+function summarize(period, { years, samples }, value, digits) {
+  const good = years.filter((y) => y.ok);
+  const out = {
+    id: period.id, label: period.label, from: period.from, to: period.to, yearsInPeriod: period.years,
+    validYears: good.length, samples: samples.length, missingYears: years.filter((y) => !y.ok).map((y) => y.year),
+    weighting: "연도별 평균의 산술평균(해마다 같은 무게)",
+  };
+  if (period.years === 0 || good.length < period.minYears) return { ...out, status: "insufficient", statusText: "비교 데이터 부족", mean: null, diff: null };
+  const mean = good.reduce((s, y) => s + y.mean, 0) / good.length;
+  out.status = good.length === period.years ? "ok" : "partial";
+  out.statusText = out.status === "ok" ? "" : `${period.years - good.length}개 해 자료 부족 — 나머지 ${good.length}개 해로 계산`;
+  out.mean = round(mean, digits);
+  out.diff = Number.isFinite(value) ? round(value - mean, digits) : null;
+  let mx = null, mn = null;
+  for (const x of samples) {
+    if (!mx || x.v > mx.v) mx = x;
+    if (!mn || x.v < mn.v) mn = x;
+  }
+  out.max = mx ? { value: round(mx.v, digits), date: dnToYmd(mx.dn) } : null;
+  out.min = mn ? { value: round(mn.v, digits), date: dnToYmd(mn.dn) } : null;
+  if (Number.isFinite(value) && samples.length >= MIN_SAMPLES_RANK) {
+    let lt = 0, eq = 0, gt = 0;
+    for (const x of samples) x.v < value ? lt++ : x.v > value ? gt++ : eq++;
+    out.percentile = round(((lt + eq / 2) / samples.length) * 100, 1);
+    out.rankHigh = gt + 1; // 높은 쪽에서 몇 번째(같은 값 다음)
+    out.rankLow = lt + 1;
+    const sorted = samples.map((x) => x.v).sort((p, q) => p - q);
+    const q = (p) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(p * (sorted.length - 1))))];
+    out.p10 = round(q(0.1), digits);
+    out.p90 = round(q(0.9), digits);
+    out.outside = value > out.p90 ? round(value - out.p90, digits) : value < out.p10 ? round(value - out.p10, digits) : 0; // 평년 범위(10~90%) 밖으로 나간 정도
+    out.newHigh = value > mx.v; // 관측값이면 '같은 시기 표본 최고보다 높음', 예보값이면 확정하지 않음(호출 쪽에서 표시)
+    out.newLow = value < mn.v;
+  } else out.rankNote = "표본 부족 — 순위·백분위 표시 안 함";
+  return out;
+}
+
+export const HOURLY_FIELDS = { ta: { label: "기온", unit: "℃", digits: 1 }, hm: { label: "습도", unit: "%", digits: 0 }, rn: { label: "1시간 강수량", unit: "mm", digits: 1 }, ws: { label: "풍속", unit: "m/s", digits: 1 } };
+// 시간자료(ASOS) — 같은 시기(±7일) 같은 시각 hour 의 값
+export function hourlyCompare(hs, ymd, hour, field, value = NaN, { periods = basePeriods(ymd), w = WINDOW_DAYS } = {}) {
+  const md = ymd.slice(5, 10);
+  const arr = hs[field];
+  const get = (dn) => {
+    const i = (dn - hs.base) * 24 + hour;
+    return i >= 0 && i < hs.n && hs.src[i] ? [hval(arr, i)] : [NaN];
+  };
+  const digits = HOURLY_FIELDS[field]?.digits ?? 1;
+  return periods.map((p) => summarize(p, collect(p, md, get, 1, w), value, digits));
+}
+
+// 공식 일자료 — 같은 시기(±7일) 일 값(max·min·avg·rain). 일 강수 공란 = 무강수 0(기존 규칙), 행 없음 = 결측.
+export const DAILY_FIELDS = { max: "최고기온", min: "최저기온", avg: "평균기온", rain: "일강수량" };
+export function dailyCompare(store, ymd, field, value = NaN, { periods = basePeriods(ymd), w = WINDOW_DAYS } = {}) {
+  const md = ymd.slice(5, 10);
+  const get = (dn) => {
+    const i = dn - store.base;
+    return [i >= 0 && i < store.n && store.present[i] ? store[field][i] : NaN];
+  };
+  return periods.map((p) => summarize(p, collect(p, md, get, 1, w), value, 1));
+}
+
+// 메모 캐시: 키 = 지점|자료|지표|월일|시각|기준기간|자료 판
+export function createBaselineCache(max = 4000) {
+  const m = new Map();
+  return {
+    get(key, fn) {
+      if (m.has(key)) return m.get(key);
+      const v = fn();
+      if (m.size >= max) m.delete(m.keys().next().value);
+      m.set(key, v);
+      return v;
+    },
+    size: () => m.size,
+  };
+}
+
+// 차이 → 말(과장하지 않음): |차| < 1 비슷, < 3 조금, < 5 꽤, 그 이상 상당히
+export function diffWord(d, unitHot = "높", unitCold = "낮") {
+  if (!Number.isFinite(d)) return null;
+  const a = Math.abs(d);
+  if (a < 1) return "비슷";
+  const deg = a < 3 ? "조금 " : a < 5 ? "꽤 " : "상당히 ";
+  return `${deg}${d > 0 ? unitHot : unitCold}음`;
+}
