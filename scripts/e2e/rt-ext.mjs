@@ -15,9 +15,9 @@ for (const [tag, vp, mobile] of [["mobile", { width: 390, height: 844 }, true], 
   for (const [tab, sel, re] of TABS) {
     await page.goto(`${BASE}/#/stats/${tab}?station=108`, { waitUntil: "networkidle" });
     await page.waitForFunction(([s, r]) => { const e = document.querySelector(s); return e && new RegExp(r).test(e.textContent) && !/불러오는 중/.test(e.textContent); }, [sel, re.source], { timeout: 60000 }).catch(() => {});
-    const t = await page.evaluate((s) => ({ txt: document.querySelector(s)?.textContent || "", ovf: document.documentElement.scrollWidth - innerWidth }), sel);
+    const t = await page.evaluate((s) => ({ txt: document.querySelector(s)?.textContent || "", ovf: Math.max(document.documentElement.scrollWidth, innerWidth) - document.documentElement.clientWidth + (innerWidth - document.documentElement.clientWidth > 1 ? 1000 : 0), wide: [...document.querySelectorAll(".rtx-card")].filter((c) => c.getBoundingClientRect().right > document.documentElement.clientWidth + 1).length }), sel);
     ok(re.test(t.txt) && !/오류|NaN|undefined/.test(t.txt), `${tag} ${tab}: 실황·예보 카드 (${t.txt.slice(0, 40).trim()})`);
-    ok(t.ovf <= 1, `${tag} ${tab}: 가로 넘침 없음 (${t.ovf})`);
+    ok(t.ovf <= 1 && !t.wide, `${tag} ${tab}: 가로 넘침 없음 (${t.ovf}, 넓은 카드 ${t.wide})`);
     await page.screenshot({ path: `${SH}/rt-ext-${tab}-${tag}-full.png`, fullPage: true });
   }
   for (const [pg, k, id] of [["hourly-weather", "KMA_ULTRA_NCST", "#hourly"], ["daily-weather", "KMA_MID_TA", "#daily"]]) {
