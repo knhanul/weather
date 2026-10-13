@@ -19,8 +19,8 @@ import { createStatsData } from "./stats-data.mjs";
 import { createStatsApi } from "./stats-api.mjs";
 import { createRtApi } from "./rt-api.mjs";
 import { createStatsHourly } from "./stats-hourly.mjs";
-import { collectForecast, FORECAST_KINDS } from "./kma-forecast.mjs";
-import { collectMid, MID_KINDS } from "./kma-mid.mjs";
+import { collectForecast, FORECAST_KINDS, releaseTimes } from "./kma-forecast.mjs";
+import { collectMid, MID_KINDS, midReleaseTimes } from "./kma-mid.mjs";
 import { forecastStatus } from "./rt-admin.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1122,6 +1122,43 @@ function machineCollectError(req, body) {
 
 // 기상청 단기예보(단기예보·초단기예보·초단기실황) 적재. 최근 hours 시간 안의 발표 중 아직 다 받지 않은 것을 지점 격자마다 받는다
 // (기상청은 실황을 최근 1일만 제공 → 매번 지난 24시간을 다시 훑어 짧은 장애는 저절로 메워진다). 실행 1번 = collect_jobs 1행.
+// 자동 보충: 기상청이 최신 단기·중기 발표를 늦게(또는 격자마다 들쭉날쭉하게) 내주면 정시 수집에서 '아직 없음'으로 넘어가고
+// 다음 발표 수집(단기 3시간·중기 12시간 뒤)까지 빈다. 매시 실황 정기 수집 뒤에 '아직 못 받은 발표'가 있을 때만 그 발표만 다시 요청한다.
+// (기상청 호출 = 빠진 격자·구역 × 발표 수만큼, 없으면 0. 작업 기록은 실제로 시도했을 때만, trigger=CATCHUP)
+async function missingCount(dataset) {
+  const store = db.forecastStore();
+  const now = Date.now();
+  if (MID_KINDS[dataset]) {
+    const col = MID_KINDS[dataset].regionCol;
+    const regions = [...new Set((await store.midRegions()).map((r) => r[col]).filter(Boolean))];
+    const bases = midReleaseTimes(now, 24);
+    if (!bases.length) return 0;
+    const done = await store.completedMid(dataset, bases[0]);
+    return bases.reduce((n, b) => n + regions.filter((r) => !done.has(`${r}|${b}`)).length, 0);
+  }
+  const grids = [...new Map((await store.grids()).map((g) => [`${Number(g.nx)}|${Number(g.ny)}`, g])).keys()];
+  const bases = releaseTimes(dataset, now, 24);
+  if (!bases.length) return 0;
+  const done = await store.completedReleases(dataset, bases[0]);
+  return bases.reduce((n, b) => n + grids.filter((g) => !done.has(`${g}|${b}`)).length, 0);
+}
+let catchUpRunning = false;
+async function catchUpForecasts() {
+  if (catchUpRunning || !db.forecastReady()) return;
+  catchUpRunning = true;
+  try {
+    for (const dataset of ["KMA_VILAGE_FCST", "KMA_MID_TA", "KMA_MID_LAND", "KMA_MID_FCST"]) {
+      const n = await missingCount(dataset);
+      if (!n) continue;
+      const job = await collectForecastJob({ dataset, hours: 24, trigger: "CATCHUP" });
+      console.error(`forecast catch-up ${dataset} missing=${n} ${job.status} ${job.message}`);
+    }
+  } catch (e) {
+    console.error(`forecast catch-up error ${e instanceof Error ? e.message : e}`);
+  } finally {
+    catchUpRunning = false;
+  }
+}
 async function collectForecastJob({ dataset, hours = 24, trigger = "MANUAL" }) {
   const key = await getKey();
   const job = { id: Date.now(), dataset, status: "RUNNING", trigger, station_id: null, from: null, to: null, received: 0, inserted: 0, updated: 0, chunks: 0, message: "" };
@@ -1384,9 +1421,9 @@ const server = http.createServer(async (req, res) => {
       const nowMs = Date.now();
       const store = db.forecastStore();
       const fromWall = new Date(nowMs - (hours + 13) * 3600000 + 9 * 3600000).toISOString().slice(0, 19).replace("T", " ");
-      const [grids, regions, releases] = await Promise.all([store.grids(), store.midRegions(), db.rtStore().releasesSince(fromWall)]);
+      const [grids, regions, releases, firstBase] = await Promise.all([store.grids(), store.midRegions(), db.rtStore().releasesSince(fromWall), db.rtStore().firstReleases()]);
       const uniq = [...new Map(grids.map((g) => [`${Number(g.nx)}|${Number(g.ny)}`, { nx: Number(g.nx), ny: Number(g.ny) }])).values()];
-      return json(res, forecastStatus({ nowMs, hours, grids: uniq, regions, releases }));
+      return json(res, forecastStatus({ nowMs, hours, grids: uniq, regions, releases, firstBase }));
     }
     if (req.method === "GET" && url.pathname === "/api/jobs") {
       return json(res, await listJobs());
@@ -1419,7 +1456,9 @@ const server = http.createServer(async (req, res) => {
       const hours = body.hours == null ? (MID_KINDS[dataset] ? 36 : 24) : Number(body.hours);
       if (!Number.isInteger(hours) || hours < 1 || hours > 72) return json(res, { ok: false, message: "hours 는 1~72" }, 400);
       const job = await collectForecastJob({ dataset, hours, trigger: req._collectToken ? "SCHEDULED" : "MANUAL" });
-      return json(res, job, job.status === "FAILED" ? 400 : 200);
+      json(res, job, job.status === "FAILED" ? 400 : 200);
+      if (req._collectToken && dataset === "KMA_ULTRA_NCST") setTimeout(() => catchUpForecasts(), 2000); // 응답 뒤(n8n 을 붙잡지 않음)
+      return;
     }
     if (req.method === "POST" && url.pathname === "/api/collect") {
       const body = await readBody(req);

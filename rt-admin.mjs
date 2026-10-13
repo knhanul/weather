@@ -17,14 +17,17 @@ function nextRelease(ds, nowMs) {
   const lastAvail = avail[avail.length - 1] || "";
   return list.find((b) => b > lastAvail) || null;
 }
-export function forecastStatus({ nowMs, hours = 48, grids, regions, releases }) {
+export function forecastStatus({ nowMs, hours = 48, grids, regions, releases, firstBase = {} }) {
   const out = [];
   const have = new Map();
   for (const r of releases.short) have.set(`${r.dataset}|${r.nx},${r.ny}|${r.base}`, r);
   for (const r of releases.mid) have.set(`${r.dataset}|${r.region}|${r.base}`, r);
   const targetsOf = (ds) => (FORECAST_KINDS[ds] ? grids.map((g) => `${g.nx},${g.ny}`) : [...new Set(regions.map((r) => r[MID_KINDS[ds].regionCol]).filter(Boolean))]);
   for (const ds of [...Object.keys(FORECAST_KINDS), ...Object.keys(MID_KINDS)]) {
-    const bases = FORECAST_KINDS[ds] ? releaseTimes(ds, nowMs, hours) : midReleaseTimes(nowMs, hours);
+    const all = FORECAST_KINDS[ds] ? releaseTimes(ds, nowMs, hours) : midReleaseTimes(nowMs, hours);
+    // 수집 시작(그 데이터셋 첫 발표) 전 발표는 기대에서 뺀다 — 처음부터 받을 수 없던 것이지 빠진 것이 아님
+    const floor = firstBase[ds] || null;
+    const bases = floor ? all.filter((b) => b >= floor) : all;
     const targets = targetsOf(ds);
     const missing = [];
     let got = 0, latest = null, latestAt = null;
@@ -42,7 +45,8 @@ export function forecastStatus({ nowMs, hours = 48, grids, regions, releases }) 
       latestBase: latest, latestCollectedAt: latestAt ? wallOf(Date.parse(latestAt)) : null,
       ageMin, stale: ageMin == null || ageMin > STALE_AFTER_MIN[ds],
       nextRelease: nextRelease(ds, nowMs),
+      collectingSince: floor, beforeStart: all.length - bases.length,
     });
   }
-  return { ok: true, now: wallOf(nowMs), hours, providerWindowH: PROVIDER_WINDOW_H, datasets: out, rule: `기대 발표 = 수집기와 같은 발표 규칙(조회 가능 지연 포함) × 사용 중 지점의 격자/구역. 지금 시각 기준 아직 조회할 수 없는 발표는 '미적재'가 아니라 '다음 발표'로 표시. 기상청은 최근 ${PROVIDER_WINDOW_H}시간 발표만 다시 주므로 그보다 오래된 미적재는 다시 받을 수 없음.` };
+  return { ok: true, now: wallOf(nowMs), hours, providerWindowH: PROVIDER_WINDOW_H, datasets: out, rule: `기대 발표 = 수집기와 같은 발표 규칙(조회 가능 지연 포함) × 사용 중 지점의 격자/구역. 수집 시작(데이터셋 첫 발표) 전 발표는 세지 않음. 지금 시각 기준 아직 조회할 수 없는 발표는 '미적재'가 아니라 '다음 발표'로 표시. 기상청은 최근 ${PROVIDER_WINDOW_H}시간 발표만 다시 주므로 그보다 오래된 미적재는 다시 받을 수 없음.` };
 }

@@ -1123,6 +1123,12 @@ export async function rtReleasesSince(fromWall) {
     mid: b.map((x) => ({ dataset: x.dataset, region: x.region_id, base: wall19(x.tm_fc), rows: x.row_count, collectedAt: utcIso(x.collected_at) })),
   };
 }
+// 데이터셋별 첫 발표(수집 시작) — 관리 현황에서 수집 시작 전 발표를 '미적재'로 세지 않으려고
+export async function rtFirstReleases() {
+  const a = await q("SELECT dataset, MIN(base_datetime) AS b FROM kma_fcst_releases GROUP BY dataset");
+  const b = await q("SELECT dataset, MIN(tm_fc) AS b FROM kma_mid_releases GROUP BY dataset");
+  return Object.fromEntries([...a, ...b].map((x) => [x.dataset, wall19(x.b)]));
+}
 // 원자료 조회(실황·예보): 그 날(KST) 하루, 격자
 export async function rtRaw(dataset, nx, ny, ymd) {
   const from = `${ymd} 00:00:00`;
