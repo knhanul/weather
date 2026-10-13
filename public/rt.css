@@ -56,7 +56,7 @@
 #forecast.on { display:grid; gap:14px; }
 #forecast h2 { margin:0 0 10px; font-size:16px; }
 .rt-week { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-top:10px; }
-.rt-wd { display:flex; flex-direction:column; align-items:center; background:var(--soft); border-radius:8px; padding:6px 2px; font-size:12.5px; font-variant-numeric:tabular-nums; }
+.rt-wd { min-width:0; display:flex; flex-direction:column; align-items:center; background:var(--soft); border-radius:8px; padding:6px 2px; font-size:12.5px; font-variant-numeric:tabular-nums; }
 .rt-wd.today { outline:2px solid var(--pri); }
 .rt-wd small { font-size:10.5px; } .src-obs { color:var(--ok); } .src-fc { color:var(--pri-dark); }
 .rt-tbl tr.today { background:#f3f8ff; }

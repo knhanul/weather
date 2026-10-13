@@ -64,7 +64,7 @@
       const word = main.diff == null ? "비교 데이터 부족" : Math.abs(main.diff) < 1 ? "예년과 비슷할 전망" : main.diff > 0 ? "예년보다 더울 전망" : "예년보다 추울 전망";
       h += `<section class="card rt-now"><p class="rt-time">이번 주 ${esc(dlab(w.from))}~${esc(dlab(w.to))} · ${esc(d.station.name)}</p><p class="rt-temp" style="font-size:28px">${esc(word)}</p>
         <div class="rt-cmp">${w.anomaly.filter((a) => ids.includes(a.id)).map((a) => `<div class="rt-cmp-i"><span>${esc(a.label)}<small>${esc(a.range)}</small></span><b class="${cls(a.diff)}">${a.diff == null ? `<em class="rt-ins">비교 데이터 부족</em>` : sg(a.diff)}</b><i></i></div>`).join("")}</div>
-        <div class="rt-week">${w.days.map((x) => `<div class="rt-wd ${x.date === d.date ? "today" : ""}"><b>${esc(dlab(x.date))}</b><span>${x.max ?? "–"} / ${x.min ?? "–"}</span><small class="src-${x.source === "관측" ? "obs" : "fc"}">${esc(x.source || "자료 없음")}</small></div>`).join("")}</div>
+        <div class="rt-week">${w.days.map((x) => `<div class="rt-wd ${x.date === d.date ? "today" : ""}"><b>${+x.date.slice(8, 10)}(${DOW[new Date(`${x.date}T00:00:00Z`).getUTCDay()]})</b><span>${x.max ?? "–"}</span><span>${x.min ?? "–"}</span><small class="src-${x.source === "관측" ? "obs" : "fc"}">${esc(x.source === "관측" ? "관측" : x.source ? (x.source.startsWith("중기") ? "중기" : "예보") : "없음")}</small></div>`).join("")}</div>
         <p class="rt-note">${esc(w.note)}. 각 날짜의 같은 시기(±7일) 공식 일자료 최고·최저기온 평균과 비교.</p></section>`;
     }
     // 2) 주간 예보
