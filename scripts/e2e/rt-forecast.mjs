@@ -14,7 +14,7 @@ for (const [tag, vp, mobile] of [["mobile", { width: 390, height: 844 }, true], 
   await page.goto(`${BASE}/#/forecast?station=108`, { waitUntil: "networkidle" });
   await page.waitForSelector("#fcOut .rt-week, #fcOut .result.bad", { timeout: 60000 });
   const s = await page.evaluate(() => ({
-    wk: document.querySelectorAll(".rt-wd").length, rows: document.querySelectorAll("#fcOut .rt-tbl tbody tr").length, mid: /중기예보/.test(document.getElementById("fcOut").textContent),
+    wk: document.querySelectorAll(".rt-wd").length, rows: document.querySelectorAll("#fcOut .rt-tbl tbody tr").length + document.querySelectorAll("#fcOut .rt-dlist li").length, mid: /중기예보/.test(document.getElementById("fcOut").textContent),
     svg: !!document.querySelector(".rt-svg-h path[stroke-dasharray]"), ovf: document.documentElement.scrollWidth - innerWidth, top: document.querySelector("#fcOut .card").getBoundingClientRect().top / innerHeight,
     title: document.getElementById("phTitle").textContent, cmp: document.querySelectorAll("#fcOut .rt-cmp-i").length,
   }));

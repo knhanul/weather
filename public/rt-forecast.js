@@ -68,12 +68,12 @@
         <p class="rt-note">${esc(w.note)}. 각 날짜의 같은 시기(±7일) 공식 일자료 최고·최저기온 평균과 비교.</p></section>`;
     }
     // 2) 주간 예보
-    h += `<section class="card"><h2>주간 예보와 과거 평균</h2><div class="tbl-wrap"><table class="rt-tbl"><thead><tr><th>날짜</th><th>날씨</th><th>강수확률</th><th>예상 강수량</th><th>최고</th><th>최저</th><th>출처·발표</th></tr></thead><tbody>${d.days.map((x) => {
+    h += `<section class="card"><h2>주간 예보와 과거 평균</h2><div class="tbl-wrap rt-desk"><table class="rt-tbl"><thead><tr><th>날짜</th><th>날씨</th><th>강수확률</th><th>예상 강수량</th><th>최고</th><th>최저</th><th>출처·발표</th></tr></thead><tbody>${d.days.map((x) => {
       if (x.none) return `<tr><th scope="row">${esc(dlab(x.date))}</th><td colspan="6" class="rt-ins">예보 없음</td></tr>`;
       const cell = (v, cmp) => `${v == null ? "–" : `<b>${v}℃</b>`}${ids.map((id) => { const c = cmp[pi(id)]; return `<br><small>${esc(c.label.replace(" 평균", ""))} ${c.mean == null ? "부족" : `${c.mean}℃${v == null ? "" : ` <span class="${cls(c.diff)}">${sg(c.diff)}</span>`}`}</small>`; }).join("")}`;
       const rain = x.rain ? (x.rain.rainHours ? `${x.rain.mm ? `${x.rain.mm}mm` : ""}${x.rain.rangeHours ? `${x.rain.mm ? " + " : ""}1mm 미만 ${x.rain.rangeHours}시간` : ""}` : "강수 없음") : "–";
       return `<tr${x.offset === 0 ? ' class="today"' : ""}><th scope="row">${esc(dlab(x.date))}${x.offset === 0 ? " 오늘" : ""}</th><td>${esc(x.wf || x.sky || "–")}</td><td>${x.pop == null ? "–" : `${x.pop}%`}</td><td>${esc(rain)}</td><td>${cell(x.max, x.maxCmp)}${x.nearRecord ? `<br><small class="up">같은 시기 과거 최고 ${x.nearRecord.record.value}℃(${esc(x.nearRecord.record.date)})에 근접 — 예상</small>` : ""}</td><td>${cell(x.min, x.minCmp)}</td><td><small>${esc(x.maxSource || x.minSource || x.wxSource || "")} ${esc(hm(x.maxBase || x.minBase || x.wxBase))}</small></td></tr>`;
-    }).join("")}</tbody></table></div><p class="rt-note">단기예보가 있는 날은 단기예보, 그 뒤(대략 4일 이후)는 중기예보. 강수확률은 하루 중 가장 큰 값이며 더하지 않습니다. 예상 강수량은 숫자로 나온 시간만 더하고 '1mm 미만'은 시간 수로 따로 적습니다.</p></section>`;
+    }).join("")}</tbody></table></div>${mobileDays(d, ids, pi)}<p class="rt-note">단기예보가 있는 날은 단기예보, 그 뒤(대략 4일 이후)는 중기예보. 강수확률은 하루 중 가장 큰 값이며 더하지 않습니다. 예상 강수량은 숫자로 나온 시간만 더하고 '1mm 미만'은 시간 수로 따로 적습니다.</p></section>`;
     // 3) 시간별
     h += hourlyCard(d, ids);
     // 4) 예보 변화
@@ -83,6 +83,14 @@
   }
   // 값이 바뀐 발표만(첫 발표 + 바뀐 회차), 최근 6개
   const changesOnly = (a) => a.filter((x, i) => i === 0 || x.value !== a[i - 1].value || x.source !== a[i - 1].source);
+  // 좁은 화면: 날짜마다 한 줄 카드(표 가로 스크롤 대신)
+  function mobileDays(d, ids, pi) {
+    return `<ul class="rt-dlist">${d.days.map((x) => {
+      if (x.none) return `<li><b>${esc(dlab(x.date))}</b> <span class="rt-ins">예보 없음</span></li>`;
+      const df = (cmp) => ids.map((id) => { const c = cmp[pi(id)]; return c.diff == null ? "" : `<span class="${cls(c.diff)}">${sg(c.diff)}</span>`; }).join(" ");
+      return `<li${x.offset === 0 ? ' class="today"' : ""}><div class="r1"><b>${esc(dlab(x.date))}</b><span>${esc(x.wf || x.sky || "")}${x.pop != null ? ` · ${x.pop}%` : ""}</span></div><div class="r2"><span>최고 <b>${x.max ?? "–"}</b> ${x.max != null ? df(x.maxCmp) : ""}</span><span>최저 <b>${x.min ?? "–"}</b> ${x.min != null ? df(x.minCmp) : ""}</span></div><small>${esc(x.maxSource || x.minSource || x.wxSource || "")} ${esc(hm(x.maxBase || x.minBase || x.wxBase))}${x.nearRecord ? ` · <span class="up">과거 최고 ${x.nearRecord.record.value}℃ 근접(예상)</span>` : ""}</small></li>`;
+    }).join("")}</ul><p class="rt-note rt-mob">차이는 ${ids.map((id) => esc(d.periods[pi(id)].label.replace(" 평균", ""))).join(" · ")} 평균 대비(℃).</p>`;
+  }
   const seqTxt = (a0) => { const a = changesOnly(a0); return a.length ? a.slice(-6).map((x, i, arr) => `<span title="${esc(x.source)}">${esc(hm(x.base))} <b${i && x.value !== arr[i - 1].value ? ` class="${cls(x.value - arr[i - 1].value)}"` : ""}>${x.value}</b>${x.source === "중기예보" ? "<sup>중기</sup>" : ""}</span>`).join(" → ") + (a0.length > a.length ? ` <small>(발표 ${a0.length}회 중 값이 바뀐 회차만)</small>` : "") : "–"; };
   function hourlyCard(d, ids) {
     const hrs = d.hours.slice(0, 72);

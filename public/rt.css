@@ -63,3 +63,13 @@
 .rt-hscroll { overflow-x:auto; } .rt-svg-h { display:block; height:auto; max-width:none; }
 .rt-hdet summary { cursor:pointer; font-weight:600; margin:8px 0; }
 @media (max-width:800px) { #forecast.on { gap:10px; } .rt-week { gap:2px; } .rt-wd { font-size:11.5px; } }
+.rt-dlist, .rt-mob { display:none; }
+@media (max-width:800px) {
+  .rt-desk { display:none; }
+  .rt-dlist { display:block; list-style:none; margin:0; padding:0; }
+  .rt-mob { display:block; }
+  .rt-dlist li { border-bottom:1px solid var(--line); padding:7px 0; font-size:13.5px; font-variant-numeric:tabular-nums; }
+  .rt-dlist li.today { background:#f3f8ff; }
+  .rt-dlist .r1, .rt-dlist .r2 { display:flex; justify-content:space-between; gap:8px; }
+  .rt-dlist .r2 span { flex:1; } .rt-dlist small { color:var(--muted); font-size:11.5px; }
+}
