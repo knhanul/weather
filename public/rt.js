@@ -1,0 +1,195 @@
+// 오늘의 날씨(#/today) — /api/rt/today. 과거 3개 기준(1990년 이후·최근 10년·최근 5년) 선택은 NWBasis(공통, 주소 ?basis= + localStorage nw.basis).
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const sg = (d, u = "℃") => (d == null ? "–" : `${d > 0 ? "+" : d < 0 ? "−" : "±"}${Math.abs(d)}${u}`);
+  const v1 = (v, u = "℃") => (v == null ? "–" : `${v}${u}`);
+  const COLORS = { obs: "#0d1b3d", fcst: "#026ef8", all: "#8a4b00", r10: "#0e7a3e", r5: "#c0262d" };
+  // ---------------------------------------------------------------- 공통: 기준 선택
+  const BASIS = [["cmp", "전체 비교"], ["all", "1990년 이후"], ["r10", "최근 10년"], ["r5", "최근 5년"]];
+  const NWBasis = {
+    get() {
+      const u = new URLSearchParams(location.hash.split("?")[1] || "").get("basis");
+      if (BASIS.some((b) => b[0] === u)) return u;
+      try { const s = localStorage.getItem("nw.basis"); if (BASIS.some((b) => b[0] === s)) return s; } catch { /* */ }
+      return "cmp";
+    },
+    set(v) { try { localStorage.setItem("nw.basis", v); } catch { /* */ } },
+    html(cur, labels) {
+      return `<div class="seg rt-basis" role="radiogroup" aria-label="비교 기준">${BASIS.map(([id, l]) => `<button type="button" role="radio" aria-checked="${id === cur}" class="${id === cur ? "on" : ""}" data-basis="${id}">${esc(labels?.[id] || l)}</button>`).join("")}</div>`;
+    },
+    ids: (cur) => (cur === "cmp" ? ["all", "r10", "r5"] : [cur]),
+  };
+  window.NWBasis = NWBasis;
+
+  const state = { station: null, data: null, show: { all: true, r10: true, r5: true }, sel: null, stations: [] };
+  function hashParams() { return new URLSearchParams(location.hash.split("?")[1] || ""); }
+  function setHash(p) { const q = p.toString(); history.replaceState(history.state, "", `#/today${q ? `?${q}` : ""}`); }
+  function pickStation() {
+    const u = hashParams().get("station");
+    const ids = state.stations.map((s) => String(s.station_id));
+    if (u && ids.includes(u)) return u;
+    try { const v = JSON.parse(localStorage.getItem("nw.station") || "null"); if (v && ids.includes(String(v.id))) return String(v.id); } catch { /* */ }
+    return ids.includes("108") ? "108" : ids[0];
+  }
+  async function loadStations() {
+    if (state.stations.length) return;
+    const r = await fetch("/api/stations").then((x) => x.json()).catch(() => []);
+    const list = Array.isArray(r) ? r : r.stations || [];
+    state.stations = list.filter((s) => s.enabled !== false);
+  }
+  async function show() {
+    const root = $("today");
+    if (!root.dataset.init) {
+      root.dataset.init = "1";
+      root.innerHTML = `<div class="rt-ctl card"><label class="rt-st"><span class="sr">관측지점</span><select id="rtStation" aria-label="관측지점"></select></label><div id="rtBasis"></div></div><div id="rtOut" aria-live="polite"><div class="card rt-load">불러오는 중…</div></div>`;
+      $("rtStation").addEventListener("change", (e) => {
+        state.station = e.target.value;
+        if (window.NWStation && NWStation.manual) NWStation.manual(state.station);
+        const p = hashParams(); p.set("station", state.station); setHash(p); load();
+      });
+      root.addEventListener("click", onClick);
+    }
+    await loadStations();
+    state.station = pickStation();
+    $("rtStation").innerHTML = state.stations.map((s) => `<option value="${esc(s.station_id)}"${String(s.station_id) === state.station ? " selected" : ""}>${esc(s.station_name)}(${esc(s.station_id)})</option>`).join("");
+    renderBasis();
+    load();
+  }
+  function renderBasis() { $("rtBasis").innerHTML = NWBasis.html(NWBasis.get()); }
+  function onClick(e) {
+    const b = e.target.closest("[data-basis]");
+    if (b) {
+      NWBasis.set(b.dataset.basis);
+      const p = hashParams(); p.set("basis", b.dataset.basis); setHash(p);
+      renderBasis(); render(); return;
+    }
+    const t = e.target.closest("[data-line]");
+    if (t) { state.show[t.dataset.line] = !state.show[t.dataset.line]; render(); return; }
+  }
+  let seq = 0;
+  async function load() {
+    const my = ++seq;
+    $("rtOut").innerHTML = `<div class="card rt-load">불러오는 중…</div>`;
+    try {
+      const r = await fetch(`/api/rt/today?station=${encodeURIComponent(state.station)}`);
+      const d = await r.json();
+      if (my !== seq) return;
+      if (!r.ok || !d.ok) throw new Error(d.message || "불러오지 못했습니다");
+      state.data = d;
+      state.sel = null;
+      render();
+    } catch (e) {
+      if (my === seq) $("rtOut").innerHTML = `<div class="card result bad">${esc(e.message)}</div>`;
+    }
+  }
+  // ---------------------------------------------------------------- 그리기
+  function render() {
+    const d = state.data;
+    if (!d) return;
+    const basis = NWBasis.get();
+    const ids = NWBasis.ids(basis);
+    const c = d.current;
+    const fresh = c.freshness || {};
+    const v = c.values;
+    const ta = c.compare?.ta;
+    const head = v
+      ? `<section class="card rt-now ${fresh.state === "stale" ? "is-stale" : ""}" aria-label="현재 기상">
+          <div class="rt-now-main">
+            <div><p class="rt-time">${esc(c.time.slice(11, 16))} 실황 · ${esc(d.station.name)}${fresh.state === "stale" ? ` <span class="rt-badge bad">지연</span>` : ` <span class="rt-badge ok">최신</span>`}</p>
+            <p class="rt-temp">${v1(v.ta)}</p></div>
+            <dl class="rt-vals"><div><dt>습도</dt><dd>${v1(v.hm, "%")}</dd></div><div><dt>1시간 강수</dt><dd>${v1(v.rn1, "mm")}</dd></div><div><dt>강수형태</dt><dd>${esc(v.pty ?? "–")}</dd></div><div><dt>바람</dt><dd>${esc(v.windDir ?? "")} ${v1(v.ws, "m/s")}</dd></div></dl>
+          </div>
+          ${fresh.state === "stale" ? `<p class="result bad rt-stale">${esc(fresh.text)}. 아래 값은 지금 날씨가 아닙니다.</p>` : ""}
+          ${ta ? `<div class="rt-cmp">${ta.filter((p) => ids.includes(p.id)).map((p) => `<div class="rt-cmp-i"><span>${esc(p.label)}<small>${esc(p.range)}</small></span><b>${p.mean == null ? `<em class="rt-ins">${esc(p.statusText)}</em>` : `${p.mean}℃`}</b><i class="${p.diff > 0 ? "up" : p.diff < 0 ? "down" : ""}">${p.mean == null ? "" : sg(p.diff)}</i></div>`).join("")}</div>` : ""}
+          <p class="rt-src">출처: ${esc(c.source)} ${esc(c.time.slice(0, 16))} · ${esc(d.grid?.note || "")}</p>
+        </section>`
+      : `<section class="card rt-now"><p class="result bad">${esc(c.message || "오늘 실황 자료가 없습니다")}</p></section>`;
+    const story = d.stories.length ? `<section class="card rt-stories" aria-label="오늘의 날씨 이야기"><h2>오늘의 날씨 이야기</h2>${d.stories.map((s) => `<article class="rt-story"><h3>${esc(s.title)} <b>${esc(s.value)}</b></h3><p>${esc(s.text)}</p><p class="rt-basis-row">${s.periods.filter((p) => ids.includes(idOf(p.label))).map((p) => `<span>${esc(p.label.replace(" 평균", ""))} ${p.mean != null ? `${p.mean}℃(${sg(p.diff)})` : p.percentile != null ? `${p.percentile}백분위` : "비교 데이터 부족"}</span>`).join("")}</p><p class="rt-note">근거: ${esc(s.basis)} · 기준 ${esc(s.asOf || "")}</p></article>`).join("")}</section>` : "";
+    $("rtOut").innerHTML = head + story + chartCard(d, ids) + distCard(d, ids) + dayCard(d, ids) + otherCard(d, ids) + methodCard(d);
+    bindChart();
+  }
+  const idOf = (label) => (/1990|이후/.test(label) ? "all" : /10년/.test(label) ? "r10" : "r5");
+  function distCard(d, ids) {
+    const ta = d.current.compare?.ta;
+    if (!ta) return "";
+    const rows = ta.filter((p) => ids.includes(p.id)).map((p) => `<tr><th scope="row">${esc(p.label)}<small>${esc(p.range)}</small></th><td>${p.percentile == null ? `<span class="rt-ins">${esc(p.rankNote || p.statusText || "표본 부족")}</span>` : `${p.percentile}`}</td><td>${p.percentile == null ? "–" : `높은 쪽 ${p.rankHigh}위 / ${p.samples}`}</td><td>${p.p10 == null ? "–" : `${p.p10}~${p.p90}℃`}${p.outside ? ` <b class="${p.outside > 0 ? "up" : "down"}">(${sg(p.outside)} 벗어남)</b>` : ""}</td><td>${p.max ? `${p.max.value}℃ <small>${esc(p.max.date)}</small>` : "–"}</td><td>${p.min ? `${p.min.value}℃ <small>${esc(p.min.date)}</small>` : "–"}</td></tr>`).join("");
+    return `<section class="card rt-dist"><h2>같은 시기·같은 시각 분포에서 지금 위치</h2><div class="tbl-wrap"><table class="rt-tbl"><thead><tr><th>기준</th><th>백분위</th><th>순위</th><th>보통 범위(10~90%)</th><th>과거 최고</th><th>과거 최저</th></tr></thead><tbody>${rows}</tbody></table></div><p class="rt-note">${esc(d.current.hour)}시 정시 관측, 같은 월일 ±7일. 실황은 격자 값이고 분포는 ASOS 관측소 값이라 장소가 조금 다를 수 있습니다.</p></section>`;
+  }
+  function dayCard(d, ids) {
+    const it = [["max", "최고기온"], ["min", "최저기온"]].map(([k, l]) => {
+      const x = d.day[k];
+      return `<div class="rt-day-i"><h3>오늘 ${l} <span class="rt-badge fc">예보</span></h3><p class="rt-big">${x.value == null ? "예보 없음" : `${x.value}℃`}</p><ul>${x.compare.filter((p) => ids.includes(p.id)).map((p) => `<li>${esc(p.label)} <small>${esc(p.range)}</small>: ${p.mean == null ? esc(p.statusText) : `${p.mean}℃${x.value == null ? "" : ` (${sg(p.diff)})`}`}</li>`).join("")}</ul><p class="rt-note">${x.base ? `단기예보 ${esc(x.base.slice(5, 16))} 발표` : "이 날짜의 최고·최저 예보가 저장된 발표가 없습니다"} · 비교: 공식 일자료 ${l}</p></div>`;
+    }).join("");
+    return `<section class="card rt-day"><h2>오늘 최고·최저기온</h2><div class="rt-day-g">${it}</div></section>`;
+  }
+  function otherCard(d, ids) {
+    const c = d.current.compare;
+    if (!c) return "";
+    const row = (label, list, u, val) => (list ? `<tr><th scope="row">${label}</th><td>${v1(val, u)}</td>${list.filter((p) => ids.includes(p.id)).map((p) => `<td>${p.mean == null ? `<span class="rt-ins">${esc(p.statusText)}</span>` : `${p.mean}${u} <small>(${sg(p.diff, u)})</small>`}</td>`).join("")}</tr>` : "");
+    const hd = c.ta.filter((p) => ids.includes(p.id)).map((p) => `<th>${esc(p.label)}</th>`).join("");
+    return `<section class="card"><h2>습도·강수·바람도 비교</h2><div class="tbl-wrap"><table class="rt-tbl"><thead><tr><th>항목</th><th>지금</th>${hd}</tr></thead><tbody>${row("습도", c.hm, "%", d.current.values.hm)}${row("1시간 강수량", c.rn, "mm", d.current.values.rn1)}${row("풍속", c.ws, "m/s", d.current.values.ws)}</tbody></table></div><p class="rt-note">강수량 평균은 같은 시각 1시간 강수량(비 안 온 시간 0 포함)의 평균입니다. 결측은 0으로 넣지 않습니다.</p></section>`;
+  }
+  function methodCard(d) {
+    const st = d.baseStatus || {};
+    return `<details class="card rt-method"><summary>계산 기준</summary><ul>
+      <li>${esc(d.method.rule)}</li><li>${esc(d.method.note)}</li>
+      <li>기준기간(오늘 ${esc(d.date)} 기준): ${d.periods.map((p) => `${esc(p.label)} ${esc(p.range)}(유효 ${st[p.id]?.validYears ?? "?"}/${p.years}년, 15시 표본 ${st[p.id]?.samples ?? "?"}개)`).join(" · ")}. 진행 중인 올해는 넣지 않습니다.</li>
+      <li>현재값: 기상청 초단기실황, ${esc(d.grid?.note || "격자 없음")}. 예보: 실황이 있는 시각은 실황, 그 뒤는 초단기예보(최신 발표 ${esc(d.releases?.ultra?.base?.slice(5, 16) || "없음")}), 그 뒤는 단기예보(최신 발표 ${esc(d.releases?.vilage?.base?.slice(5, 16) || "없음")}).</li>
+      <li>${esc(d.asos.note)} — ASOS 마지막 날: ${esc(d.asos.lastDay || "없음")}.</li></ul></details>`;
+  }
+  // 시간별 그래프(SVG): 관측 = 실선, 예보 = 점선 + 음영 + '지금' 세로선, 과거 평균 3선(켜고 끄기)
+  function chartCard(d, ids) {
+    const W = 720, H = 260, L = 38, R = 10, T = 14, B = 26;
+    const hrs = d.hours;
+    const lines = ["all", "r10", "r5"].filter((k) => ids.includes(k) && state.show[k]);
+    const vals = [];
+    for (const h of hrs) { if (h.obs != null) vals.push(h.obs); if (h.fcst != null) vals.push(h.fcst); for (const k of lines) if (h.base[k] != null) vals.push(h.base[k]); }
+    if (!vals.length) return `<section class="card"><h2>오늘 시간별 기온</h2><p class="rt-ins">그릴 자료가 없습니다</p></section>`;
+    let lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1);
+    const x = (h) => L + (h / 23) * (W - L - R), y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+    const path = (pts) => { let s = "", pen = false; for (const [h, v] of pts) { if (v == null) { pen = false; continue; } s += `${pen ? "L" : "M"}${x(h).toFixed(1)},${y(v).toFixed(1)}`; pen = true; } return s; };
+    const lastObs = [...hrs].reverse().find((h) => h.obs != null);
+    const nowH = lastObs ? lastObs.hour : null;
+    const ticks = []; const step = hi - lo > 12 ? 4 : 2;
+    for (let t = Math.ceil(lo / step) * step; t <= hi; t += step) ticks.push(t);
+    const fpts = hrs.map((h) => [h.hour, h.fcst]);
+    let svg = `<svg viewBox="0 0 ${W} ${H}" class="rt-svg" role="img" aria-label="오늘 시간별 기온: 관측 실선, 예보 점선, 과거 평균">`;
+    if (nowH != null && nowH < 23) svg += `<rect x="${x(nowH)}" y="${T}" width="${x(23) - x(nowH)}" height="${H - T - B}" fill="#e8f3ff" opacity=".6"/><line x1="${x(nowH)}" x2="${x(nowH)}" y1="${T}" y2="${H - B}" stroke="#026ef8" stroke-dasharray="2 3"/><text x="${x(nowH) + 4}" y="${T + 11}" font-size="11" fill="#026ef8">지금 · 이후 예보</text>`;
+    for (const t of ticks) svg += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="#e0e8f4"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end" font-size="11" fill="#5e7090">${t}</text>`;
+    for (let h = 0; h < 24; h += 3) svg += `<text x="${x(h)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="#5e7090">${h}시</text>`;
+    for (const k of lines) svg += `<path d="${path(hrs.map((h) => [h.hour, h.base[k]]))}" fill="none" stroke="${COLORS[k]}" stroke-width="1.6" opacity=".85"/>`;
+    svg += `<path d="${path(fpts)}" fill="none" stroke="${COLORS.fcst}" stroke-width="2.4" stroke-dasharray="6 4"/>`;
+    for (const h of hrs) if (h.fcst != null) svg += `<circle cx="${x(h.hour)}" cy="${y(h.fcst)}" r="2.6" fill="#fff" stroke="${COLORS.fcst}" stroke-width="1.5"/>`;
+    svg += `<path d="${path(hrs.map((h) => [h.hour, h.obs]))}" fill="none" stroke="${COLORS.obs}" stroke-width="2.6"/>`;
+    for (const h of hrs) if (h.obs != null) svg += `<circle cx="${x(h.hour)}" cy="${y(h.obs)}" r="2.6" fill="${COLORS.obs}"/>`;
+    if (state.sel != null) svg += `<line x1="${x(state.sel)}" x2="${x(state.sel)}" y1="${T}" y2="${H - B}" stroke="#0d1b3d" opacity=".35"/>`;
+    svg += `<rect class="rt-hit" x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent"/></svg>`;
+    const names = { all: d.periods[0].label, r10: d.periods[1].label, r5: d.periods[2].label };
+    const legend = `<div class="rt-legend"><span class="lg-obs">━ 실황(관측)</span><span class="lg-fc">┅ 예보</span>${["all", "r10", "r5"].filter((k) => ids.includes(k)).map((k) => `<button type="button" data-line="${k}" aria-pressed="${state.show[k]}" style="--c:${COLORS[k]}" class="${state.show[k] ? "on" : ""}">${esc(names[k])}</button>`).join("")}</div>`;
+    return `<section class="card rt-chart"><h2>오늘 시간별 기온과 과거 평균</h2>${legend}<div class="rt-svg-wrap">${svg}</div><div id="rtTip" class="rt-tip">${tipHtml(d, state.sel ?? nowH ?? 12, ids)}</div><p class="rt-note">관측과 예보는 이어 그리지 않습니다. 그래프를 누르거나 마우스를 올리면 그 시각의 값과 기준별 차이를 보여 줍니다.</p></section>`;
+  }
+  function tipHtml(d, hour, ids) {
+    const h = d.hours[hour];
+    if (!h) return "";
+    const v = h.obs ?? h.fcst;
+    const kind = h.obs != null ? "실황" : h.fcst != null ? `${h.fcstSource}(${h.fcstBase.slice(11, 16)} 발표)` : "자료 없음";
+    return `<b>${hour}시</b> ${kind}${v != null ? ` <b>${v}℃</b>` : ""} · ${["all", "r10", "r5"].filter((k) => ids.includes(k)).map((k, i) => `${esc(d.periods[["all", "r10", "r5"].indexOf(k)].label.replace(" 평균", ""))} ${h.base[k] == null ? "부족" : `${h.base[k]}℃${v != null ? `(${sg(Math.round((v - h.base[k]) * 10) / 10)})` : ""}`}`).join(" · ")}`;
+  }
+  function bindChart() {
+    const hit = document.querySelector("#rtOut .rt-hit");
+    if (!hit) return;
+    const svg = hit.ownerSVGElement;
+    const pick = (ev) => {
+      const r = svg.getBoundingClientRect();
+      const px = ((ev.clientX - r.left) / r.width) * 720;
+      const h = Math.max(0, Math.min(23, Math.round(((px - 38) / (720 - 48)) * 23)));
+      if (h === state.sel) return;
+      state.sel = h;
+      $("rtTip").innerHTML = tipHtml(state.data, h, NWBasis.ids(NWBasis.get()));
+    };
+    svg.addEventListener("pointermove", pick);
+    svg.addEventListener("pointerdown", pick);
+  }
+  window.RT = { show, station: () => state.station };
+})();

@@ -501,6 +501,7 @@
   <link rel="stylesheet" href="/views.css?v=3" />
   <link rel="stylesheet" href="/drawer.css?v=1" />
   <link rel="stylesheet" href="/fold.css?v=1" />
+  <link rel="stylesheet" href="/rt.css?v=1" />
 </head>
 <body>
   <div class="appbar" id="appbar">
@@ -524,6 +525,7 @@
       <nav>
         <div class="nav-group nav-main" role="group" aria-labelledby="navLookup">
           <p class="nav-label" id="navLookup">조회</p>
+          <a href="#/today" data-page="today">오늘의 날씨</a>
           <div class="nav-row"><a href="#/stats/overview" data-page="dash" class="nav-parent">날씨 통계</a><button type="button" class="nav-exp" id="navExp" aria-controls="navStats" aria-expanded="false" aria-label="날씨 통계 하위 메뉴 펼치기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
           <div class="nav-sub" id="navStats" role="group" aria-label="날씨 통계 하위 메뉴">
             <a href="#/stats/overview" data-sub="overview">한눈에 보기</a>
@@ -564,6 +566,7 @@
         <div class="geo-banner" id="geoBanner" role="status" hidden></div>
         <p class="geo-note" id="geoNote" role="status" hidden></p>
         <p class="login-note" id="loginNote" role="status" hidden><span id="loginNoteText"></span><button type="button" id="loginNoteClose">닫기</button></p>
+        <section class="page" id="today" aria-label="오늘의 날씨"></section>
         <section class="page" id="dash">
           <div class="st-panel" id="tabOverview">
           <p class="muted dash-note" id="dashNote" hidden></p>
@@ -1895,6 +1898,7 @@
     }
     // ---------- 상단 띠: 화면 이름·설명, 상태 칩 ----------
     const PAGE_HEAD = {
+      today: ["조회", "오늘의 날씨", "지금 날씨가 1990년 이후·최근 10년·최근 5년 같은 시기와 비교해 얼마나 다른지"],
       dash: ["조회", "날씨 통계", "1990년부터 쌓인 관측 자료로 보는 우리 동네 날씨"],
       questions: ["조회", "질문으로 보는 날씨", "예전보다 더워졌을까? 비가 더 자주 올까? — 일상적인 질문을 과거 관측으로"],
       hourly: ["조회", "시간별 날씨", "지점·기간별 한 시간 단위 관측값 — 레이아웃으로 컬럼을 고르고 그리드·카드로 보기"],
@@ -2119,6 +2123,7 @@
       if (name === "jobs") loadJobs();
       if (name === "collect") loadCollectJobs();
       if (name === "stations") loadStations();
+      if (name === "today" && window.RT) RT.show();
     }
     // 예전 주소(#/hourly, #/daily, #/download)는 새 주소로 바꿔 계속 쓸 수 있게(뒤에 붙은 ?조건은 그대로)
     const ROUTE_ALIAS = { "/hourly": "/hourly-weather", "/daily": "/daily-weather", "/download": "/view-settings" };
@@ -2138,7 +2143,7 @@
       }
       const h = location.hash.replace("#", "").split("?")[0] || "/";
       const statsTab = { "/": "overview", "/stats/overview": "overview", "/stats/yearly": "yearly", "/stats/region": "region", "/stats/life": "life", "/stats/records": "records", "/questions": "questions" }[h] || (h.startsWith("/stats/") ? "overview" : null);
-      const map = { "/": "dash", "/stats/overview": "dash", "/questions": "questions", "/stats/yearly": "dash", "/stats/region": "dash", "/stats/life": "dash", "/stats/records": "dash", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/users": "users" };
+      const map = { "/": "dash", "/stats/overview": "dash", "/questions": "questions", "/today": "today", "/stats/yearly": "dash", "/stats/region": "dash", "/stats/life": "dash", "/stats/records": "dash", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/users": "users" };
       let name = map[h] || "dash";
       if (name === "users" && !me.authEnabled) name = "dash";
       show(name);
@@ -2770,7 +2775,7 @@
     // views.js(시간별·일별 날씨)가 읽기만 하는 연결점
     window.NW = { me: () => me, stations: () => (dashCache && dashCache.stations) || [], loginHref: () => loginHref(), fromPicker, toPicker };
     window.addEventListener("hashchange", route);
-    setPageHead(({ "/questions": "questions", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider" })[location.hash.replace("#", "").split("?")[0]] || "dash");
+    setPageHead(({ "/today": "today", "/questions": "questions", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider" })[location.hash.replace("#", "").split("?")[0]] || "dash");
     showLoginNote();
     // 대시보드 자료가 늦거나 실패해도 다른 화면은 그대로 뜨게
     // 기본 지점(geo.js): 지금 화면의 지점, 나중에 정해진 기본 지점(위치·내 계정) 반영 — 주소에 지점을 넣었거나 직접 고른 뒤에는 바꾸지 않음
@@ -2794,5 +2799,6 @@
   <script src="/stats.js?v=9"></script>
   <script src="/drawer.js?v=1"></script>
   <script src="/fold.js?v=1"></script>
+  <script src="/rt.js?v=1"></script>
 </body>
 </html>
