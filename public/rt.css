@@ -29,6 +29,7 @@
 .lg-obs { font-weight:700; } .lg-fc { color:#026ef8; font-weight:700; }
 .rt-legend button { height:28px; padding:0 10px; border-radius:999px; border:1.5px solid var(--c); background:#fff; color:var(--c); font:inherit; font-size:12.5px; font-weight:600; cursor:pointer; }
 .rt-legend button.on { background:var(--c); color:#fff; }
+.rt-svg-wrap { max-width:860px; }
 .rt-svg { width:100%; height:auto; display:block; touch-action:pan-y; }
 .rt-tip { font-size:13px; background:var(--soft); border-radius:8px; padding:6px 10px; margin-top:6px; font-variant-numeric:tabular-nums; }
 .tbl-wrap { overflow-x:auto; }
