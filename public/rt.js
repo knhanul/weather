@@ -35,7 +35,7 @@
   async function loadStations() {
     if (state.stations.length) return;
     const r = await fetch("/api/stations").then((x) => x.json()).catch(() => []);
-    const list = Array.isArray(r) ? r : r.stations || [];
+    const list = Array.isArray(r) ? r : r.data || r.stations || [];
     state.stations = list.filter((s) => s.enabled !== false);
   }
   async function show() {
