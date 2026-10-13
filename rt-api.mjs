@@ -118,7 +118,7 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     const ultraRel = rt && out.grid ? await rt.latestRelease("KMA_ULTRA_FCST", out.grid.nx, out.grid.ny) : null;
     const vilRel = rt && out.grid ? await rt.latestRelease("KMA_VILAGE_FCST", out.grid.nx, out.grid.ny) : null;
     const fc = new Map(); // fcst 벽시계 → { value, source, base }
-    const put = (rows, source, base, cat) => { for (const r of rows) if (r.category === cat && !fc.has(r.fcst)) fc.set(r.fcst, { value: num(r.value), source, base }); };
+    const put = (rows, source, base, cat) => { for (const r of rows) if (r.category === cat && !fc.has(r.fcst)) fc.set(r.fcst, { value: num(r.value), source, base: r.release || base }); };
     if (ultraRel) put(await rt.fcst("KMA_ULTRA_FCST", out.grid.nx, out.grid.ny, ultraRel.base), "초단기예보", ultraRel.base, "T1H");
     if (vilRel) put(await rt.fcst("KMA_VILAGE_FCST", out.grid.nx, out.grid.ny, vilRel.base), "단기예보", vilRel.base, "TMP");
     out.releases = {

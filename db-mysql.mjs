@@ -1087,8 +1087,12 @@ const RT_FC_TABLE = { KMA_VILAGE_FCST: "kma_vilage_fcst", KMA_ULTRA_FCST: "kma_u
 export async function rtFcst(dataset, nx, ny, base) {
   const t = RT_FC_TABLE[dataset];
   if (!t) throw new Error(`알 수 없는 예보 ${dataset}`);
-  const r = await q(`SELECT fcst_datetime, category, fcst_value FROM ${t} WHERE nx = ? AND ny = ? AND base_datetime = ? ORDER BY fcst_datetime`, [nx, ny, base]);
-  return r.map((x) => ({ base, fcst: wall19(x.fcst_datetime), category: x.category, value: x.fcst_value }));
+  // 초단기예보는 발표 기록(kma_fcst_releases)은 HH:30, 행의 base_datetime 은 기상청 item 의 baseTime(HH:00 으로 오는 경우가 있음) → 발표 기록 이하의 가장 최근 행 묶음을 쓴다
+  const m = await q(`SELECT MAX(base_datetime) b FROM ${t} WHERE nx = ? AND ny = ? AND base_datetime <= ? AND base_datetime > ? - INTERVAL 3 HOUR`, [nx, ny, base, base]);
+  if (!m[0]?.b) return [];
+  const rowBase = wall19(m[0].b);
+  const r = await q(`SELECT fcst_datetime, category, fcst_value FROM ${t} WHERE nx = ? AND ny = ? AND base_datetime = ? ORDER BY fcst_datetime`, [nx, ny, rowBase]);
+  return r.map((x) => ({ base: rowBase, release: base, fcst: wall19(x.fcst_datetime), category: x.category, value: x.fcst_value }));
 }
 // 그 날 최고·최저(TMX·TMN) 예보가 들어 있는 가장 최근 발표(오늘 낮 발표에는 오늘 TMX 가 없을 수 있음)
 export async function rtDayExtremes(nx, ny, ymd) {
