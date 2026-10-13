@@ -185,7 +185,7 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     const hours = hourlyForecast({ vilRows, ultraRows, fromWall: `${k.ymd} ${pad(k.hour)}:00:00` });
     for (const h of hours) {
       const b = hourBase(hs, st.station_id, h.time.slice(0, 10), +h.time.slice(11, 13), "ta", NaN);
-      h.base = Object.fromEntries(b.map((x) => [x.id, x.mean]));
+      h.avg = Object.fromEntries(b.map((x) => [x.id, x.mean])); // 과거 평균(h.base 는 예보 발표시각)
       h.diff = Object.fromEntries(b.map((x) => [x.id, x.mean != null && h.ta != null ? Math.round((h.ta - x.mean) * 10) / 10 : null]));
     }
     out.hours = hours;

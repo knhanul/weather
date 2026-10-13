@@ -90,14 +90,14 @@
     const W = Math.max(720, hrs.length * 14), H = 220, L = 34, R = 8, T = 12, B = 26;
     const lines = ["all", "r10", "r5"].filter((k) => ids.includes(k) && state.show[k]);
     const vals = [];
-    for (const x of hrs) { if (x.ta != null) vals.push(x.ta); for (const k of lines) if (x.base[k] != null) vals.push(x.base[k]); }
+    for (const x of hrs) { if (x.ta != null) vals.push(x.ta); for (const k of lines) if (x.avg[k] != null) vals.push(x.avg[k]); }
     const lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1);
     const X = (i) => L + (i / Math.max(1, hrs.length - 1)) * (W - L - R), Y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
     const path = (get) => { let s = "", pen = false; hrs.forEach((x, i) => { const v = get(x); if (v == null) { pen = false; return; } s += `${pen ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`; pen = true; }); return s; };
     let svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" class="rt-svg-h" role="img" aria-label="시간별 예보기온과 과거 평균">`;
     for (let t = Math.ceil(lo / 2) * 2; t <= hi; t += 2) svg += `<line x1="${L}" x2="${W - R}" y1="${Y(t)}" y2="${Y(t)}" stroke="#e0e8f4"/><text x="${L - 5}" y="${Y(t) + 4}" text-anchor="end" font-size="11" fill="#5e7090">${t}</text>`;
     hrs.forEach((x, i) => { const hh = +x.time.slice(11, 13); if (hh === 0) svg += `<line x1="${X(i)}" x2="${X(i)}" y1="${T}" y2="${H - B}" stroke="#c9d6ea"/><text x="${X(i) + 3}" y="${T + 10}" font-size="11" fill="#5e7090">${esc(dlab(x.time.slice(0, 10)))}</text>`; if (hh % 6 === 0) svg += `<text x="${X(i)}" y="${H - 8}" text-anchor="middle" font-size="10.5" fill="#5e7090">${hh}시</text>`; });
-    for (const k of lines) svg += `<path d="${path((x) => x.base[k])}" fill="none" stroke="${COLORS[k]}" stroke-width="1.5" opacity=".85"/>`;
+    for (const k of lines) svg += `<path d="${path((x) => x.avg[k])}" fill="none" stroke="${COLORS[k]}" stroke-width="1.5" opacity=".85"/>`;
     svg += `<path d="${path((x) => x.ta)}" fill="none" stroke="${COLORS.fc}" stroke-width="2.4" stroke-dasharray="6 4"/></svg>`;
     const names = Object.fromEntries(d.periods.map((p) => [p.id, p.label]));
     const legend = `<div class="rt-legend"><span class="lg-fc">┅ 예보기온</span>${["all", "r10", "r5"].filter((k) => ids.includes(k)).map((k) => `<button type="button" data-line="${k}" aria-pressed="${state.show[k]}" style="--c:${COLORS[k]}" class="${state.show[k] ? "on" : ""}">${esc(names[k])}</button>`).join("")}</div>`;
