@@ -14,7 +14,7 @@
     return `<p class="rts-lead">${r.day === "yesterday" ? "어제" : "오늘"}의 기온 변화와 가장 비슷했던 과거의 날은 <b>${ymdK(b.date)}</b>입니다.</p><ol class="rts-sim">${r.top.map((x) => `<li><b>${esc(x.date)}</b> 점수 ${x.score} <small>RMSE ${x.rmse}℃${x.dMax != null ? ` · 최고 ${x.max}℃(${x.dMax > 0 ? "+" : ""}${x.dMax}) · 최저 ${x.min}℃(${x.dMin > 0 ? "+" : ""}${x.dMin})${x.rain != null ? ` · 강수 ${x.rain}mm${x.rainMismatch ? "(강수 여부 다름)" : ""}` : ""}${x.dHm != null ? ` · 습도 ${x.dHm > 0 ? "+" : ""}${x.dHm}%` : ""}` : ""}</small></li>`).join("")}</ol>`;
   }
   function simHtml(t, y) {
-    const part = (r, title) => `<div class="rts-col"><h3>${title} <span class="rt-badge ${r.partial ? "fc" : "ok"}">${esc(r.kind || "")}</span></h3>${r.stale ? `<p class="rt-ins">실황이 늦어지고 있어 최신 시각이 빠졌을 수 있습니다</p>` : ""}${simList(r)}${r.termsNote ? `<p class="rt-ins">${esc(r.termsNote)}</p>` : ""}<p class="rt-note">${esc(r.formula)}. 후보: 1990년~, 해마다 같은 월일 ±${r.window}일 ${r.considered ?? 0}일 중 자료 부족 ${r.excluded ?? 0}일 제외. ${esc(r.source || "")}</p></div>`;
+    const part = (r, title) => r.unavailable ? `<div class="rts-col"><h3>${title} <span class="rt-badge fc">자료 부족</span></h3><p class="rt-ins">아직 관측 자료 없음 — ${esc(r.message)}</p></div>` : `<div class="rts-col"><h3>${title} <span class="rt-badge ${r.partial ? "fc" : "ok"}">${esc(r.kind || "")}</span></h3>${r.stale ? `<p class="rt-ins">실황이 늦어지고 있어 최신 시각이 빠졌을 수 있습니다</p>` : ""}${simList(r)}${r.termsNote ? `<p class="rt-ins">${esc(r.termsNote)}</p>` : ""}<p class="rt-note">${esc(r.formula)}. 후보: 1990년~, 해마다 같은 월일 ±${r.window}일 ${r.considered ?? 0}일 중 자료 부족 ${r.excluded ?? 0}일 제외. ${esc(r.source || "")}</p></div>`;
     return `<section class="card rts-simcard" aria-label="과거 유사일"><h2>과거 유사일</h2><div class="rts-2">${part(t, "오늘(진행 중)")}${part(y, "어제(하루 전체)")}</div></section>`;
   }
   async function fill() {
@@ -27,7 +27,10 @@
     const [s, t, y] = await Promise.allSettled([get(`/api/rt/stories?station=${st}`), get(`/api/rt/similar?station=${st}&day=today`), get(`/api/rt/similar?station=${st}&day=yesterday`)]);
     if ($("rtsBox") !== box) return; // 다시 그려졌으면 버림
     if (s.status === "fulfilled") box.innerHTML = storiesHtml(s.value);
-    sim.innerHTML = t.status === "fulfilled" && y.status === "fulfilled" ? simHtml(t.value, y.value) : `<section class="card"><p class="rt-ins">과거 유사일을 불러오지 못했습니다</p></section>`;
+    // 오늘·어제 중 받은 쪽만 보여 주고, 못 받은 쪽은 사유만 적는다(값을 지어내지 않음)
+    const one = (r, day) => r.status === "fulfilled" ? r.value : { ok: false, day, unavailable: true, message: r.reason?.message || "응답 없음" };
+    const tv = one(t, "today"), yv = one(y, "yesterday");
+    sim.innerHTML = tv.unavailable && yv.unavailable ? `<section class="card"><p class="rt-ins">과거 유사일을 불러오지 못했습니다</p></section>` : simHtml(tv, yv);
   }
   const watch = () => { const el = $("today"); if (el && !el.dataset.rtsObs) { el.dataset.rtsObs = "1"; new MutationObserver(() => fill()).observe(el, { childList: true, subtree: true }); } fill(); };
   setInterval(watch, 1500);
