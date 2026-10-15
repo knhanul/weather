@@ -21,7 +21,7 @@
   }
   const part = (h) => (h < 6 ? "새벽" : h < 11 ? "아침" : h < 14 ? "한낮" : h < 18 ? "오후" : "저녁");
   // 히어로(동기, /api/rt/today 만으로)
-  function hero(d) {
+  function hero(d, chart = "") {
     const c = d.current, v = c.values;
     if (!v) return `<section class="card rh-hero"><p class="result bad">${esc(c.message || "오늘 실황 자료가 없습니다")}</p></section>`;
     const stale = c.freshness?.state === "stale";
@@ -44,6 +44,7 @@
       ${meter}
     </section>
     <section class="card rh-hours" aria-label="앞으로 12시간"><h2>앞으로 12시간 <span class="rt-badge fc">예보</span></h2><div class="rh-chips" id="rhHours"><p class="rt-load">불러오는 중…</p></div></section>
+    ${chart}
     <section class="card rh-tip" id="rhTip" aria-label="옷차림·우산 참고" hidden></section>
     <section class="card rh-life" id="rhLife" aria-label="생활 질문" hidden></section>`;
   }

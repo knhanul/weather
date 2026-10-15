@@ -110,7 +110,7 @@
     const H = window.RTHome;
     const fold = (t, html) => (html ? `<details class="card rh-fold"><summary>${t}</summary>${html.replace(/^<section class="card[^"]*"[^>]*>|<\/section>$/g, "")}</details>` : "");
     $("rtOut").innerHTML = H
-      ? H.hero(d) + `<div id="rtsBox">${story}</div><div id="rhWeek"></div><div id="rhHist"></div>` + chartCard(d, ids) + fold("지금 값과 3개 기준 평균 비교", head) + `<div id="rtsSim"></div>` + fold("같은 시기·같은 시각 분포에서 지금 위치", distCard(d, ids)) + fold("오늘 최고·최저기온과 과거 평균", dayCard(d, ids)) + fold("습도·강수·바람도 비교", otherCard(d, ids)) + methodCard(d)
+      ? H.hero(d, chartCard(d, ids)) + `<div id="rtsBox">${story}</div><div id="rhWeek"></div><div id="rhHist"></div>` + fold("지금 값과 3개 기준 평균 비교", head) + `<div id="rtsSim"></div>` + fold("같은 시기·같은 시각 분포에서 지금 위치", distCard(d, ids)) + fold("오늘 최고·최저기온과 과거 평균", dayCard(d, ids)) + fold("습도·강수·바람도 비교", otherCard(d, ids)) + methodCard(d)
       : head + `<div id="rtsBox">${story}</div>` + chartCard(d, ids) + `<div id="rtsSim"></div>` + distCard(d, ids) + dayCard(d, ids) + otherCard(d, ids) + methodCard(d);
     bindChart();
     if (H) H.fill(d);
