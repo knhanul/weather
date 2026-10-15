@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "누니날씨 · nuni weather",
-  "short_name": "누니날씨",
-  "description": "1990년부터의 기상청 공식 ASOS 관측으로 보는 우리 동네 날씨 통계·시간별/일별 날씨",
+  "name": "이날 · 이야기가 있는 날씨",
+  "short_name": "이날",
+  "description": "이야기가 있는 날씨 — 1990년부터의 기상청 공식 ASOS 관측으로 보는 우리 동네 날씨 통계·시간별/일별 날씨",
   "lang": "ko",
   "start_url": "/#/stats/overview",
   "scope": "/",

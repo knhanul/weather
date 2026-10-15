@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>누니날씨 · nuni weather</title>
-  <meta name="description" content="누니날씨(nuni weather) — 기상청 공식 ASOS 관측 자료를 수집·조회·다운로드하는 공통 기상데이터 플랫폼" />
+  <title>이날 · 이야기가 있는 날씨</title>
+  <meta name="description" content="이날 — 이야기가 있는 날씨. 기상청 공식 ASOS 관측 자료를 수집·조회·다운로드하는 공통 기상데이터 플랫폼" />
   <meta name="theme-color" content="#026EF8" />
-  <meta name="application-name" content="누니날씨" />
-  <meta name="apple-mobile-web-app-title" content="누니날씨" />
+  <meta name="application-name" content="이날" />
+  <meta name="apple-mobile-web-app-title" content="이날" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -18,8 +18,8 @@
   <link rel="manifest" href="/brand/site.webmanifest" />
   <script src="/chart-full.js?v=2"></script>
   <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="누니날씨" />
-  <meta property="og:title" content="누니날씨 · nuni weather" />
+  <meta property="og:site_name" content="이날" />
+  <meta property="og:title" content="이날 · 이야기가 있는 날씨" />
   <meta property="og:description" content="기상청 공식 ASOS 관측 자료를 수집·조회·다운로드하는 공통 기상데이터 플랫폼" />
   <meta property="og:url" content="https://weather.nuni.co.kr/" />
   <meta property="og:image" content="https://weather.nuni.co.kr/brand/og.png" />
@@ -46,7 +46,9 @@
     .layout { display:flex; min-height:100dvh; }
     aside { width:228px; flex:none; background:var(--surface); border-right:1px solid var(--line); padding:0 12px; }
     .aside-in { position:sticky; top:0; max-height:100dvh; overflow-y:auto; padding:20px 0; }
-    .brand { display:flex; align-items:center; gap:10px; padding:0 8px 18px; text-decoration:none; color:var(--fg); }
+    .brand { display:flex; flex-direction:column; align-items:flex-start; gap:7px; padding:2px 8px 18px; text-decoration:none; color:var(--fg); }
+    .brand-logo { height:46px; width:auto; display:block; }
+    .brand-sub { height:16px; width:auto; display:block; }
     .brand-icon { width:38px; height:38px; flex:none; display:block; }
     .brand-text { display:flex; flex-direction:column; gap:3px; min-width:0; }
     /* 한글 로고 '누니' 이미지 + '날씨' 글자: 글자 높이(로고 높이의 80%)와 아래선을 맞춤 */
@@ -506,7 +508,7 @@
 <body>
   <div class="appbar" id="appbar">
     <button type="button" class="ab-menu" id="abMenu" aria-label="메뉴 열기" aria-controls="drawer" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
-    <a class="ab-brand" href="#/stats/overview" aria-label="누니날씨 한눈에 보기"><img src="/brand/icon.svg" alt="" width="24" height="24" /></a>
+    <a class="ab-brand" href="#/stats/overview" aria-label="이날 한눈에 보기"><img src="/brand/inal-logo.svg" alt="" width="33" height="24" /></a>
     <p class="ab-title" id="abTitle">날씨 통계</p>
     <span class="ab-meta" id="abMeta" aria-label="공식 최신 관측 시각"></span>
   </div>
@@ -515,12 +517,9 @@
     <aside id="drawer">
       <div class="aside-in">
       <button type="button" class="dr-close" id="drClose" aria-label="메뉴 닫기">✕</button>
-      <a class="brand" href="#/" aria-label="누니날씨 (nuni weather) 날씨 통계">
-        <img class="brand-icon" src="/brand/icon.svg" alt="" width="38" height="38" />
-        <span class="brand-text">
-          <span class="brand-ko"><img src="/brand/logo-ko.svg" alt="누니" width="45" height="26" /><b>날씨</b></span>
-          <span class="brand-en">nuni weather</span>
-        </span>
+      <a class="brand" href="#/" aria-label="이날 · 이야기가 있는 날씨">
+        <img class="brand-logo" src="/brand/inal-logo.svg" alt="이날" width="64" height="46" />
+        <img class="brand-sub" src="/brand/subtitle.png" alt="이야기가 있는 날씨" width="132" height="16" />
       </a>
       <nav>
         <div class="nav-group nav-main" role="group" aria-labelledby="navLookup">
@@ -799,8 +798,8 @@
         </section>
       </main>
       <footer class="site-foot">
-        <a class="foot-logo" href="https://www.nuni.co.kr" aria-label="nuni 홈페이지"><img src="/brand/logo-en.svg" alt="nuni" width="41" height="18" /><span>weather</span></a>
-        <span>누니날씨 · 공식 ASOS 관측 자료(기상청) · Asia/Seoul · 관측값이 없으면 NULL 그대로 두고 0으로 바꾸지 않습니다</span>
+        <a class="foot-logo" href="https://www.nuni.co.kr" aria-label="nuni 홈페이지"><img src="/brand/inal-logo.svg" alt="이날" width="25" height="18" /><span>이야기가 있는 날씨</span></a>
+        <span>이날 · 공식 ASOS 관측 자료(기상청) · Asia/Seoul · 관측값이 없으면 NULL 그대로 두고 0으로 바꾸지 않습니다</span>
       </footer>
     </div>
   </div>
@@ -1920,7 +1919,7 @@
       let [g, t, d] = PAGE_HEAD[name] || PAGE_HEAD.dash;
       if (name === "users" && isNuni()) d = "통합 관리 콘솔에서 권한 관리";
       $("phGroup").textContent = g; $("phTitle").textContent = t; $("phDesc").textContent = d;
-      document.title = `${t} · 누니날씨`;
+      document.title = `${t} · 이날`;
     }
     let currentPage = "dash";
     function renderHeadChips() {
@@ -2069,7 +2068,7 @@
     async function loadUsers() {
       if (isNuni()) {
         // 누니 ID 모드: 사용자 승인·권한은 통합 관리 콘솔에서 (이 화면은 관리자만 봄)
-        $("uHelp").innerHTML = `관리 권한은 통합 관리 콘솔에서 회원의 누니날씨 역할(<b>스태프</b>·<b>브랜드 관리자</b>)로 정합니다. 권한을 바꾸면 그 사람이 다음에 로그인할 때 반영됩니다.`;
+        $("uHelp").innerHTML = `관리 권한은 통합 관리 콘솔에서 회원의 이날(누니날씨) 역할(<b>스태프</b>·<b>브랜드 관리자</b>)로 정합니다. 권한을 바꾸면 그 사람이 다음에 로그인할 때 반영됩니다.`;
         $("uMsg").innerHTML = `<a id="uConsole" style="font-size:13px;color:var(--pri)" href="${esc(me.adminConsoleUrl || "#/")}" target="_blank" rel="noopener">관리 콘솔 열기 (${esc(String(me.adminConsoleUrl || "").replace(/^https?:\/\//, "").replace(/\/.*$/, ""))}) ↗</a>`;
         $("uTable").hidden = true;
         return;

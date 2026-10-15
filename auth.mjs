@@ -211,10 +211,10 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
   }
   function page(res, status, title, text, cookies = []) {
     res.writeHead(status, { "content-type": "text/html; charset=utf-8", "set-cookie": cookies, "cache-control": "no-store" });
-    res.end(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escHtml(title)} · 누니날씨</title>
+    res.end(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escHtml(title)} · 이날</title>
 <style>body{margin:0;min-height:100dvh;display:grid;place-items:center;background:#f4f8ff;color:#0d1b3d;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
 .c{background:#fff;border:1px solid #e0e8f4;border-radius:16px;padding:28px 26px;max-width:420px;margin:16px;box-shadow:0 16px 42px rgba(0,80,224,.08)}h1{font-size:19px;margin:0 0 8px}p{margin:0 0 18px;color:#5e7090}a{display:inline-block;background:#026ef8;color:#fff;text-decoration:none;padding:9px 16px;border-radius:10px;font-weight:600}</style></head>
-<body><div class="c"><h1>${escHtml(title)}</h1><p>${escHtml(text)}</p><a href="/">누니날씨로 돌아가기</a></div></body></html>`);
+<body><div class="c"><h1>${escHtml(title)}</h1><p>${escHtml(text)}</p><a href="/">이날로 돌아가기</a></div></body></html>`);
   }
   const json = (res, data, status = 200, cookies = []) => {
     res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "set-cookie": cookies });
@@ -264,7 +264,7 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
     const validCookie = cState && cNext && sig && safeEqual(sig, hmac(`state:${cState}.${cNext}`));
     if (!validCookie || !qState || !safeEqual(cState, qState)) {
       log("kakao login rejected: state mismatch or expired");
-      return page(res, 400, "로그인을 완료하지 못했습니다", "로그인 요청이 만료되었거나 올바르지 않습니다. 누니날씨에서 다시 로그인해 주세요.", [clear]);
+      return page(res, 400, "로그인을 완료하지 못했습니다", "로그인 요청이 만료되었거나 올바르지 않습니다. 이날에서 다시 로그인해 주세요.", [clear]);
     }
     const next = safeNext(Buffer.from(cNext, "base64url").toString("utf8"));
     if (url.searchParams.get("error")) {
@@ -348,7 +348,7 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
     const validCookie = cState && cNonce && cVerifier && cNext && sig && safeEqual(sig, hmac(`oidc:${cState}.${cNonce}.${cVerifier}.${cNext}`));
     if (!validCookie || !qState || !safeEqual(cState, qState)) {
       log("nuni-id login rejected: state mismatch or expired");
-      return page(res, 400, "로그인을 완료하지 못했습니다", "로그인 요청이 만료되었거나 올바르지 않습니다. 누니날씨에서 다시 로그인해 주세요.", [clear]);
+      return page(res, 400, "로그인을 완료하지 못했습니다", "로그인 요청이 만료되었거나 올바르지 않습니다. 이날에서 다시 로그인해 주세요.", [clear]);
     }
     const next = safeNext(Buffer.from(cNext, "base64url").toString("utf8"));
     const qIss = url.searchParams.get("iss");
@@ -414,7 +414,7 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
     if (!enabled) {
       if (p.startsWith("/auth/") || p.startsWith("/api/admin/")) {
         if (p.startsWith("/api/")) json(res, { ok: false, message: "로그인 기능이 꺼져 있습니다." }, 404);
-        else page(res, 404, "로그인 기능이 꺼져 있습니다", "이 누니날씨 서버에는 카카오 로그인이 아직 설정되지 않았습니다.");
+        else page(res, 404, "로그인 기능이 꺼져 있습니다", "이 이날 서버에는 카카오 로그인이 아직 설정되지 않았습니다.");
         return true;
       }
       return false;

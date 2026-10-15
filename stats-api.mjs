@@ -95,7 +95,7 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
     const table = yearlyTable(r, st);
     if (url.searchParams.get("format") === "csv") {
       const meta = [
-        `누니날씨 날씨 통계 · 연도별 같은 기간 비교 (원자료 다운로드가 아닌 집계 결과)`,
+        `이날 날씨 통계 · 연도별 같은 기간 비교 (원자료 다운로드가 아닌 집계 결과)`,
         `지점 ${stationLabel(st)} · 기간 ${r.period.label} · 항목 ${r.metric.label}(${r.metric.unit}) — ${r.metric.def}`,
         `연도 ${fromYear}~${toYear} · 자료 ${asOf}까지 · 출처 ${SOURCE} · 시간대 Asia/Seoul`,
         ...r.text,
@@ -121,7 +121,7 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
     const table = { columns, rows };
     if (url.searchParams.get("format") === "csv") {
       return sendCsv(res, `weather-stats-overlay-${fileKey(st.station_id)}-${fileKey(p.key)}-${metric}`, table, [
-        `누니날씨 날씨 통계 · 날짜별 겹쳐보기 (집계 결과)`,
+        `이날 날씨 통계 · 날짜별 겹쳐보기 (집계 결과)`,
         `지점 ${stationLabel(st)} · 기간 ${r.period.label} · ${r.value.label}(${r.value.unit}) · 자료 ${asOf}까지 · 출처 ${SOURCE}`,
       ]);
     }
@@ -194,7 +194,7 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
     } else throw new StatsError("보기는 period·monthly·yearly 중 하나입니다");
     if (url.searchParams.get("format") === "csv") {
       return sendCsv(res, `weather-stats-region-${view}-${ids.map(fileKey).join("_")}`, table, [
-        `누니날씨 날씨 통계 · 지역별 비교 (${view}) — 집계 결과(원자료 아님)`,
+        `이날 날씨 통계 · 지역별 비교 (${view}) — 집계 결과(원자료 아님)`,
         `지점 ${sts.map(stationLabel).join(", ")} · 연도 ${fromYear}~${toYear} · 자료 ${asOf}까지 · 출처 ${SOURCE}`,
         ...meta,
       ]);
@@ -262,7 +262,7 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
     const { fromYear, toYear } = yearsParam(url, +asOf.slice(0, 4));
     return { st, hs, asOf, fromYear, toYear, station: { station_id: st.station_id, station_name: st.station_name, region: st.region || null } };
   }
-  const head = (kind, st, extra) => [`누니날씨 날씨 통계 · ${kind} (원자료 다운로드가 아닌 집계 결과)`, `지점 ${stationLabel(st)} · ${extra} · 출처 ${SOURCE} · 시간대 Asia/Seoul`];
+  const head = (kind, st, extra) => [`이날 날씨 통계 · ${kind} (원자료 다운로드가 아닌 집계 결과)`, `지점 ${stationLabel(st)} · ${extra} · 출처 ${SOURCE} · 시간대 Asia/Seoul`];
 
   async function lifeHeat(url, res) {
     const c = await dailyCtx(url);

@@ -1,4 +1,4 @@
-/* 누니날씨 · 날씨 통계 탭(한눈에 보기의 질문 카드, 연도별 비교, 지역별 비교, 생활 속 날씨·날씨 기록 안내).
+/* 이날(구 누니날씨) · 날씨 통계 탭(한눈에 보기의 질문 카드, 연도별 비교, 지역별 비교, 생활 속 날씨·날씨 기록 안내).
    계산은 모두 서버(/api/stats/*, stats-engine.mjs)에서 한다. 이 파일은 조건 고르기·그리기·주소 상태만 맡는다.
    그래프·표·CSV 는 같은 응답 값을 쓴다(그래프 점 = 응답 rows, 표 = 응답 table, CSV = 같은 주소 + format=csv). */
 (function () {
@@ -1350,7 +1350,7 @@
       $id("phGroup").textContent = "날씨 통계";
       $id("phTitle").textContent = TAB_LABEL[tab];
       $id("phDesc").textContent = TAB_DESC[tab];
-      document.title = `${TAB_LABEL[tab]} · 날씨 통계 · 누니날씨`;
+      document.title = `${TAB_LABEL[tab]} · 날씨 통계 · 이날`;
     }
     for (const t of TABS) {
       const el = $id(PANEL[t]);
