@@ -143,3 +143,4 @@
 @media (min-width:900px) { .rts-swipe { grid-auto-columns:calc((100% - 20px)/3); } }
 .rh-fold > summary { cursor:pointer; font-weight:700; font-size:15px; }
 .rh-fold[open] > summary { margin-bottom:10px; }
+@media (max-width:720px) { .rh-qa { display:grid; grid-auto-flow:column; grid-template-columns:none; grid-auto-columns:72%; overflow-x:auto; scroll-snap-type:x mandatory; } .rh-q { scroll-snap-align:start; } }

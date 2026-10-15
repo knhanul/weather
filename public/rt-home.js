@@ -4,7 +4,8 @@
   const sg = (d, u = "℃") => (d == null ? "–" : `${d > 0 ? "+" : d < 0 ? "−" : "±"}${Math.abs(d)}${u}`);
   const get = async (u) => { const r = await fetch(u); const d = await r.json(); if (!r.ok || d.ok === false) throw new Error(d.message || `HTTP ${r.status}`); return d; };
   const ICON = { 맑음: "☀️", 구름많음: "⛅", 흐림: "☁️", 비: "🌧️", "비/눈": "🌨️", 눈: "❄️", 소나기: "🌦️", 빗방울: "🌦️", "빗방울눈날림": "🌨️", 눈날림: "🌨️" };
-  const icon = (h) => ICON[h?.pty && h.pty !== "없음" ? h.pty : h?.sky] || "·";
+  const iconTxt = (t) => (!t ? "" : ICON[t] || (/눈/.test(t) ? "❄️" : /비|소나기/.test(t) ? "🌧️" : /흐/.test(t) ? "☁️" : /구름/.test(t) ? "⛅" : /맑/.test(t) ? "☀️" : ""));
+  const icon = (h) => iconTxt(h?.pty && h.pty !== "없음" ? h.pty : h?.sky) || "·";
   const wx = (h) => (h?.pty && h.pty !== "없음" ? h.pty : h?.sky) || null;
   const ymdK = (s) => `${s.slice(0, 4)}년 ${Number(s.slice(5, 7))}월 ${Number(s.slice(8, 10))}일`;
   const DOW = "일월화수목금토";
@@ -74,7 +75,7 @@
   function weekHtml(f) {
     const ds = (f.days || []).filter((x) => x.max != null || x.min != null);
     if (!ds.length) return "";
-    return `<section class="card rh-week" aria-label="이번 주 예보"><h2>이번 주 <span class="rt-badge fc">예보</span> <a class="rh-more" href="#/forecast">날씨 예보 ›</a></h2><div class="rh-chips">${ds.map((x) => { const c = x.maxCmp?.[0]; return `<div class="rh-chip day"><span>${x.offset === 0 ? "오늘" : x.offset === 1 ? "내일" : `${Number(x.date.slice(8))}(${dow(x.date)})`}</span><i>${ICON[x.sky] || ICON[x.wf] || "·"}</i><b>${x.max ?? "–"}°</b><small>${x.min ?? "–"}°</small>${c && c.diff != null && Math.abs(c.diff) >= 1 ? `<em class="${c.diff > 0 ? "up" : "down"}">${sg(c.diff)}</em>` : ""}${x.pop != null ? `<small>☂${x.pop}%</small>` : ""}</div>`; }).join("")}</div><p class="rt-note">최고기온 옆 숫자는 1990년 이후 같은 시기 최고기온 평균과의 차이(1℃ 이상만). 단기예보·중기예보.</p></section>`;
+    return `<section class="card rh-week" aria-label="이번 주 예보"><h2>이번 주 <span class="rt-badge fc">예보</span> <a class="rh-more" href="#/forecast">날씨 예보 ›</a></h2><div class="rh-chips">${ds.map((x) => { const c = x.maxCmp?.[0]; return `<div class="rh-chip day"><span>${x.offset === 0 ? "오늘" : x.offset === 1 ? "내일" : `${Number(x.date.slice(8))}(${dow(x.date)})`}</span><i>${iconTxt(x.sky || x.wf) || "–"}</i><b>${x.max ?? "–"}°</b><small>${x.min ?? "–"}°</small>${c && c.diff != null && Math.abs(c.diff) >= 1 ? `<em class="${c.diff > 0 ? "up" : "down"}">${sg(c.diff)}</em>` : ""}${x.pop != null ? `<small>☂${x.pop}%</small>` : ""}</div>`; }).join("")}</div><p class="rt-note">최고기온 옆 숫자는 1990년 이후 같은 시기 최고기온 평균과의 차이(1℃ 이상만). 단기예보·중기예보.</p></section>`;
   }
   function histHtml(t, sim) {
     const p = t.current?.compare?.ta?.[0];
