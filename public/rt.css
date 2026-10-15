@@ -98,3 +98,13 @@
 .rts-sim { margin:0 0 6px; padding-left:20px; font-size:13.5px; } .rts-sim li { margin:2px 0; } .rts-sim small { color:var(--muted); display:block; }
 .rtad-miss summary { cursor:pointer; margin-top:8px; } .rtad-miss ul { margin:4px 0; padding-left:20px; font-size:13px; max-height:240px; overflow:auto; } .rtad-log { margin-top:8px; font-size:13.5px; }
 #rtx, #rtxOv { min-width:0; } #rtx > *, #rtxOv > * { min-width:0; max-width:100%; } .rtx-card .tbl-wrap { max-width:100%; overflow-x:auto; }
+/* 크게 보기(chart-full.js 공통) — 오늘의 날씨·날씨 예보 시간별 그래프 */
+.rt-hwrap { position:relative; }
+.rt-hwrap .rt-hscroll { padding-top:0; }
+.cf-overlay .rt-fs svg { touch-action:none; }
+.cf-overlay .rt-fs-tip { position:absolute; top:0; left:40px; right:44px; z-index:2; pointer-events:none; font-size:13px; line-height:1.4; background:rgba(238,244,255,.92); border-radius:8px; padding:4px 10px; font-variant-numeric:tabular-nums; }
+.cf-overlay .rt-fs-tip:empty { display:none; }
+.cf-legend .rt-legend { margin:0; }
+.cf-legend .rt-lgk { display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--c); }
+.cf-legend .rt-lgk:not(.on) { opacity:.45; text-decoration:line-through; }
+.cf-legend .rt-lgk::before { content:""; width:14px; height:2px; background:var(--c); }

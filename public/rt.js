@@ -140,12 +140,23 @@
   }
   // 시간별 그래프(SVG): 관측 = 실선, 예보 = 점선 + 음영 + '지금' 세로선, 과거 평균 3선(켜고 끄기)
   function chartCard(d, ids) {
-    const W = 720, H = 260, L = 38, R = 10, T = 14, B = 26;
+    const svg = todaySvg(d, ids, 720, 260, state.sel);
+    if (!svg) return `<section class="card"><h2>오늘 시간별 기온</h2><p class="rt-ins">그릴 자료가 없습니다</p></section>`;
+    const names = { all: d.periods[0].label, r10: d.periods[1].label, r5: d.periods[2].label };
+    const legend = `<div class="rt-legend"><span class="lg-obs">━ 실황(관측)</span><span class="lg-fc">┅ 예보</span>${["all", "r10", "r5"].filter((k) => ids.includes(k)).map((k) => `<button type="button" data-line="${k}" aria-pressed="${state.show[k]}" style="--c:${COLORS[k]}" class="${state.show[k] ? "on" : ""}">${esc(names[k])}</button>`).join("")}</div>`;
+    return `<section class="card rt-chart"><h2>오늘 시간별 기온과 과거 평균</h2>${legend}<div class="rt-svg-wrap" id="rtChartHost">${svg}${window.ChartFull ? window.ChartFull.button() : ""}</div><div id="rtTip" class="rt-tip">${tipHtml(d, state.sel ?? lastObsHour(d) ?? 12, ids)}</div><p class="rt-note">관측과 예보는 이어 그리지 않습니다. 그래프를 누르거나 마우스를 올리면 그 시각의 값과 기준별 차이를 보여 줍니다.</p></section>`;
+  }
+  const lastObsHour = (d) => { const h = [...d.hours].reverse().find((x) => x.obs != null); return h ? h.hour : null; };
+  // 시간별 기온 SVG(카드 = 720×260 viewBox, 크게 보기 = 겹친 화면 크기로 다시 그림). 가로 위치 → 시각은 todayHourAt
+  const TL = 38, TR = 10;
+  const todayHourAt = (fr, W) => Math.max(0, Math.min(23, Math.round(((fr * W - TL) / (W - TL - TR)) * 23)));
+  function todaySvg(d, ids, W, H, sel) {
+    const L = TL, R = TR, T = 14, B = 26;
     const hrs = d.hours;
     const lines = ["all", "r10", "r5"].filter((k) => ids.includes(k) && state.show[k]);
     const vals = [];
     for (const h of hrs) { if (h.obs != null) vals.push(h.obs); if (h.fcst != null) vals.push(h.fcst); for (const k of lines) if (h.base[k] != null) vals.push(h.base[k]); }
-    if (!vals.length) return `<section class="card"><h2>오늘 시간별 기온</h2><p class="rt-ins">그릴 자료가 없습니다</p></section>`;
+    if (!vals.length) return "";
     let lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1);
     const x = (h) => L + (h / 23) * (W - L - R), y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
     const path = (pts) => { let s = "", pen = false; for (const [h, v] of pts) { if (v == null) { pen = false; continue; } s += `${pen ? "L" : "M"}${x(h).toFixed(1)},${y(v).toFixed(1)}`; pen = true; } return s; };
@@ -163,11 +174,9 @@
     for (const h of hrs) if (h.fcst != null) svg += `<circle cx="${x(h.hour)}" cy="${y(h.fcst)}" r="2.6" fill="#fff" stroke="${COLORS.fcst}" stroke-width="1.5"/>`;
     svg += `<path d="${path(hrs.map((h) => [h.hour, h.obs]))}" fill="none" stroke="${COLORS.obs}" stroke-width="2.6"/>`;
     for (const h of hrs) if (h.obs != null) svg += `<circle cx="${x(h.hour)}" cy="${y(h.obs)}" r="2.6" fill="${COLORS.obs}"/>`;
-    if (state.sel != null) svg += `<line x1="${x(state.sel)}" x2="${x(state.sel)}" y1="${T}" y2="${H - B}" stroke="#0d1b3d" opacity=".35"/>`;
+    if (sel != null) svg += `<line class="rt-sel" x1="${x(sel)}" x2="${x(sel)}" y1="${T}" y2="${H - B}" stroke="#0d1b3d" opacity=".35"/>`;
     svg += `<rect class="rt-hit" x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent"/></svg>`;
-    const names = { all: d.periods[0].label, r10: d.periods[1].label, r5: d.periods[2].label };
-    const legend = `<div class="rt-legend"><span class="lg-obs">━ 실황(관측)</span><span class="lg-fc">┅ 예보</span>${["all", "r10", "r5"].filter((k) => ids.includes(k)).map((k) => `<button type="button" data-line="${k}" aria-pressed="${state.show[k]}" style="--c:${COLORS[k]}" class="${state.show[k] ? "on" : ""}">${esc(names[k])}</button>`).join("")}</div>`;
-    return `<section class="card rt-chart"><h2>오늘 시간별 기온과 과거 평균</h2>${legend}<div class="rt-svg-wrap">${svg}</div><div id="rtTip" class="rt-tip">${tipHtml(d, state.sel ?? nowH ?? 12, ids)}</div><p class="rt-note">관측과 예보는 이어 그리지 않습니다. 그래프를 누르거나 마우스를 올리면 그 시각의 값과 기준별 차이를 보여 줍니다.</p></section>`;
+    return svg;
   }
   function tipHtml(d, hour, ids) {
     const h = d.hours[hour];
@@ -182,14 +191,54 @@
     const svg = hit.ownerSVGElement;
     const pick = (ev) => {
       const r = svg.getBoundingClientRect();
-      const px = ((ev.clientX - r.left) / r.width) * 720;
-      const h = Math.max(0, Math.min(23, Math.round(((px - 38) / (720 - 48)) * 23)));
+      const h = todayHourAt((ev.clientX - r.left) / r.width, 720);
       if (h === state.sel) return;
       state.sel = h;
       $("rtTip").innerHTML = tipHtml(state.data, h, NWBasis.ids(NWBasis.get()));
     };
     svg.addEventListener("pointermove", pick);
     svg.addEventListener("pointerdown", pick);
+    // 크게 보기(chart-full.js 공통): 겹친 화면 크기로 다시 그리고, 툴팁은 그래프 위에
+    const host = $("rtChartHost");
+    if (host && window.ChartFull) {
+      window.ChartFull.register(host, {
+        hostClass: "rt-fs",
+        title: () => `오늘 시간별 기온과 과거 평균 — ${state.data.station.name}`,
+        sub: () => `${state.data.date} · 관측 실선, 예보 점선 · 단위 ℃`,
+        legend: () => window.RTFull.legend(host.closest(".card")),
+        source: () => "자료: 기상청 초단기실황·초단기/단기예보, 과거 평균 ASOS · 시간대 Asia/Seoul",
+        render: (el, size) => {
+          const d = state.data, ids = NWBasis.ids(NWBasis.get());
+          const W = size.width, sel = state.sel ?? lastObsHour(d) ?? 12;
+          window.RTFull.draw(el, todaySvg(d, ids, W, size.height, sel), (fr) => todayHourAt(fr, W), (h) => (TL + (h / 23) * (W - TL - TR)).toFixed(1), (h) => tipHtml(d, h, ids), sel);
+        },
+      });
+    }
   }
+  // rt.js·rt-forecast.js 가 함께 쓰는 '크게 보기' 그리기(겹친 화면 안 SVG + 툴팁 + 탭/마우스로 시각 고르기)
+  window.RTFull = {
+    legend(card) {
+      const lg = card && card.querySelector(".rt-legend");
+      if (!lg) return null;
+      const c = lg.cloneNode(true);
+      c.querySelectorAll("button").forEach((b) => { const sp = document.createElement("span"); sp.className = `rt-lgk ${b.className}`; sp.setAttribute("style", b.getAttribute("style") || ""); sp.textContent = b.textContent; b.replaceWith(sp); });
+      return c;
+    },
+    // svg: sel 세로선(.rt-sel)을 포함해 그린 문자열, idxAt(가로 비율) → 칸, xAt(칸) → viewBox x
+    draw(el, svg, idxAt, xAt, tipAt, sel0) {
+      el.innerHTML = `${svg}<div class="rt-fs-tip" role="status">${tipAt(sel0)}</div>`;
+      const s = el.querySelector("svg"), tip = el.querySelector(".rt-fs-tip"), ln = s.querySelector(".rt-sel");
+      let cur = sel0;
+      const pick = (ev) => {
+        const i = idxAt(window.ChartFull.frac(ev, s));
+        if (i === cur) return;
+        cur = i;
+        tip.innerHTML = tipAt(i);
+        if (ln) { ln.setAttribute("x1", xAt(i)); ln.setAttribute("x2", xAt(i)); }
+      };
+      s.addEventListener("pointermove", pick);
+      s.addEventListener("pointerdown", pick);
+    },
+  };
   window.RT = { show, station: () => state.station };
 })();

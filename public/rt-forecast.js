@@ -80,6 +80,7 @@
     if (d.changes.length) h += `<section class="card"><h2>발표마다 바뀐 최고·최저기온 예보</h2><div class="tbl-wrap"><table class="rt-tbl"><thead><tr><th>날짜</th><th>최고기온 (발표 → 값)</th><th>최저기온</th></tr></thead><tbody>${d.changes.map((c) => `<tr><th scope="row">${esc(dlab(c.date))}</th><td>${seqTxt(c.max)}</td><td>${seqTxt(c.min)}</td></tr>`).join("")}</tbody></table></div><p class="rt-note">저장된 발표 회차별 값(단기예보 TMX·TMN, 중기기온 taMax·taMin). 맨 오른쪽이 가장 최근 발표.</p></section>`;
     h += `<details class="card rt-method"><summary>계산 기준</summary><ul><li>${esc(d.method.rule)}</li><li>${esc(d.method.note)}</li><li>${esc(d.mapping?.note || "")}</li><li>최신 발표: 단기 ${esc(hm(d.releases?.vilage?.base) || "없음")}, 초단기 ${esc(hm(d.releases?.ultra?.base) || "없음")}, 중기기온 ${esc(hm(d.releases?.midTa) || "없음")}, 중기육상 ${esc(hm(d.releases?.midLand) || "없음")}.</li><li>시간별 기온 비교 = 같은 날짜 ±7일·같은 정시 ASOS 평균, 일별 = 공식 일자료 최고·최저기온 평균. 예보값으로 기록 경신을 확정하지 않습니다.</li></ul></details>`;
     $("fcOut").innerHTML = h;
+    bindFull();
   }
   // 값이 바뀐 발표만(첫 발표 + 바뀐 회차), 최근 6개
   const changesOnly = (a) => a.filter((x, i) => i === 0 || x.value !== a[i - 1].value || x.source !== a[i - 1].source);
@@ -95,8 +96,19 @@
   function hourlyCard(d, ids) {
     const hrs = d.hours.slice(0, 72);
     if (!hrs.length) return `<section class="card"><h2>시간별 예보</h2><p class="rt-ins">예보 자료가 없습니다</p></section>`;
-    const W = Math.max(720, hrs.length * 14), H = 220, L = 34, R = 8, T = 12, B = 26;
     const lines = ["all", "r10", "r5"].filter((k) => ids.includes(k) && state.show[k]);
+    const svg = fcSvg(hrs, lines, Math.max(720, hrs.length * 14), 220, null);
+    const names = Object.fromEntries(d.periods.map((p) => [p.id, p.label]));
+    const legend = `<div class="rt-legend"><span class="lg-fc">┅ 예보기온</span>${["all", "r10", "r5"].filter((k) => ids.includes(k)).map((k) => `<button type="button" data-line="${k}" aria-pressed="${state.show[k]}" style="--c:${COLORS[k]}" class="${state.show[k] ? "on" : ""}">${esc(names[k])}</button>`).join("")}</div>`;
+    const rows = hrs.map((x) => `<tr><th scope="row">${esc(hm(x.time))}</th><td>${esc(x.pty && x.pty !== "없음" ? x.pty : x.sky || "–")}</td><td><b>${x.ta ?? "–"}℃</b> ${ids.map((id) => `<small class="${cls(x.diff[id])}">${sg(x.diff[id])}</small>`).join(" ")}</td><td>${x.pop == null ? "–" : `${x.pop}%`}</td><td>${esc(x.pcp ?? "–")}</td><td>${x.hm ?? "–"}%</td><td>${x.ws ?? "–"}m/s</td><td><small>${esc(x.source)} ${esc(hm(x.base))}</small></td></tr>`).join("");
+    return `<section class="card rt-chart"><h2>시간별 예보</h2>${legend}<div class="rt-hwrap" id="fcChartHost"><div class="rt-hscroll">${svg}</div>${window.ChartFull ? window.ChartFull.button() : ""}</div><details class="rt-hdet"><summary>시간별 표 보기 (${hrs.length}시간)</summary><div class="tbl-wrap"><table class="rt-tbl"><thead><tr><th>시각</th><th>하늘·강수</th><th>기온 (기준별 차이)</th><th>강수확률</th><th>강수량</th><th>습도</th><th>풍속</th><th>출처·발표</th></tr></thead><tbody>${rows}</tbody></table></div></details><p class="rt-note">차이 = 예보기온 − 같은 날짜 ±7일·같은 정시 ASOS 평균(${ids.map((id) => esc(names[id])).join(", ")} 순). 6시간 안은 초단기예보, 그 뒤는 단기예보.</p></section>`;
+  }
+  // 시간별 예보 SVG(카드 = 가로 스크롤 폭, 크게 보기 = 겹친 화면 크기로 다시 그림)
+  const FL = 34, FR = 8;
+  const fcX = (i, n, W) => FL + (i / Math.max(1, n - 1)) * (W - FL - FR);
+  const fcIdxAt = (fr, n, W) => Math.max(0, Math.min(n - 1, Math.round(((fr * W - FL) / (W - FL - FR)) * Math.max(1, n - 1))));
+  function fcSvg(hrs, lines, W, H, sel) {
+    const L = FL, R = FR, T = 12, B = 26;
     const vals = [];
     for (const x of hrs) { if (x.ta != null) vals.push(x.ta); for (const k of lines) if (x.avg[k] != null) vals.push(x.avg[k]); }
     const lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1);
@@ -106,11 +118,30 @@
     for (let t = Math.ceil(lo / 2) * 2; t <= hi; t += 2) svg += `<line x1="${L}" x2="${W - R}" y1="${Y(t)}" y2="${Y(t)}" stroke="#e0e8f4"/><text x="${L - 5}" y="${Y(t) + 4}" text-anchor="end" font-size="11" fill="#5e7090">${t}</text>`;
     hrs.forEach((x, i) => { const hh = +x.time.slice(11, 13); if (hh === 0) svg += `<line x1="${X(i)}" x2="${X(i)}" y1="${T}" y2="${H - B}" stroke="#c9d6ea"/><text x="${X(i) + 3}" y="${T + 10}" font-size="11" fill="#5e7090">${esc(dlab(x.time.slice(0, 10)))}</text>`; if (hh % 6 === 0) svg += `<text x="${X(i)}" y="${H - 8}" text-anchor="middle" font-size="10.5" fill="#5e7090">${hh}시</text>`; });
     for (const k of lines) svg += `<path d="${path((x) => x.avg[k])}" fill="none" stroke="${COLORS[k]}" stroke-width="1.5" opacity=".85"/>`;
-    svg += `<path d="${path((x) => x.ta)}" fill="none" stroke="${COLORS.fc}" stroke-width="2.4" stroke-dasharray="6 4"/></svg>`;
-    const names = Object.fromEntries(d.periods.map((p) => [p.id, p.label]));
-    const legend = `<div class="rt-legend"><span class="lg-fc">┅ 예보기온</span>${["all", "r10", "r5"].filter((k) => ids.includes(k)).map((k) => `<button type="button" data-line="${k}" aria-pressed="${state.show[k]}" style="--c:${COLORS[k]}" class="${state.show[k] ? "on" : ""}">${esc(names[k])}</button>`).join("")}</div>`;
-    const rows = hrs.map((x) => `<tr><th scope="row">${esc(hm(x.time))}</th><td>${esc(x.pty && x.pty !== "없음" ? x.pty : x.sky || "–")}</td><td><b>${x.ta ?? "–"}℃</b> ${ids.map((id) => `<small class="${cls(x.diff[id])}">${sg(x.diff[id])}</small>`).join(" ")}</td><td>${x.pop == null ? "–" : `${x.pop}%`}</td><td>${esc(x.pcp ?? "–")}</td><td>${x.hm ?? "–"}%</td><td>${x.ws ?? "–"}m/s</td><td><small>${esc(x.source)} ${esc(hm(x.base))}</small></td></tr>`).join("");
-    return `<section class="card rt-chart"><h2>시간별 예보</h2>${legend}<div class="rt-hscroll">${svg}</div><details class="rt-hdet"><summary>시간별 표 보기 (${hrs.length}시간)</summary><div class="tbl-wrap"><table class="rt-tbl"><thead><tr><th>시각</th><th>하늘·강수</th><th>기온 (기준별 차이)</th><th>강수확률</th><th>강수량</th><th>습도</th><th>풍속</th><th>출처·발표</th></tr></thead><tbody>${rows}</tbody></table></div></details><p class="rt-note">차이 = 예보기온 − 같은 날짜 ±7일·같은 정시 ASOS 평균(${ids.map((id) => esc(names[id])).join(", ")} 순). 6시간 안은 초단기예보, 그 뒤는 단기예보.</p></section>`;
+    svg += `<path d="${path((x) => x.ta)}" fill="none" stroke="${COLORS.fc}" stroke-width="2.4" stroke-dasharray="6 4"/>`;
+    if (sel != null) svg += `<line class="rt-sel" x1="${X(sel).toFixed(1)}" x2="${X(sel).toFixed(1)}" y1="${T}" y2="${H - B}" stroke="#0d1b3d" opacity=".35"/>`;
+    return svg + `</svg>`;
+  }
+  function fcTip(x, ids) {
+    if (!x) return "";
+    return `<b>${esc(hm(x.time))}</b> ${esc(x.pty && x.pty !== "없음" ? x.pty : x.sky || "")} · 기온 <b>${x.ta ?? "–"}℃</b> ${ids.map((id) => `<span class="${cls(x.diff[id])}">${sg(x.diff[id])}</span>`).join(" ")} · 강수확률 ${x.pop == null ? "–" : `${x.pop}%`} · 강수량 ${esc(x.pcp ?? "–")} · 습도 ${x.hm ?? "–"}% · 풍속 ${x.ws ?? "–"}m/s <small>${esc(x.source)} ${esc(hm(x.base))}</small>`;
+  }
+  function bindFull() {
+    const host = $("fcChartHost");
+    if (!host || !window.ChartFull || !window.RTFull) return;
+    window.ChartFull.register(host, {
+      hostClass: "rt-fs",
+      title: () => `시간별 예보 — ${state.data.station.name}`,
+      sub: () => `예보기온(점선)과 같은 날짜 ±7일·같은 정시 과거 평균 · 단위 ℃`,
+      legend: () => window.RTFull.legend(host.closest(".card")),
+      source: () => "자료: 기상청 초단기·단기예보, 과거 평균 ASOS · 시간대 Asia/Seoul",
+      render: (el, size) => {
+        const d = state.data, ids = NWBasis.ids(NWBasis.get());
+        const hrs = d.hours.slice(0, 72), n = hrs.length, W = size.width;
+        const lines = ["all", "r10", "r5"].filter((k) => ids.includes(k) && state.show[k]);
+        window.RTFull.draw(el, fcSvg(hrs, lines, W, size.height, 0), (fr) => fcIdxAt(fr, n, W), (i) => fcX(i, n, W).toFixed(1), (i) => fcTip(hrs[i], ids), 0);
+      },
+    });
   }
   window.RTF = { show, station: () => state.station };
 })();
