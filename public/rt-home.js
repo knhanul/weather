@@ -34,7 +34,7 @@
     const stale = c.freshness?.state === "stale";
     const p = pickP(c.compare?.ta);
     const m = p && p.mean != null ? mood(p.diff) : null;
-    const line = stale ? esc(c.freshness.text) : m ? `${m.replace("평소", p.id === "all" ? "평소" : String(p.label).replace(" 평균", ""))} ${part(c.hour)}` : `${p ? esc(nm(p)) + " " : ""}비교 데이터 부족`;
+    const line = stale ? esc(c.freshness.text) : m ? `${p.id === "all" ? m : m.replace("평소와", `${p.label}과`).replace("평소보다", `${p.label}보다`)} ${part(c.hour)}` : `${p ? esc(nm(p)) + " " : ""}비교 데이터 부족`;
     // 분포 띠: 같은 시기·시각 과거 최저~최고, 10·90백분위, 지금 위치(표본 60개 이상일 때만)
     let meter = "";
     if (p && (p.percentile == null || !p.min || !p.max)) meter = `<p class="rt-ins rh-meter">${esc(nm(p))} 분포·순위: 비교 데이터 부족${p.samples != null ? `(표본 ${p.samples}개, 60개 이상 필요)` : ""}</p>`;
