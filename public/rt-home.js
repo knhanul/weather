@@ -50,7 +50,7 @@
   function hoursHtml(f) {
     const hs = (f.hours || []).slice(0, 12);
     if (!hs.length) return `<p class="rt-ins">예보 자료가 없습니다</p>`;
-    return hs.map((h, i) => `<div class="rh-chip${h.pop >= 60 ? " wet" : ""}"><span>${i === 0 ? "지금" : `${Number(h.time.slice(11, 13))}시`}</span><i aria-label="${esc(wx(h) || "")}">${icon(h)}</i><b>${h.ta ?? "–"}°</b><small>${h.pop == null ? "" : `☂${h.pop}%`}</small></div>`).join("");
+    return hs.map((h) => `<div class="rh-chip${h.pop >= 60 ? " wet" : ""}"><span>${Number(h.time.slice(11, 13))}시</span><i aria-label="${esc(wx(h) || "")}">${icon(h)}</i><b>${h.ta ?? "–"}°</b><small>${h.pop == null ? "" : `☂${h.pop}%`}</small></div>`).join("");
   }
   function tipHtml(t, f) {
     const hs = (f.hours || []).slice(0, 12);
