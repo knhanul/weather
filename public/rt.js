@@ -106,8 +106,14 @@
         </section>`
       : `<section class="card rt-now"><p class="result bad">${esc(c.message || "오늘 실황 자료가 없습니다")}</p></section>`;
     const story = d.stories.length ? `<section class="card rt-stories" aria-label="오늘의 날씨 이야기"><h2>오늘의 날씨 이야기</h2>${d.stories.map((s) => `<article class="rt-story"><h3>${esc(s.title)} <b>${esc(s.value)}</b></h3><p>${esc(s.text)}</p><p class="rt-basis-row">${s.periods.filter((p) => ids.includes(idOf(p.label))).map((p) => `<span>${esc(p.label.replace(" 평균", ""))} ${p.mean != null ? `${p.mean}℃(${sg(p.diff)})` : p.percentile != null ? `${p.percentile}백분위` : "비교 데이터 부족"}</span>`).join("")}</p><p class="rt-note">근거: ${esc(s.basis)} · 기준 ${esc(s.asOf || "")}</p></article>`).join("")}</section>` : "";
-    $("rtOut").innerHTML = head + `<div id="rtsBox">${story}</div>` + chartCard(d, ids) + `<div id="rtsSim"></div>` + distCard(d, ids) + dayCard(d, ids) + otherCard(d, ids) + methodCard(d);
+    // 첫 화면: 히어로·다음 12시간·옷차림 참고·생활 질문 → 이야기(넘겨 보기) → 이번 주 → 이맘때의 기록 → 그래프 → 기존 상세(접힘)
+    const H = window.RTHome;
+    const fold = (t, html) => (html ? `<details class="card rh-fold"><summary>${t}</summary>${html.replace(/^<section class="card[^"]*"[^>]*>|<\/section>$/g, "")}</details>` : "");
+    $("rtOut").innerHTML = H
+      ? H.hero(d) + `<div id="rtsBox">${story}</div><div id="rhWeek"></div><div id="rhHist"></div>` + chartCard(d, ids) + fold("지금 값과 3개 기준 평균 비교", head) + `<div id="rtsSim"></div>` + fold("같은 시기·같은 시각 분포에서 지금 위치", distCard(d, ids)) + fold("오늘 최고·최저기온과 과거 평균", dayCard(d, ids)) + fold("습도·강수·바람도 비교", otherCard(d, ids)) + methodCard(d)
+      : head + `<div id="rtsBox">${story}</div>` + chartCard(d, ids) + `<div id="rtsSim"></div>` + distCard(d, ids) + dayCard(d, ids) + otherCard(d, ids) + methodCard(d);
     bindChart();
+    if (H) H.fill(d);
   }
   const idOf = (label) => (/1990|이후/.test(label) ? "all" : /10년/.test(label) ? "r10" : "r5");
   function distCard(d, ids) {

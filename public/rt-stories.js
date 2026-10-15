@@ -6,7 +6,7 @@
   const ymdK = (s) => `${s.slice(0, 4)}년 ${Number(s.slice(5, 7))}월 ${Number(s.slice(8, 10))}일`;
   function storiesHtml(d) {
     if (!d.stories.length) return `<section class="card rt-stories" aria-label="오늘의 날씨 이야기"><h2>오늘의 날씨 이야기</h2><p class="rt-ins">오늘은 평소와 크게 다른 점이 없습니다(후보 ${d.candidates}개 모두 선별 기준 미달).</p></section>`;
-    return `<section class="card rt-stories" aria-label="오늘의 날씨 이야기"><h2>오늘의 날씨 이야기 <small class="rts-sub">후보 ${d.candidates}개 중 ${d.stories.length}개 자동 선별</small></h2>${d.staleNote ? `<p class="rt-ins">${esc(d.staleNote)}</p>` : ""}${d.stories.map((s) => `<article class="rt-story"><h3><span class="rt-badge ${s.kind === "관측" ? "ok" : "fc"}">${esc(s.kind)}</span> ${esc(s.title)}</h3><p>${esc(s.text)}</p><p class="rt-note">근거: ${esc(s.basis)}</p></article>`).join("")}<details class="rts-why"><summary>선별 방법</summary><p class="rt-note">${esc(d.rule.text)}</p>${d.dropped.length ? `<p class="rt-note">빠진 후보: ${d.dropped.map((x) => `${esc(x.key)}(${esc(x.reason)})`).join(", ")}</p>` : ""}</details></section>`;
+    return `<section class="card rt-stories" aria-label="오늘의 날씨 이야기"><h2>오늘의 날씨 이야기 <small class="rts-sub">후보 ${d.candidates}개 중 ${d.stories.length}개 자동 선별</small></h2>${d.staleNote ? `<p class="rt-ins">${esc(d.staleNote)}</p>` : ""}<div class="rts-swipe">${d.stories.map((s, i) => `<article class="rt-story"><small class="rts-n">${i + 1}/${d.stories.length}</small><h3><span class="rt-badge ${s.kind === "관측" ? "ok" : "fc"}">${esc(s.kind)}</span> ${esc(s.title)}</h3><p>${esc(s.text)}</p><p class="rt-note">근거: ${esc(s.basis)}</p></article>`).join("")}</div><details class="rts-why"><summary>선별 방법</summary><p class="rt-note">${esc(d.rule.text)}</p>${d.dropped.length ? `<p class="rt-note">빠진 후보: ${d.dropped.map((x) => `${esc(x.key)}(${esc(x.reason)})`).join(", ")}</p>` : ""}</details></section>`;
   }
   function simList(r) {
     if (!r.ok) return `<p class="rt-ins">${esc(r.message)}</p>`;
@@ -26,7 +26,7 @@
     sim.innerHTML = `<section class="card"><p class="rt-load">과거 유사일 찾는 중…</p></section>`;
     const [s, t, y] = await Promise.allSettled([get(`/api/rt/stories?station=${st}`), get(`/api/rt/similar?station=${st}&day=today`), get(`/api/rt/similar?station=${st}&day=yesterday`)]);
     if ($("rtsBox") !== box) return; // 다시 그려졌으면 버림
-    if (s.status === "fulfilled") box.innerHTML = storiesHtml(s.value);
+    if (s.status === "fulfilled") { box.innerHTML = storiesHtml(s.value); document.dispatchEvent(new CustomEvent("rt:stories", { detail: s.value })); }
     // 오늘·어제 중 받은 쪽만 보여 주고, 못 받은 쪽은 사유만 적는다(값을 지어내지 않음)
     const one = (r, day) => r.status === "fulfilled" ? r.value : { ok: false, day, unavailable: true, message: r.reason?.message || "응답 없음" };
     const tv = one(t, "today"), yv = one(y, "yesterday");
