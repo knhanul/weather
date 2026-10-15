@@ -2132,6 +2132,7 @@
     }
     // 예전 주소(#/hourly, #/daily, #/download)는 새 주소로 바꿔 계속 쓸 수 있게(뒤에 붙은 ?조건은 그대로)
     const ROUTE_ALIAS = { "/hourly": "/hourly-weather", "/daily": "/daily-weather", "/download": "/view-settings" };
+    const ROUTE_KNOWN = new Set(["/stats/overview", "/questions", "/today", "/forecast", "/stats/yearly", "/stats/region", "/stats/life", "/stats/records", "/hourly-weather", "/daily-weather", "/view-settings", "/collect", "/gaps", "/jobs", "/stations", "/provider", "/users", ...Object.keys(ROUTE_ALIAS)]);
     function route() {
       {
         const [p0, q0] = location.hash.replace("#", "").split("?");
@@ -2145,6 +2146,11 @@
           qp.delete("view");
           history.replaceState(history.state, "", `#/questions${qp.toString() ? `?${qp}` : ""}`);
         }
+      }
+      {
+        // 첫 화면: 주소에 화면이 없거나(#, #/) 모르는 화면이면 오늘의 날씨(#/today)로(뒤에 붙은 ?조건은 그대로)
+        const [p2, q2] = location.hash.replace("#", "").split("?");
+        if (!ROUTE_KNOWN.has(p2 || "/") || (p2 || "/") === "/") history.replaceState(history.state, "", `#/today${q2 ? `?${q2}` : ""}`);
       }
       const h = location.hash.replace("#", "").split("?")[0] || "/";
       const statsTab = { "/": "overview", "/stats/overview": "overview", "/stats/yearly": "yearly", "/stats/region": "region", "/stats/life": "life", "/stats/records": "records", "/questions": "questions" }[h] || (h.startsWith("/stats/") ? "overview" : null);
