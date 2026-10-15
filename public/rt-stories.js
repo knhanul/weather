@@ -2,7 +2,9 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-  const get = async (u) => { const r = await fetch(u); const d = await r.json(); if (!r.ok || d.ok === false) throw new Error(d.message || `HTTP ${r.status}`); return d; };
+  const memo = new Map();
+  const get0 = async (u) => { const r = await fetch(u); const d = await r.json(); if (!r.ok || d.ok === false) throw new Error(d.message || `HTTP ${r.status}`); return d; };
+  const get = (u) => { const c = memo.get(u); if (c && Date.now() - c.at < 60000) return c.p; const p = get0(u); memo.set(u, { at: Date.now(), p }); p.catch(() => memo.delete(u)); return p; };
   const ymdK = (s) => `${s.slice(0, 4)}년 ${Number(s.slice(5, 7))}월 ${Number(s.slice(8, 10))}일`;
   function storiesHtml(d) {
     if (!d.stories.length) return `<section class="card rt-stories" aria-label="오늘의 날씨 이야기"><h2>오늘의 날씨 이야기</h2><p class="rt-ins">오늘은 평소와 크게 다른 점이 없습니다(후보 ${d.candidates}개 모두 선별 기준 미달).</p></section>`;
