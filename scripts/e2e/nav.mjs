@@ -22,9 +22,9 @@ const navState = (page) => page.evaluate(() => ({ hash: location.hash, title: do
   await page.waitForSelector("#chart svg, .dchart svg", { timeout: 30000 }).catch(() => {});
   let s = await navState(page);
   const sub = await page.$$eval("#navStats a", (a) => a.map((x) => x.textContent.trim()));
-  ok(JSON.stringify(sub) === JSON.stringify(["한눈에 보기", "연도별 비교", "지역별 비교", "생활 속 날씨", "날씨 기록", "질문으로 보는 날씨"]), `하위 메뉴 ${sub}`);
+  ok(JSON.stringify(sub) === JSON.stringify(["한눈에 보기", "연도별 비교", "지역별 비교", "생활 속 날씨", "날씨 기록"]), `하위 메뉴 ${sub}`);
   const main = await page.$$eval("aside .nav-main > a, aside .nav-main > .nav-row > a", (a) => a.map((x) => x.textContent.trim()));
-  ok(JSON.stringify(main) === JSON.stringify(["오늘 날씨", "내일 날씨", "지난 날씨", "날씨 자료실"]), `조회 주 메뉴 ${main}`);
+  ok(JSON.stringify(main) === JSON.stringify(["오늘 날씨", "내일 날씨", "지난 날씨", "질문으로 보는 날씨", "날씨 자료실"]), `조회 주 메뉴 ${main}`);
   ok(s.active.includes("한눈에 보기") && s.active.includes("지난 날씨") && s.title === "한눈에 보기" && s.group === "지난 날씨", `#/ = 한눈에 보기 ${JSON.stringify(s)}`);
   ok(!(await page.$("#stTabs")), "본문 탭 줄 없음");
   const sys = await page.evaluate(() => ({ cards: !!document.querySelector("#tabOverview #dashCards"), gapsLink: !!document.querySelector('#tabOverview a[href="#/gaps"]'), q: !!document.querySelector("#tabOverview #qCards"), chips: [...document.querySelectorAll("#phChips .chip")].map((c) => c.textContent.trim()), qLink: document.querySelector("#qLink")?.getAttribute("href") }));

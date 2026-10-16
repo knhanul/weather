@@ -547,8 +547,8 @@
             <a href="#/stats/region" data-sub="region">지역별 비교</a>
             <a href="#/stats/life" data-sub="life">생활 속 날씨</a>
             <a href="#/stats/records" data-sub="records">날씨 기록</a>
-            <a href="#/questions" data-page="questions">질문으로 보는 날씨</a>
           </div>
+          <a href="#/questions" data-page="questions">질문으로 보는 날씨</a>
           <div class="nav-row"><a href="#/hourly-weather" data-grp="lib" class="nav-parent">날씨 자료실</a><button type="button" class="nav-exp" id="navExpLib" data-name="날씨 자료실" aria-controls="navLib" aria-expanded="false" aria-label="날씨 자료실 하위 메뉴 펼치기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
           <div class="nav-sub" id="navLib" role="group" aria-label="날씨 자료실 하위 메뉴">
             <a href="#/hourly-weather" data-page="hourly">시간별 날씨</a>
@@ -1922,7 +1922,7 @@
       today: ["조회", "오늘 날씨", "지금 날씨가 1990년 이후·최근 10년·최근 5년 같은 시기와 비교해 얼마나 다른지"],
       forecast: ["조회", "내일 날씨", "앞으로의 날씨가 과거 같은 시기와 얼마나 다를지 — 단기·중기예보와 1990년 이후·최근 10년·최근 5년 평균"],
       dash: ["조회", "지난 날씨", "1990년부터 쌓인 관측 자료로 보는 우리 동네 날씨"],
-      questions: ["지난 날씨", "질문으로 보는 날씨", "예전보다 더워졌을까? 비가 더 자주 올까? — 일상적인 질문을 과거 관측으로"],
+      questions: ["조회", "질문으로 보는 날씨", "예전보다 더워졌을까? 비가 더 자주 올까? — 일상적인 질문을 과거 관측으로"],
       hourly: ["날씨 자료실", "시간별 날씨", "지점·기간별 한 시간 단위 관측값 — 레이아웃으로 컬럼을 고르고 그리드·카드로 보기"],
       daily: ["날씨 자료실", "일별 날씨", "하루 단위 관측값 — 레이아웃으로 컬럼을 고르고 그리드·카드로 보기"],
       download: ["날씨 자료실", "보기 설정", "시간별·일별 날씨에 보여 줄 컬럼 구성(레이아웃) 만들기·저장"],
@@ -2135,9 +2135,9 @@
       document.querySelectorAll("nav a[data-page]").forEach((a) => a.classList.toggle("active", a.dataset.page === name));
       if (name !== "dash") document.querySelectorAll("nav a[data-sub]").forEach((a) => { a.classList.remove("active"); a.removeAttribute("aria-current"); });
       const nv = document.querySelector("aside nav");
-      nv.classList.toggle("stats-on", name === "dash" || name === "questions");
+      nv.classList.toggle("stats-on", name === "dash");
       // 묶음 메뉴 강조: 지난 날씨(통계 탭·질문), 날씨 자료실(시간별·일별·보기 설정)
-      const grp = name === "dash" || name === "questions" ? "past" : ["hourly", "daily", "download"].includes(name) ? "lib" : null;
+      const grp = name === "dash" ? "past" : ["hourly", "daily", "download"].includes(name) ? "lib" : null;
       nv.querySelectorAll("a[data-grp]").forEach((a) => a.classList.toggle("active", a.dataset.grp === grp));
       nv.querySelectorAll(".nav-sub").forEach((s) => s.classList.toggle("cur", !!s.querySelector("a.active") || (grp === "past" && s.id === "navStats") || (grp === "lib" && s.id === "navLib")));
       renderHeadChips();
