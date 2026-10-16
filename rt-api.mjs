@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 // 같은 시각에 여러 값이 있으면: 실황 > 초단기예보(최신 발표) > 단기예보(최신 발표).
 import { ytdCompare, firstHotDay, outdoorWindow, basePeriods, hourlyCompare, dailyCompare, kst, createBaselineCache, HOURLY_FIELDS, DAILY_FIELDS, diffWord, WINDOW_DAYS, MIN_YEAR_SHARE, MIN_IN_YEAR_SHARE, MIN_SAMPLES_RANK } from "./rt-baseline.mjs";
 import { StatsError, hourlyLastDay, ymdToDn, OUTDOOR_DEFAULT, outdoorLabel } from "./stats-engine.mjs";
+import { windHours } from "./rt-forecast-wind.mjs";
 import { hourlyForecast, shortDaySummary, extremesByDate, midByDate, stitchDays, forecastChanges, addDays } from "./rt-forecast.mjs";
 
 const pad = (n) => String(n).padStart(2, "0");
@@ -171,6 +172,20 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     return out;
   }
 
+  // GET /api/rt/forecast-wind?station= — 시간별 풍향·풍속(읽기 전용, 예보 화면 바람 띠용). /api/rt/forecast 와 같은 최신 발표
+  async function forecastWind(url) {
+    const rt = typeof rtSrc === "function" ? rtSrc() : rtSrc;
+    const st = await stationParam(url);
+    const k = kst(now());
+    const out = { ok: true, now: k.text, station: { id: String(st.station_id), name: st.station_name }, hours: [] };
+    const g = rt ? await rt.gridOf(st.station_id) : null;
+    if (!g || g.nx == null) return { ...out, message: "이 지점에는 예보 격자가 없습니다" };
+    const [ultraRel, vilRel] = await Promise.all([rt.latestRelease("KMA_ULTRA_FCST", g.nx, g.ny), rt.latestRelease("KMA_VILAGE_FCST", g.nx, g.ny)]);
+    const [ultraRows, vilRows] = await Promise.all([ultraRel ? rt.fcst("KMA_ULTRA_FCST", g.nx, g.ny, ultraRel.base) : [], vilRel ? rt.fcst("KMA_VILAGE_FCST", g.nx, g.ny, vilRel.base) : []]);
+    out.hours = windHours({ vilRows, ultraRows, fromWall: `${k.ymd} ${pad(k.hour)}:00:00` });
+    out.note = "풍향 = 바람이 불어오는 쪽(도, 기상청 VEC), 화살표는 바람이 불어 가는 쪽. 풍속 WSD(m/s). 6시간 안은 초단기예보, 그 뒤는 단기예보.";
+    return out;
+  }
   // GET /api/rt/forecast?station= — 시간별·주간 예보 + 3개 기준 비교 + 이번 주 예년 대비 + 발표별 예보 변화
   async function forecast(url) {
     const rt = typeof rtSrc === "function" ? rtSrc() : rtSrc;
@@ -556,6 +571,7 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     if (p === "/api/rt/now") return nowOf(station(url));
     if (p === "/api/rt/today") return todayOf(station(url));
     if (p === "/api/rt/forecast") return forecastOf(station(url));
+    if (p === "/api/rt/forecast-wind") return cached(`FW|${station(url)}`, () => forecastWind(url));
     if (p === "/api/rt/ytd") return cached(`Y|${url.search}`, () => ytd(url));
     if (p === "/api/rt/nation-hours") return nationHoursSWR();
     if (p === "/api/rt/regions") return cached("R", () => regions());
