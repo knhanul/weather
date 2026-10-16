@@ -1571,9 +1571,12 @@ const ready = (async () => {
         // 기본 지점(108) 먼저, 시간자료는 질의 하나씩 흘려 받으며 3곳씩(메모리 한도 192MB 안). 그동안 /api/rt/* 는 4초 넘으면 '준비 중'
         const ids = on.map((x) => String(x.station_id)).sort((a, b) => (a === "108" ? -1 : b === "108" ? 1 : 0));
         if (process.env.STATS_WARM_HOURLY !== "0") handleRt.setWarming(true);
-        const daily = (async () => { for (const id of ids) await statsData.get(id).catch(() => {}); })();
+        const daily = (async () => { for (const id of ids) await statsData.get(id).catch(() => {}); })(); // 지점당 약 1초, 시간자료와 함께
         const hourly = process.env.STATS_WARM_HOURLY === "0" ? Promise.resolve() : (async () => {
-          let i = 0;
+          // 기본 지점은 혼자 먼저(첫 화면을 빨리), 나머지는 3곳씩
+          await statsHourly.get(ids[0]).catch((e) => console.log(`stats hourly warm failed station=${ids[0]} ${e?.code || e?.message}`));
+          if (ids[0] === "108") await handleRt.warmStations(["108"]);
+          let i = 1;
           await Promise.all([0, 1, 2].map(async () => { while (i < ids.length) { const id = ids[i++]; await statsHourly.get(id).catch((e) => console.log(`stats hourly warm failed station=${id} ${e?.code || e?.message}`)); } }));
         })();
         await Promise.all([daily, hourly]);
