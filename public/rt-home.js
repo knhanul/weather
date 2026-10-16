@@ -51,6 +51,7 @@
       <h2 class="rh-line">${line}</h2><p class="rh-story" id="rhStory"></p>
       ${meter}
     </section>
+    <section class="card rh-nation" id="rhNation" aria-label="지금 전국은?"><h2>지금 전국은?</h2><p class="rt-load">불러오는 중…</p></section>
     <section class="card rh-hours" aria-label="앞으로 12시간"><h2>앞으로 12시간 <span class="rt-badge fc">예보</span></h2><div class="rh-chips" id="rhHours"><p class="rt-load">불러오는 중…</p></div></section>
     ${chart}
     <section class="card rh-tip" id="rhTip" aria-label="옷차림·우산 참고" hidden></section>
@@ -100,9 +101,28 @@
     if (!rows.length) return "";
     return `<section class="card rh-hist" aria-label="이맘때의 기록"><h2>이맘때의 기록 <span class="rt-badge ok">과거 관측</span></h2><ul class="rh-list">${rows.join("")}</ul><p class="rt-note">${esc(p ? nm(p) : "")}: 같은 월일 ±7일, 같은 정시(${t.current.hour}시) ASOS 관측 중. 자세한 유사일 목록은 아래 ‘과거 유사일’.</p></section>`;
   }
+  // 지금 전국은? — /api/rt/regions(관측소별 초단기실황 + 3개 기준 평균) 그대로. 위치는 대략적인 지도 배치(열, 행)
+  const POS = { 112: [1, 1], 108: [2, 1], 119: [2, 2], 133: [2, 3], 156: [1, 4], 143: [3, 4], 159: [3, 5], 184: [1, 6] };
+  function nationHtml(r, cur) {
+    const id = mainId(), per = (r.periods || []).find((p) => p.id === id);
+    const cells = (r.rows || []).map((x) => {
+      const [c, w] = POS[x.id] || [3, 6];
+      const dv = x.diffs ? x.diffs[id] : null;
+      return `<button type="button" class="rh-st${String(x.id) === String(cur) ? " on" : ""}" data-st="${esc(x.id)}" style="grid-column:${c};grid-row:${w}" aria-label="${esc(x.name)}으로 바꾸기"><span>${esc(x.name)}</span>${x.temp == null ? `<em class="rt-ins">자료 없음</em>` : `<b>${x.temp}℃</b><small class="${dv > 0 ? "up" : dv < 0 ? "down" : ""}">${dv == null ? "비교 데이터 부족" : sg(dv)}</small>`}</button>`;
+    }).join("");
+    const t = (r.rows || []).find((x) => x.time)?.time;
+    return `<h2>지금 전국은? <small class="rh-sub">${t ? `${esc(t.slice(11, 16))} 실황` : ""}</small></h2><div class="rh-map">${cells}</div><p class="rt-note">기온 아래 숫자: ${per ? esc(`${per.label.replace(" 평균", "")} ${per.range}`) : "선택 기준"} 같은 시기 이 시각 평균과의 차이. 누르면 그 관측소로 바뀝니다. 출처: 기상청 초단기실황(관측소 격자). 하늘 상태는 관측소별 자료가 없어 표시하지 않습니다.</p>`;
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("#rhNation [data-st]"); if (!b) return;
+    const sel = document.getElementById("rtStation"); if (!sel || sel.value === b.dataset.st) return;
+    sel.value = b.dataset.st; sel.dispatchEvent(new Event("change", { bubbles: true }));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
   let seq = 0;
   async function fill(t) {
     const my = ++seq, st = t.station.id;
+    get("/api/rt/regions").then((r) => { const el = document.getElementById("rhNation"); if (my === seq && el) el.innerHTML = nationHtml(r, st); }).catch((e) => { const el = document.getElementById("rhNation"); if (el) el.innerHTML = `<h2>지금 전국은?</h2><p class="rt-ins">자료 없음 — ${esc(e.message)}</p>`; });
     const [f, l, s] = await Promise.allSettled([get(`/api/rt/forecast?station=${st}`), get(`/api/rt/life?station=${st}`), get(`/api/rt/similar?station=${st}&day=today`)]);
     if (my !== seq || !document.getElementById("rhHours")) return;
     const fv = f.status === "fulfilled" ? f.value : null;
