@@ -168,3 +168,13 @@
   #today .rt-ctl .rt-basis button { padding:0 8px; font-size:12.5px; white-space:nowrap; height:32px; }
 }
 .rh-lazy { min-height:1px; }
+.rh-wear{margin:.5rem 0 0;padding-top:.5rem;border-top:1px dashed #d6e0ee;font-size:.92rem;line-height:1.45}
+.rh-grp{padding:0}
+.rh-grp>summary{cursor:pointer;list-style:none;padding:.85rem 1rem;display:flex;flex-direction:column;gap:.15rem}
+.rh-grp>summary::-webkit-details-marker{display:none}
+.rh-grp>summary .rh-gt{font-weight:700;font-size:1.05rem}
+.rh-grp>summary .rh-gt::after{content:" ▾";color:#5e7090}
+.rh-grp[open]>summary .rh-gt::after{content:" ▴"}
+.rh-pv{color:#5e7090;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rh-grp>.card,.rh-grp>div>.card,.rh-grp>div>section{box-shadow:none;border:0;border-top:1px solid #e6edf6;border-radius:0;margin:0}
+.rh-golink{margin:0;padding:.6rem 1rem .9rem;text-align:right}
