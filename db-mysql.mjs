@@ -222,6 +222,15 @@ async function ensureIndex(table, name, cols) {
   return true;
 }
 
+// 시작할 때마다 확인(이미 있으면 건너뜀 — 여러 번 실행해도 안전, 표·색인을 지우지 않음)
+// kma_vilage_fcst_cat: 단기예보 TMX·TMN 을 격자·항목·예보시각으로 찾기(한 달 조회 89,800행 → 약 400행, 0.15초 → 0.01초). 2026-10-16 NAS 에 먼저 만듦
+export async function ensureIndexes() {
+  const added = [];
+  if (await ensureIndex("observations_daily", "observations_daily_date", "(observation_date)")) added.push("observations_daily.observations_daily_date");
+  if (await ensureIndex("kma_vilage_fcst", "kma_vilage_fcst_cat", "(nx, ny, category, fcst_datetime, base_datetime)")) added.push("kma_vilage_fcst.kma_vilage_fcst_cat");
+  return added;
+}
+
 export async function hasFullFieldColumns() {
   const need = [
     ...HOURLY_EXTRA.map((f) => ["observations_hourly", f.col]),
@@ -243,7 +252,7 @@ export async function init(url) {
   const applied = await applyMysqlMigrations();
   if (applied.length) console.log(`mysql migrations applied: ${applied.join(", ")}`);
   fullFields = await hasFullFieldColumns();
-  await ensureIndex("observations_daily", "observations_daily_date", "(observation_date)");
+  await ensureIndexes();
   await ensureStationGrid().catch((e) => console.error("station grid setup failed", e?.code || e?.message));
   await ensureMidRegions().catch((e) => console.error("mid regions setup failed", e?.code || e?.message));
   statsReady = await loadStatsReady();
