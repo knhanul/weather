@@ -248,6 +248,19 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
   }
 
   // 지역별: 지금 실황 기온(절대 순위)과 평소 대비 차이(이례성 순위)를 따로
+  // GET /api/rt/nation-hours — 관측소별 오늘 0~23시 기온(실황 obs·예보 fcst·3개 기준 평균 base). /api/rt/today 와 같은 값(같은 캐시)을 모아 줄인 것, 새 계산 없음
+  async function nationHours() {
+    const list = (await stations()).filter((s) => s.enabled !== false);
+    const rows = [];
+    for (const s of list) rows.push(await (async () => { // 지역별 비교와 같이 차례대로(NAS DB 부담), 같은 캐시 재사용
+      try {
+        const t = await todayOf(String(s.station_id));
+        return { id: String(s.station_id), name: s.station_name, lat: s.latitude ?? null, freshness: t.current?.freshness?.state ?? null, hours: t.hours.map((h) => ({ hour: h.hour, obs: h.obs, fcst: h.fcst, fcstSource: h.fcstSource, base: h.base })) };
+      } catch (e) { return { id: String(s.station_id), name: s.station_name, error: String(e.message || e), hours: [] }; }
+    })());
+    const any = await todayOf(String(list[0]?.station_id || "108")).catch(() => null);
+    return { ok: true, date: any?.date ?? null, now: any?.now ?? null, periods: any?.periods ?? [], rows, note: "실황 = 기상청 초단기실황, 이후 = 초단기·단기예보(오늘의 날씨와 같은 값). 빈 시각은 자료 없음." };
+  }
   async function regions() {
     const list = (await stations()).filter((s) => s.enabled !== false);
     const rows = [];
@@ -490,6 +503,7 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
       if (url.pathname === "/api/rt/today") return json(res, await todayOf(String(url.searchParams.get("station") || "108").trim())), true;
       if (url.pathname === "/api/rt/forecast") return json(res, await forecastOf(String(url.searchParams.get("station") || "108").trim())), true;
       if (url.pathname === "/api/rt/ytd") return json(res, await ytd(url)), true;
+      if (url.pathname === "/api/rt/nation-hours") return json(res, await cached("NH", () => nationHours())), true;
       if (url.pathname === "/api/rt/regions") return json(res, await cached("R", () => regions())), true;
       if (url.pathname === "/api/rt/life") return json(res, await life(url)), true;
       if (url.pathname === "/api/rt/records") return json(res, await recordsRt(url)), true;

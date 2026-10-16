@@ -51,7 +51,6 @@
       <h2 class="rh-line">${line}</h2><p class="rh-story" id="rhStory"></p>
       ${meter}
     </section>
-    <section class="card rh-nation" id="rhNation" aria-label="지금 전국은?"><h2>지금 전국은?</h2><p class="rt-load">불러오는 중…</p></section>
     <section class="card rh-hours" aria-label="앞으로 12시간"><h2>앞으로 12시간 <span class="rt-badge fc">예보</span></h2><div class="rh-chips" id="rhHours"><p class="rt-load">불러오는 중…</p></div></section>
     ${chart}
     <section class="card rh-tip" id="rhTip" aria-label="옷차림·우산 참고" hidden></section>
@@ -101,28 +100,68 @@
     if (!rows.length) return "";
     return `<section class="card rh-hist" aria-label="이맘때의 기록"><h2>이맘때의 기록 <span class="rt-badge ok">과거 관측</span></h2><ul class="rh-list">${rows.join("")}</ul><p class="rt-note">${esc(p ? nm(p) : "")}: 같은 월일 ±7일, 같은 정시(${t.current.hour}시) ASOS 관측 중. 자세한 유사일 목록은 아래 ‘과거 유사일’.</p></section>`;
   }
-  // 지금 전국은? — /api/rt/regions(관측소별 초단기실황 + 3개 기준 평균) 그대로. 위치는 대략적인 지도 배치(열, 행)
-  const POS = { 112: [1, 1], 108: [2, 1], 119: [2, 2], 133: [2, 3], 156: [1, 4], 143: [3, 4], 159: [3, 5], 184: [1, 6] };
-  function nationHtml(r, cur) {
-    const id = mainId(), per = (r.periods || []).find((p) => p.id === id);
-    const cells = (r.rows || []).map((x) => {
-      const [c, w] = POS[x.id] || [3, 6];
-      const dv = x.diffs ? x.diffs[id] : null;
-      return `<button type="button" class="rh-st${String(x.id) === String(cur) ? " on" : ""}" data-st="${esc(x.id)}" style="grid-column:${c};grid-row:${w}" aria-label="${esc(x.name)}으로 바꾸기"><span>${esc(x.name)}</span>${x.temp == null ? `<em class="rt-ins">자료 없음</em>` : `<b>${x.temp}℃</b><small class="${dv > 0 ? "up" : dv < 0 ? "down" : ""}">${dv == null ? "비교 데이터 부족" : sg(dv)}</small>`}</button>`;
+  // 지금 전국은? — /api/rt/nation-hours(관측소별 오늘 0~23시, 오늘의 날씨 그래프와 같은 값). 실황 실선·예보 점선(잇지 않음), '지금' 세로선
+  const NC = ["#0d1b3d", "#c0262d", "#0e7a3e", "#8a4b00", "#026ef8", "#7c3aed", "#0891b2", "#db2777"];
+  const NAT = { data: null, hide: new Set(), sel: null };
+  const NL = 38, NR = 10;
+  const nHourAt = (fr, W) => Math.max(0, Math.min(23, Math.round(((fr * W - NL) / (W - NL - NR)) * 23)));
+  function nSvg(rows, cur, W, H, sel) {
+    const L = NL, R = NR, T = 14, B = 26, vis = rows.filter((r) => !NAT.hide.has(r.id));
+    const vals = []; for (const r of vis) for (const h of r.hours) { if (h.obs != null) vals.push(h.obs); if (h.fcst != null) vals.push(h.fcst); }
+    if (!vals.length) return `<p class="rt-ins">표시할 자료 없음</p>`;
+    const lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1);
+    const x = (h) => L + (h / 23) * (W - L - R), y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+    const path = (pts) => { let s = "", pen = false; for (const [h, v] of pts) { if (v == null) { pen = false; continue; } s += `${pen ? "L" : "M"}${x(h).toFixed(1)},${y(v).toFixed(1)}`; pen = true; } return s; };
+    const lastObs = Math.max(-1, ...rows.flatMap((r) => r.hours.filter((h) => h.obs != null).map((h) => h.hour)));
+    const ticks = []; const step = hi - lo > 12 ? 4 : 2;
+    for (let t = Math.ceil(lo / step) * step; t <= hi; t += step) ticks.push(t);
+    let svg = `<svg viewBox="0 0 ${W} ${H}" class="rt-svg" role="img" aria-label="관측소별 오늘 시간별 기온: 실황 실선, 예보 점선">`;
+    if (lastObs >= 0 && lastObs < 23) svg += `<rect x="${x(lastObs)}" y="${T}" width="${x(23) - x(lastObs)}" height="${H - T - B}" fill="#e8f3ff" opacity=".6"/><line x1="${x(lastObs)}" x2="${x(lastObs)}" y1="${T}" y2="${H - B}" stroke="#026ef8" stroke-dasharray="2 3"/><text x="${x(lastObs) + 4}" y="${T + 11}" font-size="11" fill="#026ef8">지금 · 이후 예보</text>`;
+    for (const t of ticks) svg += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="#e0e8f4"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end" font-size="11" fill="#5e7090">${t}</text>`;
+    for (let h = 0; h < 24; h += 3) svg += `<text x="${x(h)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="#5e7090">${h}시</text>`;
+    rows.forEach((r, i) => {
+      if (NAT.hide.has(r.id)) return;
+      const c = NC[i % NC.length], me = String(r.id) === String(cur), w = me ? 3.2 : 1.6, op = me ? 1 : 0.8;
+      svg += `<path d="${path(r.hours.map((h) => [h.hour, h.fcst]))}" fill="none" stroke="${c}" stroke-width="${w}" stroke-dasharray="6 4" opacity="${op}"/>`;
+      svg += `<path d="${path(r.hours.map((h) => [h.hour, h.obs]))}" fill="none" stroke="${c}" stroke-width="${w}" opacity="${op}"/>`;
+    });
+    if (sel != null) svg += `<line class="rt-sel" x1="${x(sel)}" x2="${x(sel)}" y1="${T}" y2="${H - B}" stroke="#0d1b3d" opacity=".35"/>`;
+    return svg + `<rect class="rt-hit" x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent"/></svg>`;
+  }
+  function nTip(hour) {
+    const d = NAT.data; if (!d) return "";
+    const id = mainId(), per = (d.periods || []).find((p) => p.id === id);
+    const items = d.rows.map((r, i) => {
+      if (NAT.hide.has(r.id)) return "";
+      const h = r.hours.find((x) => x.hour === hour), v = h ? (h.obs ?? h.fcst) : null, b = h?.base?.[id];
+      return `<span><i style="background:${NC[i % NC.length]}"></i>${esc(r.name)} ${v == null ? "자료 없음" : `<b>${v}℃</b>${h.obs == null ? "<small>예보</small>" : ""}${b == null ? " <small>비교 데이터 부족</small>" : ` <small class="${v - b > 0 ? "up" : v - b < 0 ? "down" : ""}">${sg(Math.round((v - b) * 10) / 10)}</small>`}`}</span>`;
     }).join("");
-    const t = (r.rows || []).find((x) => x.time)?.time;
-    return `<h2>지금 전국은? <small class="rh-sub">${t ? `${esc(t.slice(11, 16))} 실황` : ""}</small></h2><div class="rh-map">${cells}</div><p class="rt-note">기온 아래 숫자: ${per ? esc(`${per.label.replace(" 평균", "")} ${per.range}`) : "선택 기준"} 같은 시기 이 시각 평균과의 차이. 누르면 그 관측소로 바뀝니다. 출처: 기상청 초단기실황(관측소 격자). 하늘 상태는 관측소별 자료가 없어 표시하지 않습니다.</p>`;
+    return `<b>${hour}시</b> <small>${per ? esc(`${per.label.replace(" 평균", "")} ${per.range}`) : ""} 같은 시기 이 시각 평균 대비</small><div class="rh-ntip">${items}</div>`;
+  }
+  const nLast = () => { const d = NAT.data; const m = Math.max(-1, ...d.rows.flatMap((r) => r.hours.filter((h) => h.obs != null).map((h) => h.hour))); return m < 0 ? 12 : m; };
+  function nationPaint(cur) {
+    const el = document.getElementById("rhNation"), d = NAT.data; if (!el || !d) return;
+    const legend = `<div class="rt-legend rh-nlg"><span class="lg-obs">━ 실황</span><span class="lg-fc">┅ 예보</span>${d.rows.map((r, i) => `<button type="button" data-nt="${esc(r.id)}" aria-pressed="${!NAT.hide.has(r.id)}" style="--c:${NC[i % NC.length]}" class="${NAT.hide.has(r.id) ? "" : "on"}${String(r.id) === String(cur) ? " me" : ""}">${esc(r.name)}</button>`).join("")}</div>`;
+    const sel = NAT.sel ?? nLast();
+    el.innerHTML = `<h2>지금 전국은? <small class="rh-sub">8개 관측소 오늘 시간별 기온</small></h2>${legend}<div class="rt-svg-wrap" id="rhNatHost">${nSvg(d.rows, cur, 720, 260, sel)}${window.ChartFull ? window.ChartFull.button() : ""}</div><div class="rt-tip" id="rhNatTip">${nTip(sel)}</div><p class="rt-note">이름을 누르면 선을 숨기거나 보입니다(굵은 선 = 지금 보는 관측소). 실황 = 기상청 초단기실황, 이후 = 초단기·단기예보이며 서로 잇지 않습니다. 빈 시각은 자료 없음.</p>`;
+    const svg = el.querySelector("svg.rt-svg");
+    if (svg) { const pick = (ev) => { const r = svg.getBoundingClientRect(); const h = nHourAt((ev.clientX - r.left) / r.width, 720); if (h === NAT.sel) return; NAT.sel = h; document.getElementById("rhNatTip").innerHTML = nTip(h); }; svg.addEventListener("pointermove", pick); svg.addEventListener("pointerdown", pick); }
+    const host = document.getElementById("rhNatHost");
+    if (host && window.ChartFull && window.RTFull) window.ChartFull.register(host, {
+      hostClass: "rt-fs", title: () => "지금 전국은? — 8개 관측소 오늘 시간별 기온", sub: () => `${d.date} · 실황 실선, 예보 점선 · 단위 ℃`,
+      legend: () => window.RTFull.legend(host.closest(".card")), source: () => "자료: 기상청 초단기실황·초단기/단기예보, 과거 평균 ASOS · 시간대 Asia/Seoul",
+      render: (box, size) => { const W = size.width, s0 = NAT.sel ?? nLast(); window.RTFull.draw(box, nSvg(d.rows, cur, W, size.height, s0), (fr) => nHourAt(fr, W), (h) => (NL + (h / 23) * (W - NL - NR)).toFixed(1), (h) => nTip(h), s0); },
+    });
   }
   document.addEventListener("click", (e) => {
-    const b = e.target.closest("#rhNation [data-st]"); if (!b) return;
-    const sel = document.getElementById("rtStation"); if (!sel || sel.value === b.dataset.st) return;
-    sel.value = b.dataset.st; sel.dispatchEvent(new Event("change", { bubbles: true }));
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    const b = e.target.closest("#rhNation [data-nt]"); if (!b) return;
+    const id = b.dataset.nt; NAT.hide.has(id) ? NAT.hide.delete(id) : NAT.hide.add(id);
+    nationPaint(window.RT?.station?.());
   });
   let seq = 0;
   async function fill(t) {
     const my = ++seq, st = t.station.id;
-    get("/api/rt/regions").then((r) => { const el = document.getElementById("rhNation"); if (my === seq && el) el.innerHTML = nationHtml(r, st); }).catch((e) => { const el = document.getElementById("rhNation"); if (el) el.innerHTML = `<h2>지금 전국은?</h2><p class="rt-ins">자료 없음 — ${esc(e.message)}</p>`; });
+    get("/api/rt/nation-hours").then((r) => { if (my !== seq) return; NAT.data = r; NAT.sel = null; nationPaint(st); }).catch((e) => { const el = document.getElementById("rhNation"); if (el) el.innerHTML = `<h2>지금 전국은?</h2><p class="rt-ins">자료 없음 — ${esc(e.message)}</p>`; });
     const [f, l, s] = await Promise.allSettled([get(`/api/rt/forecast?station=${st}`), get(`/api/rt/life?station=${st}`), get(`/api/rt/similar?station=${st}&day=today`)]);
     if (my !== seq || !document.getElementById("rhHours")) return;
     const fv = f.status === "fulfilled" ? f.value : null;
