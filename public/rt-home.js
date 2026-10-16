@@ -5,7 +5,7 @@
   const memo = new Map();
   const get = async (u) => { const c = memo.get(u); if (c && Date.now() - c.at < 60000) return c.p; const p = (async () => { const r = await fetch(u); const d = await r.json(); if (!r.ok || d.ok === false) throw new Error(d.message || `HTTP ${r.status}`); return d; })(); memo.set(u, { at: Date.now(), p }); p.catch(() => memo.delete(u)); return p; };
   // 선택 기준(NWBasis): 전체 비교 = 1990년 이후가 대표, 10년·5년은 작게
-  const basis = () => (window.NWBasis ? NWBasis.get() : "cmp");
+  const basis = () => (window.NWBasis ? (NWBasis.today ? NWBasis.today() : NWBasis.get()) : "cmp");
   const mainId = () => (basis() === "cmp" ? "all" : basis());
   const pickP = (list, id = mainId()) => (list || []).find((p) => p.id === id) || null;
   const others = (list) => (basis() === "cmp" ? (list || []).filter((p) => p.id !== "all") : []);

@@ -15,11 +15,13 @@
       return "cmp";
     },
     set(v) { try { localStorage.setItem("nw.basis", v); } catch { /* */ } },
-    html(cur, labels) {
-      return `<div class="seg rt-basis" role="radiogroup" aria-label="비교 기준">${BASIS.map(([id, l]) => `<button type="button" role="radio" aria-checked="${id === cur}" class="${id === cur ? "on" : ""}" data-basis="${id}">${esc(labels?.[id] || l)}</button>`).join("")}</div>`;
+    html(cur, labels, skip) {
+      return `<div class="seg rt-basis" role="radiogroup" aria-label="비교 기준">${BASIS.filter((b) => !(skip || []).includes(b[0])).map(([id, l]) => `<button type="button" role="radio" aria-checked="${id === cur}" class="${id === cur ? "on" : ""}" data-basis="${id}">${esc(labels?.[id] || l)}</button>`).join("")}</div>`;
     },
     ids: (cur) => (cur === "cmp" ? ["all", "r10", "r5"] : [cur]),
   };
+  // 오늘의 날씨: '1990년 이후' 단독 선택 없음 — 예전 주소·저장값 all 은 전체 비교로
+  NWBasis.today = () => { const v = NWBasis.get(); return v === "all" ? "cmp" : v; };
   window.NWBasis = NWBasis;
 
   const state = { station: null, data: null, show: { all: true, r10: true, r5: true }, sel: null, stations: [] };
@@ -56,7 +58,7 @@
     renderBasis();
     load();
   }
-  function renderBasis() { $("rtBasis").innerHTML = NWBasis.html(NWBasis.get()); }
+  function renderBasis() { $("rtBasis").innerHTML = NWBasis.html(NWBasis.today(), null, ["all"]); }
   function onClick(e) {
     const b = e.target.closest("[data-basis]");
     if (b) {
@@ -87,7 +89,7 @@
   function render() {
     const d = state.data;
     if (!d) return;
-    const basis = NWBasis.get();
+    const basis = NWBasis.today();
     const ids = NWBasis.ids(basis);
     const c = d.current;
     const fresh = c.freshness || {};
@@ -200,7 +202,7 @@
       const h = todayHourAt((ev.clientX - r.left) / r.width, 720);
       if (h === state.sel) return;
       state.sel = h;
-      $("rtTip").innerHTML = tipHtml(state.data, h, NWBasis.ids(NWBasis.get()));
+      $("rtTip").innerHTML = tipHtml(state.data, h, NWBasis.ids(NWBasis.today()));
     };
     svg.addEventListener("pointermove", pick);
     svg.addEventListener("pointerdown", pick);
@@ -214,7 +216,7 @@
         legend: () => window.RTFull.legend(host.closest(".card")),
         source: () => "자료: 기상청 초단기실황·초단기/단기예보, 과거 평균 ASOS · 시간대 Asia/Seoul",
         render: (el, size) => {
-          const d = state.data, ids = NWBasis.ids(NWBasis.get());
+          const d = state.data, ids = NWBasis.ids(NWBasis.today());
           const W = size.width, sel = state.sel ?? lastObsHour(d) ?? 12;
           window.RTFull.draw(el, todaySvg(d, ids, W, size.height, sel), (fr) => todayHourAt(fr, W), (h) => (TL + (h / 23) * (W - TL - TR)).toFixed(1), (h) => tipHtml(d, h, ids), sel);
         },
