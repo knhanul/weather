@@ -16,6 +16,20 @@
   <link rel="icon" href="/brand/favicon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
   <link rel="manifest" href="/brand/site.webmanifest" />
+  <script>
+    // 빠른 시작: 오늘의 날씨·날씨 예보면 지점 목록과 첫 자료(/api/rt/now, /api/rt/forecast)를 문서 머리에서 바로 요청(아래 스크립트가 받아 씀)
+    (function () {
+      var h = location.hash || "", path = h.replace("#", "").split("?")[0], q = new URLSearchParams(h.split("?")[1] || "");
+      var today = path === "" || path === "/" || path === "/today", fc = path === "/forecast";
+      function guess() { var s = q.get("station"); if (s && /^\d+$/.test(s)) return s; try { var v = JSON.parse(localStorage.getItem("nw.station") || "null"); if (v && v.id) return String(v.id); } catch (e) {} return "108"; }
+      function j(u) { return fetch(u).then(function (r) { return r.json().then(function (d) { if (!r.ok || d.ok === false) throw new Error(d.message || "HTTP " + r.status); return d; }); }); }
+      var P = { guess: guess };
+      if (today || fc) { P.stations = fetch("/api/stations").then(function (r) { return r.json(); }); P.stations.catch(function () {}); }
+      if (today) { P.nowStation = guess(); P.now = j("/api/rt/now?station=" + encodeURIComponent(P.nowStation)); P.now.catch(function () {}); }
+      if (fc) { P.fcStation = guess(); P.fc = j("/api/rt/forecast?station=" + encodeURIComponent(P.fcStation)); P.fc.catch(function () {}); }
+      window.NWPre = P;
+    })();
+  </script>
   <script src="/chart-full.js?v=2"></script>
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="이날" />
@@ -503,7 +517,7 @@
   <link rel="stylesheet" href="/views.css?v=3" />
   <link rel="stylesheet" href="/drawer.css?v=1" />
   <link rel="stylesheet" href="/fold.css?v=1" />
-  <link rel="stylesheet" href="/rt.css?v=20" />
+  <link rel="stylesheet" href="/rt.css?v=21" />
 </head>
 <body>
   <div class="appbar" id="appbar">
@@ -824,6 +838,7 @@
     }
     // 대시보드 자료: 느리거나 실패해도 화면이 비지 않게(불러오는 중 → 실패 안내·다시 시도). 실패하면 false, 던지지 않는다.
     let dashLoading = null;
+    let dashDeferred = false, dashPending = false; // 빠른 시작: 한눈에 보기 그래프는 그 화면에 갈 때 그림
     function dashNote(html) { const el = $("dashNote"); if (!el || dashCache) return; el.innerHTML = html; el.hidden = !html; }
     function loadDash() {
       if (dashLoading) return dashLoading;
@@ -849,7 +864,7 @@
       if ($("dashNote")) { $("dashNote").hidden = true; $("dashNote").innerHTML = ""; }
       seriesCache = new Map();
       renderHeadChips();
-      renderDash();
+      if (dashDeferred && currentPage !== "dash") dashPending = true; else renderDash();
       fillStations($("hStation")); fillStations($("dStation"));
       $("hFrom").value = toPicker(d.latestOfficialHour.slice(0,10) + " 00:00:00");
       $("hTo").value = toPicker(d.latestOfficialHour);
@@ -2180,6 +2195,8 @@
       }
       if (name === "gaps" && dashCache) routeGaps();
       // 한눈에 보기: 주소의 ?station=&hours= 를 먼저 반영(직접 입력·뒤로가기·위치로 고른 지점) → 그다음 통계 쪽이 그 지점을 이어받음
+      if (name === "dash" && dashCache && dashPending) { dashPending = false; renderDash(); }
+      if (name === "dash" && !dashCache && dashDeferred) { loadDash().then((ok) => ok && currentPage === "dash" && route()); }
       if (name === "dash" && dashCache && (statsTab || "overview") === "overview") {
         const before = dashKey();
         pickDefaultStation();
@@ -2804,16 +2821,28 @@
         route();
       });
     }
-    Promise.allSettled([loadMe(), loadDash()]).then(route).then(() => { if (window.NWStation) { NWStation.start(); NWStation.syncServer(); } });
+    // 오늘의 날씨·날씨 예보(조회 화면, 로그인 불필요)로 시작하면 대시보드(/api/dashboard·/api/series)를 기다리지 않고 바로 그린다.
+    // 상단 '공식 최신' 칩용 대시보드 자료는 첫 화면 자료가 온 뒤(또는 4초 뒤) 뒤에서 읽고, 한눈에 보기 그래프(/api/series)는 그 화면에 갈 때 읽는다.
+    const FAST_START = /^#\/(today|forecast)?(\?|$)/.test(location.hash || "#/") || !location.hash || location.hash === "#" ;
+    const after = () => { if (window.NWStation) { NWStation.start(); NWStation.syncServer(); } };
+    if (FAST_START) {
+      dashDeferred = true;
+      route();
+      loadMe().then(() => { if (!["today", "forecast"].includes(currentPage)) route(); });
+      let started = false;
+      const go = () => { if (started) return; started = true; loadDash().then(() => { if (!["today", "forecast"].includes(currentPage)) route(); else renderHeadChips(); }).then(after); };
+      document.addEventListener("rt:ready", go, { once: true });
+      setTimeout(go, 4000);
+    } else Promise.allSettled([loadMe(), loadDash()]).then(route).then(after);
   </script>
   <script src="/views.js?v=4"></script>
   <script src="/stats.js?v=9"></script>
   <script src="/drawer.js?v=1"></script>
   <script src="/fold.js?v=1"></script>
-  <script src="/rt-home.js?v=9"></script>
-  <script src="/rt.js?v=8"></script>
-  <script src="/rt-forecast.js?v=5"></script>
-  <script src="/rt-stories.js?v=4"></script>
+  <script src="/rt-home.js?v=10"></script>
+  <script src="/rt.js?v=9"></script>
+  <script src="/rt-forecast.js?v=6"></script>
+  <script src="/rt-stories.js?v=5"></script>
   <script src="/rt-ext.js?v=4"></script>
   <script src="/rt-admin.js?v=2"></script>
 </body>

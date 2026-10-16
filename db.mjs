@@ -322,6 +322,10 @@ export async function statsDailyRows(stationId) {
   return r.rows;
 }
 // 날씨 통계(시간자료 기반): [from, to) 정시 자료(통계용 항목만)
+// MySQL 일 때만: 한 지점 시간자료를 질의 하나로 흘려 받음(없으면 null → 해마다 읽기)
+export function statsHourlyStream(stationId, from, onRows) {
+  return my && my.statsHourlyStream ? my.statsHourlyStream(stationId, from, onRows) : null;
+}
 export async function statsHourlyRows(stationId, from, to) {
   if (my) return my.statsHourlyRows(...arguments);
   const r = await pool.query(

@@ -562,6 +562,21 @@ export async function statsHourlyRows(stationId, from, to) {
     [stationId, from, to],
   );
 }
+// 날씨 통계(시간자료) 한 번에: 한 지점 [from, ∞) 를 질의 하나로 흘려 받아(stream) onRows(묶음)로 넘김 — 해마다 질의 37번 → 1번(NAS 왕복·대기 감소)
+export function statsHourlyStream(stationId, from, onRows, batch = 5000) {
+  return new Promise((resolve, reject) => {
+    let buf = [], n = 0, done = false;
+    const fail = (e) => { if (!done) { done = true; reject(e); } };
+    const s = pool.pool.query({
+      sql: `SELECT observation_datetime, temperature, precipitation, humidity, wind_speed, rn_qcflg, ta_qcflg
+     FROM observations_hourly WHERE station_id = ? AND observation_datetime >= ? AND provider = 'KMA' AND dataset = 'ASOS_HOURLY'`,
+      timeout: 300000,
+    }, [stationId, from]).stream({ highWaterMark: batch });
+    s.on("data", (r) => { buf.push(r); n++; if (buf.length >= batch) { onRows(buf); buf = []; } });
+    s.on("error", fail);
+    s.on("end", () => { if (done) return; if (buf.length) onRows(buf); done = true; resolve(n); });
+  });
+}
 // 날씨 기록 '그날의 날씨': 공식 일자료 한 행(기본 키 읽기)
 export async function statsDayRow(stationId, date) {
   const rows = await q(

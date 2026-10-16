@@ -4,12 +4,18 @@
 // 밖에서 DB 를 고친 경우를 위해 ttlMs(기본 30분)가 지나면 최근 45일만 뒤에서 다시 읽는다.
 import { createHourlyStore, addHourlyRows, HOURLY_FROM } from "./stats-engine.mjs";
 
-export function createStatsHourly({ loadRange, ttlMs = 30 * 60 * 1000, now = () => Date.now(), log = () => {}, thisYear = () => new Date().getFullYear() }) {
+export function createStatsHourly({ loadStream = null, loadRange, ttlMs = 30 * 60 * 1000, now = () => Date.now(), log = () => {}, thisYear = () => new Date().getFullYear() }) {
   const cache = new Map(); // id -> { hs, at, dirtyFrom }
   const loading = new Map();
   let version = 1;
   const firstYear = +HOURLY_FROM.slice(0, 4);
   async function readYears(id, hs, fromYmd) {
+    // 가능하면 질의 하나로(stream). 결과는 해마다 읽는 것과 같은 행·같은 addHourlyRows(순서와 무관한 저장 규칙)
+    if (loadStream) {
+      let rows = 0;
+      const p = loadStream(id, fromYmd < HOURLY_FROM ? HOURLY_FROM : fromYmd, (part) => { rows += addHourlyRows(hs, part); });
+      if (p) { await p; return rows; }
+    }
     const y0 = Math.max(firstYear, +fromYmd.slice(0, 4));
     const y1 = thisYear();
     let rows = 0;

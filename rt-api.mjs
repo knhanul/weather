@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 // 실시간·예보 분석 API (/api/rt/*) — 새 엔드포인트만(기존 API 그대로). GET, 로그인 없이 조회(기존 /api/stats 와 같은 정책).
 // 자료 모델: obs(관측) = ASOS 시간·일자료(관측소) 또는 초단기실황(격자) — 둘을 같은 곳으로 가정하지 않고 출처를 늘 밝힌다.
 //            fcst(예보) = 초단기예보·단기예보(격자, 발표시각 base ≠ 대상시각 fcst). 강수확률(POP)은 더하지 않고 비교 엔진에도 넣지 않는다.
@@ -26,14 +27,26 @@ export function freshness(baseWall, nowMs, limitMin) {
 export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json, now = () => Date.now() }) {
   const cache = createBaselineCache();
   const todayCache = new Map();
+  // 60초 캐시. 60초~5분 지난 값은 바로 돌려주고 뒤에서 새로 계산(stale-while-revalidate), 5분 넘으면 기다려 새로 계산.
+  // 같은 키를 동시에 계산하지 않음(in-flight 공유). 저장(version 변경) 뒤에는 키가 달라져 새로 계산.
+  const inflight = new Map();
+  function compute(kk, fn) {
+    if (inflight.has(kk)) return inflight.get(kk);
+    const p = Promise.resolve().then(fn).then((data) => {
+      todayCache.delete(kk); todayCache.set(kk, { at: now(), data });
+      while (todayCache.size > 160) todayCache.delete(todayCache.keys().next().value);
+      return data;
+    }).finally(() => inflight.delete(kk));
+    inflight.set(kk, p);
+    return p;
+  }
   async function cached(key, fn) {
     const kk = `${key}|${statsHourly.version()}|${statsData.version()}`;
     const c = todayCache.get(kk);
-    if (c && now() - c.at < 60000) return c.data;
-    const data = await fn();
-    todayCache.set(kk, { at: now(), data });
-    if (todayCache.size > 80) todayCache.delete(todayCache.keys().next().value);
-    return data;
+    const age = c ? now() - c.at : Infinity;
+    if (age < 60000) return c.data;
+    if (age < 300000) { compute(kk, fn).catch(() => {}); return c.data; }
+    return compute(kk, fn);
   }
   async function stationParam(url) {
     const id = String(url.searchParams.get("station") || "108").trim();
@@ -81,7 +94,7 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
   }
 
   // GET /api/rt/today?station=
-  async function today(url) {
+  async function today(url, lite = false) {
     const rt = typeof rtSrc === "function" ? rtSrc() : rtSrc;
     const st = await stationParam(url);
     const nowMs = now();
@@ -93,9 +106,9 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     // NAS 왕복을 줄이려고 서로 기대지 않는 조회는 한꺼번에
     const G = out.grid;
     const [ncstRows, ultraRel, vilRel, ext] = G && rt
-      ? await Promise.all([rt.ncst(G.nx, G.ny, `${k.ymd} 00:00:00`, `${k.ymd} 23:59:59`), rt.latestRelease("KMA_ULTRA_FCST", G.nx, G.ny), rt.latestRelease("KMA_VILAGE_FCST", G.nx, G.ny), rt.dayExtremes(G.nx, G.ny, k.ymd)])
+      ? await Promise.all([rt.ncst(G.nx, G.ny, `${k.ymd} 00:00:00`, `${k.ymd} 23:59:59`), lite ? null : rt.latestRelease("KMA_ULTRA_FCST", G.nx, G.ny), lite ? null : rt.latestRelease("KMA_VILAGE_FCST", G.nx, G.ny), rt.dayExtremes(G.nx, G.ny, k.ymd)])
       : [[], null, null, {}];
-    const [ultraRows, vilRows] = await Promise.all([ultraRel ? rt.fcst("KMA_ULTRA_FCST", G.nx, G.ny, ultraRel.base) : [], vilRel ? rt.fcst("KMA_VILAGE_FCST", G.nx, G.ny, vilRel.base) : []]);
+    const [ultraRows, vilRows] = lite ? [[], []] : await Promise.all([ultraRel ? rt.fcst("KMA_ULTRA_FCST", G.nx, G.ny, ultraRel.base) : [], vilRel ? rt.fcst("KMA_VILAGE_FCST", G.nx, G.ny, vilRel.base) : []]);
     out.asos = { lastDay: hourlyLastDay(hs), note: "ASOS 시간자료는 매일 11시 30분에 전날까지 받습니다(오늘 관측은 아직 없음)" };
     // 실황(오늘 00시 ~ 지금)
     const obs = new Map();
@@ -152,6 +165,8 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
       dayOut[field] = { kind: "fcst", source: "단기예보", base: ext[cat]?.base ?? null, value: fin(v), compare: brief(dayBase(store, st.station_id, k.ymd, field, v)), note: "예보값 — 기록 경신 여부는 관측으로만 확정" };
     }
     out.day = dayOut;
+    // /api/rt/now(히어로 먼저): 같은 계산의 앞부분만(현재 실황·3개 기준 비교·오늘 최고·최저 예보). 예보 시간표·이야기는 /api/rt/today
+    if (lite) return { ok: true, now: out.now, date: out.date, station: out.station, method: out.method, periods: out.periods, grid: out.grid, current: out.current, day: out.day, part: "now" };
     out.stories = stories(out);
     return out;
   }
@@ -233,6 +248,15 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
 
   // ---------------------------------------------------------------- 5단계: 기존 메뉴에 붙는 실시간·예보 확장
   const todayOf = (st) => cached(`T|${st}`, () => today(new URL(`http://x/?station=${st}`)));
+  // /api/rt/now: today 캐시가 있으면 그 값에서 잘라 주고(숫자 같음), 없으면 가벼운 계산
+  const nowPart = (t) => ({ ok: true, now: t.now, date: t.date, station: t.station, method: t.method, periods: t.periods, grid: t.grid, current: t.current, day: t.day, part: "now" });
+  async function nowOf(st) {
+    const kk = `T|${st}|${statsHourly.version()}|${statsData.version()}`;
+    const c = todayCache.get(kk);
+    if (c && now() - c.at < 300000) return nowPart(c.data);
+    if (inflight.has(kk)) return nowPart(await inflight.get(kk));
+    return cached(`N|${st}`, () => today(new URL(`http://x/?station=${st}`), true));
+  }
   const forecastOf = (st) => cached(`F|${st}`, () => forecast(new URL(`http://x/?station=${st}`)));
   const avgOf = (a) => (a.length ? Math.round((a.reduce((x, y) => x + y, 0) / a.length) * 10) / 10 : null);
 
@@ -251,8 +275,9 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
   // GET /api/rt/nation-hours — 관측소별 오늘 0~23시 기온(실황 obs·예보 fcst·3개 기준 평균 base). /api/rt/today 와 같은 값(같은 캐시)을 모아 줄인 것, 새 계산 없음
   async function nationHours() {
     const list = (await stations()).filter((s) => s.enabled !== false);
+    await eachLimit(list, 3, (s) => todayOf(String(s.station_id)).catch(() => null)); // 3곳씩 미리 채움, 같은 캐시 재사용
     const rows = [];
-    for (const s of list) rows.push(await (async () => { // 지역별 비교와 같이 차례대로(NAS DB 부담), 같은 캐시 재사용
+    for (const s of list) rows.push(await (async () => {
       try {
         const t = await todayOf(String(s.station_id));
         return { id: String(s.station_id), name: s.station_name, lat: s.latitude ?? null, freshness: t.current?.freshness?.state ?? null, hours: t.hours.map((h) => ({ hour: h.hour, obs: h.obs, fcst: h.fcst, fcstSource: h.fcstSource, base: h.base })) };
@@ -268,9 +293,16 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     if (NH.data) { if (now() - NH.at > 60000) nhRefresh().catch(() => {}); return { ...NH.data, cachedAt: new Date(NH.at).toISOString() }; }
     return nhRefresh();
   }
-  setTimeout(() => nhRefresh().catch(() => {}), 20000).unref?.();
+  // 관측소 여러 곳: 2~3곳씩(NAS 부담 제한), 결과 순서는 관측소 순서 그대로
+  async function eachLimit(list, n, fn) {
+    const out = new Array(list.length);
+    let i = 0;
+    await Promise.all(Array.from({ length: Math.min(n, list.length) }, async () => { while (i < list.length) { const j = i++; out[j] = await fn(list[j], j); } }));
+    return out;
+  }
   async function regions() {
     const list = (await stations()).filter((s) => s.enabled !== false);
+    await eachLimit(list, 3, (s) => todayOf(String(s.station_id)).catch(() => null)); // 미리 3곳씩 채움(아래는 캐시에서)
     const rows = [];
     for (const s of list) {
       try {
@@ -504,10 +536,53 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
   const sign = (d) => (d > 0 ? `+${d}` : `${d}`);
   const round1 = (v) => Math.round(v * 10) / 10;
 
-  return async function handle(req, res, url) {
+  // 응답: 짧은 캐시 + 약한 ETag(본문 해시) → 같은 내용이면 304. 오류는 저장하지 않음
+  const send = (req, res, data, status = 200) => {
+    if (typeof res.writeHead !== "function") return json(res, data, status); // 시험용 가짜 응답
+    if (status !== 200) { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); return res.end(JSON.stringify(data)); }
+    const body = JSON.stringify(data);
+    const etag = `W/"${createHash("sha1").update(body).digest("base64url").slice(0, 22)}"`;
+    const h = { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=30, stale-while-revalidate=60", etag, vary: "Accept-Encoding" };
+    if (String(req.headers?.["if-none-match"] || "").split(/\s*,\s*/).includes(etag)) { res.writeHead(304, h); return res.end(); }
+    res.writeHead(200, h);
+    res.end(body);
+  };
+  // 서버를 막 시작해 과거 시간자료를 읽는 동안: 4초 안에 끝나지 않으면 '준비 중'(503)으로 답하고 계산은 뒤에서 계속(캐시에 남음)
+  let warming = false;
+  const WARM_WAIT_MS = 4000;
+  const station = (url) => String(url.searchParams.get("station") || "108").trim();
+  async function route(url, res) {
+    const p = url.pathname;
+    if (p === "/api/rt/now") return nowOf(station(url));
+    if (p === "/api/rt/today") return todayOf(station(url));
+    if (p === "/api/rt/forecast") return forecastOf(station(url));
+    if (p === "/api/rt/ytd") return cached(`Y|${url.search}`, () => ytd(url));
+    if (p === "/api/rt/nation-hours") return nationHoursSWR();
+    if (p === "/api/rt/regions") return cached("R", () => regions());
+    if (p === "/api/rt/life") return cached(`L|${url.search}`, () => life(url));
+    if (p === "/api/rt/records") return cached(`C|${url.search}`, () => recordsRt(url));
+    if (p === "/api/rt/similar") { const id = station(url); const day = url.searchParams.get("day") === "yesterday" ? "yesterday" : "today"; return cached(`S|${id}|${day}`, () => similar(id, day)); }
+    if (p === "/api/rt/stories") { const id = station(url); return cached(`ST|${id}`, () => storiesRt(id)); }
+    if (p === "/api/rt/baseline") return cached(`B|${url.search}`, () => baseline(url));
+    return undefined;
+  }
+  const handle = async function handle(req, res, url) {
     if (!url.pathname.startsWith("/api/rt/")) return false;
     if (req.method !== "GET") return json(res, { ok: false, message: "GET 만 됩니다" }, 405), true;
     try {
+      if (url.pathname !== "/api/rt/raw") {
+        const job = route(url, res);
+        let data;
+        if (warming) {
+          let timer;
+          const t = new Promise((r) => { timer = setTimeout(() => r(WARM), WARM_WAIT_MS); });
+          job.catch(() => {});
+          data = await Promise.race([job, t]).finally(() => clearTimeout(timer));
+          if (data === WARM) return send(req, res, { ok: false, warming: true, retryAfterSec: 5, message: "준비 중입니다 — 서버를 막 시작해 과거 자료를 읽고 있습니다. 잠시 뒤 다시 불러옵니다." }, 503), true;
+        } else data = await job;
+        if (data === undefined) return json(res, { ok: false, message: "없는 주소" }, 404), true;
+        return send(req, res, data), true;
+      }
       if (url.pathname === "/api/rt/today") return json(res, await todayOf(String(url.searchParams.get("station") || "108").trim())), true;
       if (url.pathname === "/api/rt/forecast") return json(res, await forecastOf(String(url.searchParams.get("station") || "108").trim())), true;
       if (url.pathname === "/api/rt/ytd") return json(res, await ytd(url)), true;
@@ -525,4 +600,9 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
       throw e;
     }
   };
+  handle.setWarming = (v) => { warming = Boolean(v); };
+  handle.warmNation = () => nhRefresh().catch(() => null);
+  handle.warmStations = (ids) => eachLimit(ids, 3, (id) => todayOf(String(id)).catch(() => null));
+  return handle;
 }
+const WARM = Symbol("warm");

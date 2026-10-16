@@ -25,7 +25,7 @@
       });
     }
     if (!state.stations.length) {
-      const r = await fetch("/api/stations").then((x) => x.json()).catch(() => ({}));
+      const r = await (window.NWPre?.stations || fetch("/api/stations").then((x) => x.json())).catch(() => ({}));
       state.stations = (Array.isArray(r) ? r : r.data || []).filter((s) => s.enabled !== false);
     }
     const ids = state.stations.map((s) => String(s.station_id));
@@ -41,11 +41,20 @@
     const my = ++seq;
     $("fcOut").innerHTML = `<div class="card rt-load">불러오는 중…</div>`;
     try {
-      const r = await fetch(`/api/rt/forecast?station=${encodeURIComponent(state.station)}`);
-      const d = await r.json();
+      // 머리에서 미리 받은 같은 지점 자료가 있으면 그것을(한 번만), '준비 중'(503)이면 5초 뒤 다시
+      const pre = window.NWPre?.fc && window.NWPre.fcStation === state.station ? window.NWPre.fc : null;
+      if (window.NWPre) window.NWPre.fc = null;
+      let d = pre ? await pre.catch(() => null) : null;
+      for (let i = 0; !d && i < 25; i++) {
+        const r = await fetch(`/api/rt/forecast?station=${encodeURIComponent(state.station)}`);
+        const x = await r.json().catch(() => ({}));
+        if (r.status === 503 && x.warming) { if (my === seq) $("fcOut").innerHTML = `<div class="card rt-load">${esc(x.message)}</div>`; await new Promise((ok) => setTimeout(ok, 5000)); if (my !== seq) return; continue; }
+        if (!r.ok || !x.ok) throw new Error(x.message || "불러오지 못했습니다");
+        d = x;
+      }
       if (my !== seq) return;
-      if (!r.ok || !d.ok) throw new Error(d.message || "불러오지 못했습니다");
-      state.data = d; render();
+      if (!d) throw new Error("불러오지 못했습니다");
+      state.data = d; render(); document.dispatchEvent(new Event("rt:ready"));
     } catch (e) { if (my === seq) $("fcOut").innerHTML = `<div class="card result bad">${esc(e.message)}</div>`; }
   }
   function render() {

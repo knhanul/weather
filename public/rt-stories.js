@@ -25,14 +25,19 @@
     const st = window.RT?.station?.() || "108";
     if (box.dataset.done === st) return;
     box.dataset.done = st; sim.dataset.done = st;
+    const G = window.RTGet || get;
+    // 이야기: 히어로 한 줄에 쓰므로 바로. 과거 유사일(오늘·어제): 그 칸이 보일 때
+    G(`/api/rt/stories?station=${st}`).then((v) => { if ($("rtsBox") !== box) return; box.innerHTML = storiesHtml(v); document.dispatchEvent(new CustomEvent("rt:stories", { detail: v })); }).catch(() => {});
     sim.innerHTML = `<section class="card"><p class="rt-load">과거 유사일 찾는 중…</p></section>`;
-    const [s, t, y] = await Promise.allSettled([get(`/api/rt/stories?station=${st}`), get(`/api/rt/similar?station=${st}&day=today`), get(`/api/rt/similar?station=${st}&day=yesterday`)]);
-    if ($("rtsBox") !== box) return; // 다시 그려졌으면 버림
-    if (s.status === "fulfilled") { box.innerHTML = storiesHtml(s.value); document.dispatchEvent(new CustomEvent("rt:stories", { detail: s.value })); }
-    // 오늘·어제 중 받은 쪽만 보여 주고, 못 받은 쪽은 사유만 적는다(값을 지어내지 않음)
-    const one = (r, day) => r.status === "fulfilled" ? r.value : { ok: false, day, unavailable: true, message: r.reason?.message || "응답 없음" };
-    const tv = one(t, "today"), yv = one(y, "yesterday");
-    sim.innerHTML = tv.unavailable && yv.unavailable ? `<section class="card"><p class="rt-ins">과거 유사일을 불러오지 못했습니다</p></section>` : simHtml(tv, yv);
+    const run = async () => {
+      const [t, y] = await Promise.allSettled([G(`/api/rt/similar?station=${st}&day=today`), G(`/api/rt/similar?station=${st}&day=yesterday`)]);
+      if ($("rtsSim") !== sim) return; // 다시 그려졌으면 버림
+      // 오늘·어제 중 받은 쪽만 보여 주고, 못 받은 쪽은 사유만 적는다(값을 지어내지 않음)
+      const one = (r, day) => r.status === "fulfilled" ? r.value : { ok: false, day, unavailable: true, message: r.reason?.message || "응답 없음" };
+      const tv = one(t, "today"), yv = one(y, "yesterday");
+      sim.innerHTML = tv.unavailable && yv.unavailable ? `<section class="card"><p class="rt-ins">과거 유사일을 불러오지 못했습니다</p></section>` : simHtml(tv, yv);
+    };
+    if (window.RTLazy) window.RTLazy("rtsSim", run); else run();
   }
   const watch = () => { const el = $("today"); if (el && !el.dataset.rtsObs) { el.dataset.rtsObs = "1"; new MutationObserver(() => fill()).observe(el, { childList: true, subtree: true }); } fill(); };
   setInterval(watch, 1500);

@@ -2,8 +2,30 @@
 (() => {
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const sg = (d, u = "℃") => (d == null ? "–" : `${d > 0 ? "+" : d < 0 ? "−" : "±"}${Math.abs(d)}${u}`);
+  // 오늘의 날씨 화면 공통 읽기(rt.js·rt-stories.js 도 같이 씀): 같은 주소는 60초 동안 한 번만 요청.
+  // 서버가 막 시작해 '준비 중'(503 warming)이면 5초 뒤 다시(최대 2분)
   const memo = new Map();
-  const get = async (u) => { const c = memo.get(u); if (c && Date.now() - c.at < 60000) return c.p; const p = (async () => { const r = await fetch(u); const d = await r.json(); if (!r.ok || d.ok === false) throw new Error(d.message || `HTTP ${r.status}`); return d; })(); memo.set(u, { at: Date.now(), p }); p.catch(() => memo.delete(u)); return p; };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function fetchJ(u) {
+    for (let i = 0; ; i++) {
+      const r = await fetch(u);
+      const d = await r.json().catch(() => ({}));
+      if (r.status === 503 && d.warming && i < 24) { document.dispatchEvent(new CustomEvent("rt:warming", { detail: { url: u, message: d.message } })); await sleep((d.retryAfterSec || 5) * 1000); continue; }
+      if (!r.ok || d.ok === false) throw new Error(d.message || `HTTP ${r.status}`);
+      return d;
+    }
+  }
+  const get = (u) => { const c = memo.get(u); if (c && Date.now() - c.at < 60000) return c.p; const p = fetchJ(u); memo.set(u, { at: Date.now(), p }); p.catch(() => memo.delete(u)); return p; };
+  window.RTGet = get;
+  // 화면 아래 칸: 보일 때(300px 앞) 읽기
+  function lazy(id, fn) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (!("IntersectionObserver" in window)) return void fn(el);
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); if (el.isConnected) fn(el); } }, { rootMargin: "300px 0px" });
+    io.observe(el);
+  }
+  window.RTLazy = lazy;
   // 선택 기준(NWBasis): 전체 비교 = 1990년 이후가 대표, 10년·5년은 작게
   const basis = () => (window.NWBasis ? (NWBasis.today ? NWBasis.today() : NWBasis.get()) : "cmp");
   const mainId = () => (basis() === "cmp" ? "all" : basis());
@@ -54,7 +76,7 @@
     <section class="card rh-hours" aria-label="앞으로 12시간"><h2>앞으로 12시간 <span class="rt-badge fc">예보</span></h2><div class="rh-chips" id="rhHours"><p class="rt-load">불러오는 중…</p></div></section>
     ${chart}
     <section class="card rh-tip" id="rhTip" aria-label="옷차림·우산 참고" hidden></section>
-    <section class="card rh-life" id="rhLife" aria-label="생활 질문" hidden></section>`;
+    <section class="card rh-life" id="rhLife" aria-label="생활 질문"><h2>궁금한 날씨, 바로 답</h2><p class="rt-load">불러오는 중…</p></section>`;
   }
   function hoursHtml(f) {
     const hs = (f.hours || []).slice(0, 12);
@@ -161,19 +183,17 @@
   let seq = 0;
   async function fill(t) {
     const my = ++seq, st = t.station.id;
-    get("/api/rt/nation-hours").then((r) => { if (my !== seq) return; NAT.data = r; NAT.sel = null; nationPaint(st); }).catch((e) => { const el = document.getElementById("rhNation"); if (el) el.innerHTML = `<h2>지금 전국은?</h2><p class="rt-ins">자료 없음 — ${esc(e.message)}</p>`; });
-    const [f, l, s] = await Promise.allSettled([get(`/api/rt/forecast?station=${st}`), get(`/api/rt/life?station=${st}`), get(`/api/rt/similar?station=${st}&day=today`)]);
+    lazy("rhNation", (el) => get("/api/rt/nation-hours").then((r) => { if (my !== seq) return; NAT.data = r; NAT.sel = null; nationPaint(st); }).catch((e) => { if (el.isConnected) el.innerHTML = `<h2>지금 전국은?</h2><p class="rt-ins">자료 없음 — ${esc(e.message)}</p>`; }));
+    lazy("rhLife", (el) => get(`/api/rt/life?station=${st}`).then((l) => { if (my !== seq || !el.isConnected) return; const lh = lifeHtml(l); if (lh) el.innerHTML = lh; else el.hidden = true; }).catch(() => { if (el.isConnected) el.hidden = true; }));
+    lazy("rhHist", (el) => get(`/api/rt/similar?station=${st}&day=today`).catch(() => null).then((s) => { if (my === seq && el.isConnected) el.innerHTML = histHtml(t, s); }));
+    const fv = await get(`/api/rt/forecast?station=${st}`).catch(() => null);
     if (my !== seq || !document.getElementById("rhHours")) return;
-    const fv = f.status === "fulfilled" ? f.value : null;
     document.getElementById("rhHours").innerHTML = fv ? hoursHtml(fv) : `<p class="rt-ins">예보를 불러오지 못했습니다</p>`;
     if (fv?.hours?.[0] && wx(fv.hours[0])) document.getElementById("rhSky").innerHTML = `${icon(fv.hours[0])} ${esc(wx(fv.hours[0]))} <small>${Number(fv.hours[0].time.slice(11, 13))}시 예보</small>`;
     const tip = document.getElementById("rhTip"), th = fv ? tipHtml(t, fv) : "";
     if (th) { tip.innerHTML = th; tip.hidden = false; }
-    const life = document.getElementById("rhLife"), lh = l.status === "fulfilled" ? lifeHtml(l.value) : "";
-    if (lh) { life.innerHTML = lh; life.hidden = false; }
     const wk = document.getElementById("rhWeek"); if (wk && fv) wk.innerHTML = weekHtml(fv);
     paintStory();
-    const hi = document.getElementById("rhHist"); if (hi) hi.innerHTML = histHtml(t, s.status === "fulfilled" ? s.value : null);
   }
   // rt-stories.js 가 이야기를 받으면 맨 위 이야기를 히어로 한 줄로
   async function storyLine(s, st) {

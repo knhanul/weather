@@ -1,5 +1,7 @@
 import http from "node:http";
 import fs from "node:fs";
+import crypto from "node:crypto";
+import zlib from "node:zlib";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as db from "./db.mjs";
@@ -1092,6 +1094,41 @@ async function dashboard() {
   };
 }
 
+// 정적 파일: 처음 요청 때 읽어 br·gzip 을 미리 만들어 메모리에 둔다(앱 파일은 이미지 안에서 바뀌지 않음, read_only).
+// 캐시: ?v= 가 붙은 요청은 1년 immutable, 그 밖(HTML 등)은 no-cache + ETag(같으면 304). Caddy encode 는 이미 압축된 응답을 다시 압축하지 않음.
+const STATIC_TYPES = {
+  ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+  ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webp": "image/webp",
+  ".json": "application/json; charset=utf-8", ".webmanifest": "application/manifest+json; charset=utf-8",
+};
+const COMPRESSIBLE = new Set([".html", ".css", ".js", ".svg", ".json", ".webmanifest", ".ico"]);
+const staticCache = new Map();
+function staticEntry(full) {
+  if (staticCache.has(full)) return staticCache.get(full);
+  let buf;
+  try { buf = fs.readFileSync(full); } catch { staticCache.set(full, null); return null; }
+  const ext = path.extname(full);
+  const e = { buf, type: STATIC_TYPES[ext] || "application/octet-stream", etag: `"${crypto.createHash("sha1").update(buf).digest("base64url").slice(0, 22)}"` };
+  if (COMPRESSIBLE.has(ext) && buf.length > 512) {
+    e.br = zlib.brotliCompressSync(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: buf.length } });
+    e.gz = zlib.gzipSync(buf, { level: 9 });
+  }
+  staticCache.set(full, e);
+  return e;
+}
+function serveStatic(req, res, url, full) {
+  const e = staticEntry(full);
+  if (!e) { res.writeHead(404); return res.end("not found"); }
+  const h = { "content-type": e.type, etag: e.etag, vary: "Accept-Encoding", "cache-control": url.searchParams.has("v") ? "public, max-age=31536000, immutable" : "no-cache" };
+  if (String(req.headers["if-none-match"] || "").split(/\s*,\s*/).includes(e.etag)) { res.writeHead(304, h); return res.end(); }
+  const ae = String(req.headers["accept-encoding"] || "");
+  let body = e.buf;
+  if (e.br && /\bbr\b/.test(ae)) { h["content-encoding"] = "br"; body = e.br; }
+  else if (e.gz && /\bgzip\b/.test(ae)) { h["content-encoding"] = "gzip"; body = e.gz; }
+  h["content-length"] = body.length;
+  res.writeHead(200, h);
+  res.end(req.method === "HEAD" ? undefined : body);
+}
 function json(res, data, status = 200) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(data));
@@ -1205,6 +1242,7 @@ const statsData = createStatsData({
 });
 // 시간자료 기반 통계(산책·출퇴근·열대야 추정): 지점별 정시 자료를 한 해씩 읽어 메모리에 둔다. 저장(upsert)하면 그 날짜부터 다시 읽음.
 const statsHourly = createStatsHourly({
+  loadStream: (id, from, onRows) => (db.usingPg() ? db.statsHourlyStream(id, from, onRows) : null),
   loadRange: async (id, from, to) =>
     db.usingPg()
       ? db.statsHourlyRows(id, from, to)
@@ -1479,20 +1517,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(403);
       return res.end();
     }
-    fs.readFile(full, (err, buf) => {
-      if (err) {
-        res.writeHead(404);
-        return res.end("not found");
-      }
-      const ext = path.extname(full);
-      const types = {
-        ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8",
-        ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webp": "image/webp",
-        ".json": "application/json; charset=utf-8", ".webmanifest": "application/manifest+json; charset=utf-8",
-      };
-      res.writeHead(200, { "content-type": types[ext] || "application/octet-stream" });
-      res.end(buf);
-    });
+    return serveStatic(req, res, url, full);
   } catch (err) {
     json(res, { ok: false, message: err instanceof Error ? err.message : String(err) }, 500);
   }
@@ -1541,10 +1566,23 @@ const ready = (async () => {
     // 날씨 통계 첫 요청이 기다리지 않게 사용 중인 지점의 일자료를 뒤에서 한 지점씩 읽어 둔다
     if (process.env.STATS_WARM !== "0") {
       (async () => {
+        const t0 = Date.now();
         const on = (await stations()).filter((x) => x.enabled);
-        for (const s of on) await statsData.get(s.station_id).catch(() => {});
-        // 시간자료는 지점당 약 10초 — 일자료 다음에 한 지점씩
-        if (process.env.STATS_WARM_HOURLY !== "0") for (const s of on) await statsHourly.get(s.station_id).catch((e) => console.log(`stats hourly warm failed station=${s.station_id} ${e?.code || e?.message}`));
+        // 기본 지점(108) 먼저, 시간자료는 질의 하나씩 흘려 받으며 3곳씩(메모리 한도 192MB 안). 그동안 /api/rt/* 는 4초 넘으면 '준비 중'
+        const ids = on.map((x) => String(x.station_id)).sort((a, b) => (a === "108" ? -1 : b === "108" ? 1 : 0));
+        if (process.env.STATS_WARM_HOURLY !== "0") handleRt.setWarming(true);
+        const daily = (async () => { for (const id of ids) await statsData.get(id).catch(() => {}); })();
+        const hourly = process.env.STATS_WARM_HOURLY === "0" ? Promise.resolve() : (async () => {
+          let i = 0;
+          await Promise.all([0, 1, 2].map(async () => { while (i < ids.length) { const id = ids[i++]; await statsHourly.get(id).catch((e) => console.log(`stats hourly warm failed station=${id} ${e?.code || e?.message}`)); } }));
+        })();
+        await Promise.all([daily, hourly]);
+        console.log(`stats warm done ms=${Date.now() - t0}`);
+        // 첫 화면 자료(오늘·전국)를 미리 계산해 두고 '준비 중' 해제
+        await handleRt.warmStations(ids);
+        await handleRt.warmNation();
+        handleRt.setWarming(false);
+        console.log(`rt warm done ms=${Date.now() - t0}`);
       })().catch(() => {});
     }
   });

@@ -36,7 +36,7 @@
   }
   async function loadStations() {
     if (state.stations.length) return;
-    const r = await fetch("/api/stations").then((x) => x.json()).catch(() => []);
+    const r = await (window.NWPre?.stations || fetch("/api/stations").then((x) => x.json())).catch(() => []);
     const list = Array.isArray(r) ? r : r.data || r.stations || [];
     state.stations = list.filter((s) => s.enabled !== false);
   }
@@ -52,6 +52,9 @@
       });
       root.addEventListener("click", onClick);
     }
+    // 지점 목록을 기다리는 동안 짐작한 지점(주소·저장값·108)의 히어로·오늘 자료를 먼저 요청(index.html 머리에서 이미 시작했을 수 있음)
+    const guess = window.NWPre?.guess?.() || "108";
+    prefetch(guess);
     await loadStations();
     state.station = pickStation();
     $("rtStation").innerHTML = state.stations.map((s) => `<option value="${esc(s.station_id)}"${String(s.station_id) === state.station ? " selected" : ""}>${esc(s.station_name)}(${esc(s.station_id)})</option>`).join("");
@@ -70,21 +73,40 @@
     if (t) { state.show[t.dataset.line] = !state.show[t.dataset.line]; render(); return; }
   }
   let seq = 0;
+  const G = (u) => (window.RTGet ? window.RTGet(u) : fetch(u).then(async (r) => { const d = await r.json(); if (!r.ok || !d.ok) throw new Error(d.message || "불러오지 못했습니다"); return d; }));
+  const pre = new Map(); // station → { now, today } 약속
+  function prefetch(st) {
+    if (pre.has(st)) return pre.get(st);
+    const p0 = window.NWPre?.now && window.NWPre.nowStation === st ? window.NWPre.now : null;
+    const x = { now: p0 || G(`/api/rt/now?station=${encodeURIComponent(st)}`), today: G(`/api/rt/today?station=${encodeURIComponent(st)}`) };
+    x.now.catch(() => {}); x.today.catch(() => {});
+    pre.set(st, x);
+    return x;
+  }
+  let readySent = false;
   async function load() {
     const my = ++seq;
+    const st = state.station;
     $("rtOut").innerHTML = `<div class="card rt-load">불러오는 중…</div>`;
+    const x = prefetch(st);
+    pre.delete(st); // 다음 load(지점 다시 고름 등)는 새로 요청(60초 안이면 RTGet 캐시)
+    state.data = null;
+    // 1) 히어로 먼저(/api/rt/now): 오늘 전체 자료가 아직이면 히어로·다음 12시간 칸만 그림
+    x.now.then((n) => { if (my === seq && !state.data && window.RTHome) { $("rtOut").innerHTML = window.RTHome.hero(n, "") + `<div class="card rt-load">그래프와 이야기를 불러오는 중…</div>`; window.RTHome.fill(n); } }).catch(() => {});
     try {
-      const r = await fetch(`/api/rt/today?station=${encodeURIComponent(state.station)}`);
-      const d = await r.json();
+      const d = await x.today;
       if (my !== seq) return;
-      if (!r.ok || !d.ok) throw new Error(d.message || "불러오지 못했습니다");
       state.data = d;
       state.sel = null;
       render();
+      if (!readySent) { readySent = true; document.dispatchEvent(new Event("rt:ready")); }
     } catch (e) {
       if (my === seq) $("rtOut").innerHTML = `<div class="card result bad">${esc(e.message)}</div>`;
+      if (!readySent) { readySent = true; document.dispatchEvent(new Event("rt:ready")); }
     }
   }
+  // 서버 '준비 중'(막 시작함)이면 안내만 — 다시 요청은 RTGet 이 함
+  document.addEventListener("rt:warming", () => { const el = $("rtOut")?.querySelector(".rt-load"); if (el && !state.data) el.textContent = "준비 중입니다 — 서버가 막 시작해 과거 자료를 읽고 있어요. 잠시 뒤 자동으로 불러옵니다."; });
   // ---------------------------------------------------------------- 그리기
   function render() {
     const d = state.data;
@@ -112,7 +134,7 @@
     const H = window.RTHome;
     const fold = (t, html) => (html ? `<details class="card rh-fold"><summary>${t}</summary>${html.replace(/^<section class="card[^"]*"[^>]*>|<\/section>$/g, "")}</details>` : "");
     $("rtOut").innerHTML = H
-      ? H.hero(d, chartCard(d, ids)) + `<div id="rtsBox">${story}</div><div id="rhWeek"></div><section class="card rh-nation" id="rhNation" aria-label="지금 전국은?"><h2>지금 전국은?</h2><p class="rt-load">불러오는 중…</p></section><div id="rhHist"></div>` + fold("지금 값과 3개 기준 평균 비교", head) + `<div id="rtsSim"></div>` + fold("같은 시기·같은 시각 분포에서 지금 위치", distCard(d, ids)) + fold("오늘 최고·최저기온과 과거 평균", dayCard(d, ids)) + fold("습도·강수·바람도 비교", otherCard(d, ids)) + methodCard(d)
+      ? H.hero(d, chartCard(d, ids)) + `<div id="rtsBox">${story}</div><div id="rhWeek"></div><section class="card rh-nation" id="rhNation" aria-label="지금 전국은?"><h2>지금 전국은?</h2><p class="rt-load">불러오는 중…</p></section><div id="rhHist" class="rh-lazy"></div>` + fold("지금 값과 3개 기준 평균 비교", head) + `<div id="rtsSim"></div>` + fold("같은 시기·같은 시각 분포에서 지금 위치", distCard(d, ids)) + fold("오늘 최고·최저기온과 과거 평균", dayCard(d, ids)) + fold("습도·강수·바람도 비교", otherCard(d, ids)) + methodCard(d)
       : head + `<div id="rtsBox">${story}</div>` + chartCard(d, ids) + `<div id="rtsSim"></div>` + distCard(d, ids) + dayCard(d, ids) + otherCard(d, ids) + methodCard(d);
     bindChart();
     if (H) H.fill(d);

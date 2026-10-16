@@ -167,3 +167,4 @@
   #today .rt-ctl .rt-basis { gap:3px; }
   #today .rt-ctl .rt-basis button { padding:0 8px; font-size:12.5px; white-space:nowrap; height:32px; }
 }
+.rh-lazy { min-height:1px; }

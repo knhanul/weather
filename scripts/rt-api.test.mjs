@@ -86,3 +86,27 @@ test("도움 함수", () => {
   assert.equal(rainText("1mm 미만").mm, null);
   assert.equal(windDir(250), "서남서풍");
 });
+
+test("now: today 의 앞부분과 같은 값(히어로 먼저), 없는 칸은 안 줌", async () => {
+  const api = fakes();
+  const n = (await call(api, "/api/rt/now?station=108")).body;
+  const t = (await call(api, "/api/rt/today?station=108")).body;
+  assert.equal(n.part, "now");
+  for (const k of ["now", "date", "station", "periods", "grid", "current", "day", "method"]) assert.deepEqual(n[k], t[k], k);
+  assert.equal(n.hours, undefined);
+  const n2 = (await call(api, "/api/rt/now?station=108")).body; // today 캐시에서 자른 값도 같음
+  assert.deepEqual(n2.current, t.current);
+});
+test("ETag: 같은 본문이면 304, 캐시 머리글", async () => {
+  const api = fakes();
+  const mkRes = () => { const r = { h: null, code: 0, body: "" }; r.writeHead = (c, h) => { r.code = c; r.h = h; }; r.end = (b) => { r.body = b || ""; }; return r; };
+  const r1 = mkRes();
+  await api({ method: "GET", headers: {} }, r1, new URL("http://x/api/rt/today?station=108"));
+  assert.equal(r1.code, 200);
+  assert.match(r1.h.etag, /^W\/"/);
+  assert.match(r1.h["cache-control"], /max-age=30/);
+  const r2 = mkRes();
+  await api({ method: "GET", headers: { "if-none-match": r1.h.etag } }, r2, new URL("http://x/api/rt/today?station=108"));
+  assert.equal(r2.code, 304);
+  assert.equal(r2.body, "");
+});
