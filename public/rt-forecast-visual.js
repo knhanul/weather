@@ -43,7 +43,7 @@
       default: return `<text y="${s * 0.35}" font-size="${s}" text-anchor="middle" fill="#8a9bb5">–</text>`;
     }
   }
-  const iconSvg = (k, n, px = 28, label = "") => `<svg viewBox="-16 -16 32 34" width="${px}" height="${px}" role="img" aria-label="${esc(label || "자료 없음")}">${icon(k, n, 12)}</svg>`;
+  const iconSvg = (k, n, px = 28, label = "") => `<svg viewBox="-16 -16 32 34" width="${px}" height="${px}" style="width:${px}px;height:${px}px" role="img" aria-label="${esc(label || "자료 없음")}">${icon(k, n, 12)}</svg>`;
 
   // 1) 히어로: 지금부터 오늘 밤까지
   function hero(d) {
@@ -133,7 +133,7 @@
     const lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1), Y = (v) => tT + (1 - (v - lo) / (hi - lo)) * (tB - tT);
     const mmMax = Math.max(5, ...hrs.map((x) => x.pcpMm || 0)), step = W / n;
     const path = (g) => { let s = "", pen = false; hrs.forEach((x, i) => { const v = g(x); if (v == null) { pen = false; return; } s += `${pen ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`; pen = true; }); return s; };
-    let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" class="rt-svg-h fv-svg" role="img" aria-label="72시간 예보: 날씨, 기온, 강수확률·강수량${wind ? ", 바람" : ""}">`;
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" class="rt-svg-h fv-svg" style="width:${W}px;height:${H}px" role="img" aria-label="72시간 예보: 날씨, 기온, 강수확률·강수량${wind ? ", 바람" : ""}">`;
     // 밤 음영
     hrs.forEach((x, i) => { if (night(hh(x.time))) s += `<rect x="${(X(i) - step / 2).toFixed(1)}" y="0" width="${(step + 0.6).toFixed(1)}" height="${H}" fill="#eef2fa"/>`; });
     for (let t = Math.ceil(lo / 2) * 2; t <= hi; t += 2) s += `<line x1="${PAD.L}" x2="${W - PAD.R}" y1="${Y(t)}" y2="${Y(t)}" stroke="#e0e8f4"/><text x="${PAD.L - 5}" y="${Y(t) + 4}" text-anchor="end" font-size="11" fill="#5e7090">${t}</text>`;

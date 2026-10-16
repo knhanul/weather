@@ -122,7 +122,7 @@
   }
   const DIR = ["북", "북북동", "북동", "동북동", "동", "동남동", "남동", "남남동", "남", "남남서", "남서", "서남서", "서", "서북서", "북서", "북북서"];
   const windAt = (t) => { const w = state.wind?.find((x) => x.time === t); return w && w.vec != null ? ` <small>${DIR[Math.round(w.vec / 22.5) % 16]}풍</small>` : ""; };
-  const chartW = (n) => Math.max(Math.min(1100, ($("fcOut")?.clientWidth || 360) - 34), n * 11);
+  const chartW = (n) => Math.max(Math.min(1100, ($("fcOut")?.clientWidth || 360) - 34), n * 10);
   function chart72Card(d, ids) {
     const hrs = d.hours.slice(0, 72);
     if (!hrs.length) return `<section class="card"><h2>72시간 예보</h2><p class="rt-ins">예보 자료가 없습니다</p></section>`;
