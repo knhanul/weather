@@ -2827,7 +2827,9 @@
     const after = () => { if (window.NWStation) { NWStation.start(); NWStation.syncServer(); } };
     if (FAST_START) {
       dashDeferred = true;
-      route();
+      // 화면 스크립트(rt.js 등)는 이 아래에서 읽히므로, 문서를 다 읽은 직후(DOMContentLoaded) 그린다
+      const first = () => route();
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", first, { once: true }); else first();
       loadMe().then(() => { if (!["today", "forecast"].includes(currentPage)) route(); });
       let started = false;
       const go = () => { if (started) return; started = true; loadDash().then(() => { if (!["today", "forecast"].includes(currentPage)) route(); else renderHeadChips(); }).then(after); };
