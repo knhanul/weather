@@ -261,6 +261,14 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     const any = await todayOf(String(list[0]?.station_id || "108")).catch(() => null);
     return { ok: true, date: any?.date ?? null, now: any?.now ?? null, periods: any?.periods ?? [], rows, note: "실황 = 기상청 초단기실황, 이후 = 초단기·단기예보(오늘의 날씨와 같은 값). 빈 시각은 자료 없음." };
   }
+  // 오래된 값은 바로 돌려주고 뒤에서 새로 고침(60초 지나면). 처음 한 번만 기다림
+  const NH = { data: null, at: 0, p: null };
+  function nhRefresh() { if (!NH.p) NH.p = nationHours().then((d) => { NH.data = d; NH.at = now(); return d; }).finally(() => { NH.p = null; }); return NH.p; }
+  async function nationHoursSWR() {
+    if (NH.data) { if (now() - NH.at > 60000) nhRefresh().catch(() => {}); return { ...NH.data, cachedAt: new Date(NH.at).toISOString() }; }
+    return nhRefresh();
+  }
+  setTimeout(() => nhRefresh().catch(() => {}), 20000).unref?.();
   async function regions() {
     const list = (await stations()).filter((s) => s.enabled !== false);
     const rows = [];
@@ -503,7 +511,7 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
       if (url.pathname === "/api/rt/today") return json(res, await todayOf(String(url.searchParams.get("station") || "108").trim())), true;
       if (url.pathname === "/api/rt/forecast") return json(res, await forecastOf(String(url.searchParams.get("station") || "108").trim())), true;
       if (url.pathname === "/api/rt/ytd") return json(res, await ytd(url)), true;
-      if (url.pathname === "/api/rt/nation-hours") return json(res, await cached("NH", () => nationHours())), true;
+      if (url.pathname === "/api/rt/nation-hours") return json(res, await nationHoursSWR()), true;
       if (url.pathname === "/api/rt/regions") return json(res, await cached("R", () => regions())), true;
       if (url.pathname === "/api/rt/life") return json(res, await life(url)), true;
       if (url.pathname === "/api/rt/records") return json(res, await recordsRt(url)), true;
