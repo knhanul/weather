@@ -317,6 +317,14 @@
     .g-log { max-height:220px; overflow:auto; font-size:13px; margin-top:10px; }
     .g-log div { padding:4px 0; border-top:1px solid var(--line); font-variant-numeric:tabular-nums; }
     .g-dlg .g-btns { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin-top:14px; }
+    .foot-about { flex:1 1 320px; min-width:0; }
+    .foot-about summary { cursor:pointer; line-height:1.5; }
+    .foot-about .fa-more { color:var(--pri); font-weight:700; margin-left:4px; white-space:nowrap; }
+    .foot-about[open] .fa-more { display:none; }
+    .fa-body { margin-top:8px; line-height:1.6; max-width:760px; }
+    .fa-body p { margin:6px 0; }
+    .fa-menu { margin:4px 0 8px; padding-left:18px; }
+    .fa-menu a { color:var(--fg); font-weight:700; }
     .site-foot { display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; padding:14px 24px 22px; margin-top:-16px; font-size:12px; color:var(--muted); }
     .foot-logo { display:inline-flex; align-items:flex-end; gap:5px; text-decoration:none; }
     .foot-logo img { height:18px; width:auto; display:block; }
@@ -816,7 +824,22 @@
       </main>
       <footer class="site-foot">
         <a class="foot-logo" href="https://www.nuni.co.kr" aria-label="nuni 홈페이지"><img src="/brand/inal-logo.svg" alt="이날" width="25" height="18" /><span>이야기가 있는 날씨</span></a>
-        <span>이날 · 공식 ASOS 관측 자료(기상청) · Asia/Seoul · 관측값이 없으면 NULL 그대로 두고 0으로 바꾸지 않습니다</span>
+        <details class="foot-about">
+          <summary>이날 · 이야기가 있는 날씨 — 1990년부터 쌓인 기상청 관측으로 오늘을 과거와 견주어 봅니다 <span class="fa-more">사이트 소개</span></summary>
+          <div class="fa-body">
+            <ul class="fa-menu">
+              <li><a href="#/today">오늘 날씨</a> — 지금 기온이 과거 같은 날·같은 시각보다 얼마나 다른지, 앞으로 12시간과 오늘의 이야기</li>
+              <li><a href="#/forecast">내일 날씨</a> — 72시간·10일 예보를 그림과 그래프로, 과거 평균과 함께</li>
+              <li><a href="#/stats/overview">지난 날씨</a> — 연도별·지역별 비교, 생활 속 날씨, 날씨 기록</li>
+              <li><a href="#/questions">질문으로 보는 날씨</a> — “예전보다 더워졌을까?” 같은 질문을 관측으로 답합니다</li>
+              <li><a href="#/hourly-weather">날씨 자료실</a> — 시간별·일별 관측 원자료 보기와 CSV 내려받기</li>
+            </ul>
+            <p><b>자료</b> 기상청 ASOS 시간·일 관측(1990년~), 초단기실황, 단기예보·중기예보. 관측소 8곳: 서울·인천·수원·대전·대구·광주·부산·제주.</p>
+            <p><b>비교 기준</b> 1990년 이후·최근 10년·최근 5년 평균을 그날그날 관측으로 직접 계산합니다. 기상청 공식 30년 평년값이 아닙니다.</p>
+            <p><b>이야기와 숫자</b> 실제 관측·예보 값에 정해 둔 규칙을 적용해 계산합니다. AI가 만든 숫자는 없습니다. 값이 없으면 ‘자료 없음’으로 두고 0으로 바꾸지 않습니다.</p>
+            <p><b>갱신</b> 초단기실황 매시, 단기예보 하루 8번, 중기예보 하루 2번, ASOS 관측은 매일 11:30에 전날까지. 시각은 모두 한국 시간(Asia/Seoul).</p>
+          </div>
+        </details>
       </footer>
     </div>
   </div>
