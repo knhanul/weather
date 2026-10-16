@@ -74,13 +74,13 @@
       ${meter}
       <p class="rh-wear" id="rhTip" hidden></p>
     </section>
-    <section class="card rh-hours" aria-label="앞으로 12시간"><h2>앞으로 12시간 <span class="rt-badge fc">예보</span></h2><div class="rh-chips" id="rhHours"><p class="rt-load">불러오는 중…</p></div></section>
+    <section class="card rh-hours lite" aria-label="앞으로 12시간"><h2>앞으로 12시간 <span class="rt-badge fc">예보</span></h2><div class="rh-chips" id="rhHours"><p class="rt-load">불러오는 중…</p></div></section>
     ${chart}`;
   }
   function hoursHtml(f) {
     const hs = (f.hours || []).slice(0, 12);
     if (!hs.length) return `<p class="rt-ins">예보 자료가 없습니다</p>`;
-    return hs.map((h) => `<div class="rh-chip${h.pop >= 60 ? " wet" : ""}"><span>${Number(h.time.slice(11, 13))}시</span><i aria-label="${esc(wx(h) || "")}">${icon(h)}</i><b>${h.ta ?? "–"}°</b><small>${h.pop == null ? "" : `☂${h.pop}%`}</small></div>`).join("");
+    return hs.map((h) => `<div class="rh-chip${h.pop >= 60 ? " wet" : ""}"><span>${Number(h.time.slice(11, 13))}시</span><i aria-label="${esc(wx(h) || "")}">${icon(h)}</i><b>${h.ta ?? "–"}°</b><small>${h.pop == null ? "" : `☂${h.pop}%`}</small></div>`).join("") + `<a class="rh-chip rh-chip-more" href="#/forecast">72시간<br>예보 보기 ›</a>`;
   }
   // 오늘 뭐 입지? — 같은 규칙(기온별 옷차림 일반 기준·일교차 10℃·강수확률 60%)을 히어로 안 한 줄로
   function tipHtml(t, f) {
@@ -103,11 +103,6 @@
     const it = (l.items || []).filter((x) => x.answer != null);
     if (!it.length) return "";
     return `<h2>궁금한 날씨, 바로 답</h2><div class="rh-qa">${it.map((x) => `<a class="rh-q" href="#/stats/life?station=${esc(l.station?.id || "")}"><span>${esc(x.q)}</span><b>${esc(x.answer)}</b>${lifeRow(x)}<small class="rt-badge ${x.kind === "관측" || x.kind === "실황" ? "ok" : "fc"}">${esc(x.kind || "")}</small></a>`).join("")}</div>`;
-  }
-  function weekHtml(f) {
-    const ds = (f.days || []).filter((x) => x.max != null || x.min != null);
-    if (!ds.length) return "";
-    return `<section class="card rh-week" aria-label="이번 주 예보"><h2>이번 주 <span class="rt-badge fc">예보</span></h2><div class="rh-chips">${ds.map((x) => { const c = pickP(x.maxCmp); return `<div class="rh-chip day"><span>${x.offset === 0 ? "오늘" : x.offset === 1 ? "내일" : `${Number(x.date.slice(8))}(${dow(x.date)})`}</span><i>${iconTxt(x.sky || x.wf) || "–"}</i><b>${x.max ?? "–"}°</b><small>${x.min ?? "–"}°</small>${c && c.diff != null && Math.abs(c.diff) >= 1 ? `<em class="${c.diff > 0 ? "up" : "down"}">${sg(c.diff)}</em>` : ""}${x.pop != null ? `<small>☂${x.pop}%</small>` : ""}</div>`; }).join("")}</div><p class="rt-note">최고기온 옆 숫자는 ${esc(pickP(ds[0].maxCmp) ? nm(pickP(ds[0].maxCmp)) : "선택 기준")} 같은 시기 최고기온 평균과의 차이(1℃ 이상만). 단기예보·중기예보.</p></section>`;
   }
   function histHtml(t, sim) {
     const p = pickP(t.current?.compare?.ta);
@@ -179,7 +174,9 @@
   // 접는 주제 묶음: 열림 상태는 localStorage, 닫힌 머리말엔 이미 받은 실제 자료로 한 줄 미리보기
   const GK = "nw.rhGroups";
   const gState = () => { try { return JSON.parse(localStorage.getItem(GK)) || {}; } catch { return {}; } };
-  const GROUPS = { week: ["이번 주 예보", "이번 주 최고·최저기온과 강수확률"], nat: ["전국과 기록", "8개 관측소 기온 · 이맘때의 기록"], past: ["과거와 비교", "오늘과 닮은 과거의 날 · 궁금한 날씨"] };
+  // 예전 '이번 주 예보' 묶음(내일 날씨와 겹쳐 뺌)의 저장값은 지운다
+  try { const s0 = JSON.parse(localStorage.getItem(GK) || "null"); if (s0 && "week" in s0) { delete s0.week; localStorage.setItem(GK, JSON.stringify(s0)); } } catch {}
+  const GROUPS = { nat: ["전국과 기록", "8개 관측소 기온 · 이맘때의 기록"], past: ["과거와 비교", "오늘과 닮은 과거의 날 · 궁금한 날씨"] };
   function group(id, inner) {
     const [t, pv] = GROUPS[id];
     return `<details class="card rh-grp" data-grp="${id}"${gState()[id] ? " open" : ""}><summary><span class="rh-gt">${t}</span><small class="rh-pv" id="rhPv-${id}">${pv}</small></summary>${inner}</details>`;
@@ -192,7 +189,8 @@
     const hi = ds.reduce((a, b) => ((b.max ?? -99) > (a.max ?? -99) ? b : a));
     const wet = ds.filter((x) => (x.pop ?? 0) >= 60);
     const dn = (x) => (x.offset === 0 ? "오늘" : x.offset === 1 ? "내일" : `${Number(x.date.slice(8))}일(${dow(x.date)})`);
-    return `${ds.length}일 예보 · 가장 더운 날 ${dn(hi)} ${hi.max ?? "–"}℃ · ${wet.length ? `비 소식 ${wet.map(dn).join("·")}` : "강수확률 60% 이상인 날 없음"}`;
+    // 비 소식(강수확률 60% 이상인 첫날)이 있으면 그것, 없으면 가장 더운 날
+    return wet.length ? `비 소식 ${dn(wet[0])}${wet.length > 1 ? ` 외 ${wet.length - 1}일` : ""} · 강수확률 ${wet[0].pop}%` : hi.max != null ? `가장 더운 날 ${dn(hi)} ${hi.max}℃` : null;
   }
   function natPv(d) {
     const xs = (d?.rows || []).map((r) => { const h = [...r.hours].reverse().find((x) => x.obs != null); return h ? { n: r.name, v: h.obs, h: h.hour } : null; }).filter(Boolean);
@@ -216,7 +214,7 @@
     if (fv?.hours?.[0] && wx(fv.hours[0])) document.getElementById("rhSky").innerHTML = `${icon(fv.hours[0])} ${esc(wx(fv.hours[0]))} <small>${Number(fv.hours[0].time.slice(11, 13))}시 예보</small>`;
     const tip = document.getElementById("rhTip"), th = fv ? tipHtml(t, fv) : "";
     if (tip && th) { tip.innerHTML = th; tip.hidden = false; }
-    const wk = document.getElementById("rhWeek"); if (wk && fv) { wk.innerHTML = weekHtml(fv); pv("week", weekPv(fv)); }
+    const wl = document.getElementById("rhWeekLink"), wt = fv ? weekPv(fv) : null; if (wl && wt) wl.innerHTML = `<a href="#/forecast?station=${esc(st)}">${esc(wt)} · 내일 날씨에서 보기 ›</a>`;
     paintStory();
   }
   // rt-stories.js 가 이야기를 받으면 맨 위 이야기를 히어로 한 줄로

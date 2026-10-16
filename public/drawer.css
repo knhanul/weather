@@ -28,12 +28,12 @@
   body.drawer-open { overflow:hidden; }
   nav a { padding:11px 12px; font-size:15px; }
   .nav-sub { display:none; }
-  nav.sub-open .nav-sub { display:block; }
+  .nav-sub.open { display:block; }
   .nav-sub a { padding:9px 10px; font-size:14px; }
   .nav-exp { display:grid; place-items:center; position:absolute; top:2px; right:2px; width:40px; height:38px; border:0; border-radius:9px; background:transparent; color:var(--muted); padding:0; cursor:pointer; box-shadow:none; }
   .nav-exp:hover, .nav-exp:focus-visible { background:var(--soft); color:var(--fg); }
   .nav-exp svg { width:18px; height:18px; transition:transform .15s; }
-  nav.sub-open .nav-exp svg { transform:rotate(180deg); }
+  .nav-exp[aria-expanded="true"] svg { transform:rotate(180deg); }
   .nav-row a.nav-parent { padding-right:48px; }
   .nav-group.adm-none { display:none; }
   .dr-auth { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:14px; padding:12px 4px 0; border-top:1px solid var(--line); }

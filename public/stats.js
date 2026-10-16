@@ -1347,10 +1347,10 @@
   function showTab(tab) {
     state.tab = tab;
     if (TAB_LABEL[tab] && document.querySelector("#dash.on") && !document.querySelector('nav a[data-page="questions"].active')) {
-      $id("phGroup").textContent = "날씨 통계";
+      $id("phGroup").textContent = "지난 날씨";
       $id("phTitle").textContent = TAB_LABEL[tab];
       $id("phDesc").textContent = TAB_DESC[tab];
-      document.title = `${TAB_LABEL[tab]} · 날씨 통계 · 이날`;
+      document.title = `${TAB_LABEL[tab]} · 지난 날씨 · 이날`;
     }
     for (const t of TABS) {
       const el = $id(PANEL[t]);

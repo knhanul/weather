@@ -41,7 +41,7 @@ const MOB = { width: 390, height: 844 };
   s = await dstate(page);
   ok(s.open && s.vis === "visible" && s.left === 0 && s.role === "dialog" && s.exp === "true" && s.inert && s.focusIn && s.sub === "block", `☰ → 서랍 열림(dialog·inert·포커스 안·하위 메뉴 펼침) ${JSON.stringify(s)}`);
   const items = await page.evaluate(() => [...document.querySelectorAll("aside nav a, aside .dr-auth a, aside .dr-auth button")].filter((a) => a.offsetParent).map((a) => a.textContent.trim()));
-  ok(["날씨 통계", "한눈에 보기", "연도별 비교", "지역별 비교", "생활 속 날씨", "날씨 기록", "질문으로 보는 날씨", "시간별 날씨", "일별 날씨", "보기 설정"].every((t) => items.includes(t)) && items.some((t) => /카카오/.test(t)) && !items.includes("자료수집"), `서랍 내용(비로그인: 관리 메뉴 없음, 로그인 버튼) ${items.join("|")}`);
+  ok(["지난 날씨", "날씨 자료실", "한눈에 보기", "연도별 비교", "지역별 비교", "생활 속 날씨", "날씨 기록", "질문으로 보는 날씨", "시간별 날씨", "일별 날씨", "보기 설정"].every((t) => items.includes(t)) && items.some((t) => /카카오/.test(t)) && !items.includes("자료수집"), `서랍 내용(비로그인: 관리 메뉴 없음, 로그인 버튼) ${items.join("|")}`);
   const mainTop1 = await page.evaluate(() => Math.round(document.querySelector("main").getBoundingClientRect().top));
   ok(mainTop1 === mainTop0, `열어도 본문 위치 그대로(레이아웃 이동 없음) ${mainTop0}→${mainTop1}`);
   await page.screenshot({ path: `${SH}/drawer-open-mobile.png` });

@@ -9,16 +9,19 @@
   const bar = $("appbar");
   const bd = $("drBackdrop");
   const closeBtn = $("drClose");
-  const exp = $("navExp");
+  const exps = [...aside.querySelectorAll(".nav-exp")];
   const wrap = document.querySelector(".wrap");
   let open = false;
   let pending = null;
   let fallback = 0;
   const focusables = () => [...aside.querySelectorAll("a[href], button:not([disabled])")].filter((el) => el.offsetParent !== null && !el.hidden);
+  // 묶음 메뉴(지난 날씨·날씨 자료실): 단추마다 aria-controls 의 하위 메뉴를 펼치고 접음
   function syncExp() {
-    const on = nav.classList.contains("sub-open");
-    exp.setAttribute("aria-expanded", String(on));
-    exp.setAttribute("aria-label", on ? "날씨 통계 하위 메뉴 접기" : "날씨 통계 하위 메뉴 펼치기");
+    for (const b of exps) {
+      const on = !!$(b.getAttribute("aria-controls"))?.classList.contains("open");
+      b.setAttribute("aria-expanded", String(on));
+      b.setAttribute("aria-label", `${b.dataset.name} 하위 메뉴 ${on ? "접기" : "펼치기"}`);
+    }
   }
   function setOpen(v) {
     open = v;
@@ -30,7 +33,7 @@
       aside.setAttribute("role", "dialog");
       aside.setAttribute("aria-modal", "true");
       aside.setAttribute("aria-label", "메뉴");
-      nav.classList.toggle("sub-open", nav.classList.contains("stats-on"));
+      for (const s of nav.querySelectorAll(".nav-sub")) s.classList.toggle("open", s.classList.contains("cur"));
       syncExp();
       const cur = aside.querySelector("nav a[data-sub].active") || aside.querySelector("nav a[data-page].active:not(.nav-parent)") || closeBtn;
       cur.focus({ preventScroll: true });
@@ -73,7 +76,7 @@
   btn.addEventListener("click", openDrawer);
   closeBtn.addEventListener("click", () => closeDrawer());
   bd.addEventListener("click", () => closeDrawer());
-  exp.addEventListener("click", () => { nav.classList.toggle("sub-open"); syncExp(); });
+  for (const b of exps) b.addEventListener("click", () => { $(b.getAttribute("aria-controls"))?.classList.toggle("open"); syncExp(); });
   aside.addEventListener("click", (e) => {
     if (!open) return;
     const lo = e.target.closest("[data-dr-logout]");

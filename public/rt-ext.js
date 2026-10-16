@@ -37,7 +37,7 @@
     const now = c?.values && c.freshness.state === "fresh" ? `<div class="rtx-ov-i"><span>지금 ${esc(c.time.slice(11, 16))} 실황</span><b>${c.values.ta}℃</b>${cmpRow(c.compare.ta)}</div>` : `<div class="rtx-ov-i"><span>지금</span><b class="rt-ins">${esc(c?.freshness?.text || "실황 없음")}</b></div>`;
     const w = f.week;
     const wk = w ? `<div class="rtx-ov-i"><span>이번 주(관측 ${w.obsDays}일 + 예보 ${w.fcDays}일) 기온</span><b>${w.anomaly[0].diff == null ? "–" : `${sg(w.anomaly[0].diff)}`}</b>${cmpRow(w.anomaly)}</div>` : "";
-    return `<section class="card rtx-card rtx-ov"><div class="rtx-ov-g">${now}${wk}</div><p class="rtx-links"><a href="#/today?station=${st}">오늘의 날씨 ›</a><a href="#/forecast?station=${st}">날씨 예보 ›</a></p></section>`;
+    return `<section class="card rtx-card rtx-ov"><div class="rtx-ov-g">${now}${wk}</div><p class="rtx-links"><a href="#/today?station=${st}">오늘 날씨 ›</a><a href="#/forecast?station=${st}">내일 날씨 ›</a></p></section>`;
   }
   async function yearly(st) {
     const d = await get(`/api/rt/ytd?station=${st}`);
