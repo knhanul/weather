@@ -61,7 +61,7 @@
     const dark = n || k === "rain" || k === "shower" || k === "sleet" || (k === "cloud" && n);
     const stars = n && (k === "clear" || k === "partly") ? [...Array(14)].map((_, i) => `<circle cx="${(i * 53) % 360 + 10}" cy="${(i * 37) % 70 + 8}" r="${i % 3 ? 0.9 : 1.4}" fill="#fff" opacity=".8"/>`).join("") : "";
     const rainBg = k === "rain" || k === "shower" || k === "sleet" ? [...Array(26)].map((_, i) => `<line x1="${(i * 29) % 380}" y1="${(i * 17) % 120}" x2="${(i * 29) % 380 - 5}" y2="${(i * 17) % 120 + 14}" stroke="#dbe7ff" stroke-width="1.2" opacity=".55"/>`).join("") : "";
-    const art = `<svg class="fv-art" viewBox="0 0 360 160" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><linearGradient id="fvSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${bg[0]}"/><stop offset="1" stop-color="${bg[1]}"/></linearGradient></defs><rect width="360" height="160" fill="url(#fvSky)"/>${stars}${rainBg}<g transform="translate(285,62) scale(3.1)">${icon(k, n, 12)}</g></svg>`;
+    const art = `<svg class="fv-art" viewBox="0 0 360 160" preserveAspectRatio="xMaxYMin slice" aria-hidden="true"><defs><linearGradient id="fvSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${bg[0]}"/><stop offset="1" stop-color="${bg[1]}"/></linearGradient></defs><rect width="360" height="160" fill="url(#fvSky)"/>${stars}${rainBg}<g transform="translate(285,62) scale(3.1)">${icon(k, n, 12)}</g></svg>`;
     const strip = span.filter((x, i) => i % (span.length > 10 ? 2 : 1) === 0).slice(0, 9).map((x) => `<div class="fv-hc"><span>${hh(x.time)}시</span>${iconSvg(kind(x.sky, x.pty), night(hh(x.time)), 26, x.pty && x.pty !== "없음" ? x.pty : x.sky)}<b>${x.ta ?? "–"}°</b><small>${x.pop == null ? "" : `☂${x.pop}%`}</small></div>`).join("");
     const rel = d.releases || {};
     return `<section class="card fv-hero${dark ? " dark" : ""}" aria-label="지금부터 오늘 밤까지">${art}<div class="fv-hin">
@@ -91,13 +91,14 @@
         out.push({ ico: kind(null, hs[0].pty !== "없음" ? hs[0].pty : "비") || "rain", t: j > 0 ? `${dayWord(hs[j].time.slice(0, 10), d.date)} ${hh(hs[j].time)}시쯤 비·눈 그침` : "72시간 내내 비·눈 또는 강수확률 60% 이상", sub: `지금 ${esc(hs[0].pty !== "없음" ? hs[0].pty : `강수확률 ${hs[0].pop}%`)}`, src: `${hs[0].source} ${hm(hs[0].base)} 발표` });
       }
       let best = null;
-      for (let i = 0; i + 3 < hs.length; i++) { const a = hs[i].ta, b = hs[i + 3].ta; if (a != null && b != null && a - b >= 4 && (!best || a - b > best.dv)) best = { dv: Math.round((a - b) * 10) / 10, a: hs[i], b: hs[i + 3] }; }
+      const byT = new Map(hs.map((x) => [x.time, x])), plus3 = (t) => { const d0 = new Date(`${t.replace(" ", "T")}+09:00`); d0.setTime(d0.getTime() + 3 * 36e5); const k = new Date(d0.getTime() + 9 * 36e5).toISOString(); return `${k.slice(0, 10)} ${k.slice(11, 13)}:00:00`; };
+      for (let i = 0; i < hs.length; i++) { const nx = byT.get(plus3(hs[i].time)); if (!nx) continue; const a = hs[i].ta, b = nx.ta; if (a != null && b != null && a - b >= 4 && (!best || a - b > best.dv)) best = { dv: Math.round((a - b) * 10) / 10, a: hs[i], b: nx }; }
       if (best) out.push({ ico: "drop", t: `${dayWord(best.a.time.slice(0, 10), d.date)} ${hh(best.a.time)}시→${hh(best.b.time)}시 기온 ${best.a.ta}℃ → ${best.b.ta}℃ (${sg(-best.dv)})`, sub: "3시간 사이 가장 큰 하강", src: `${best.b.source} ${hm(best.b.base)} 발표` });
     }
     const ds = (d.days || []).filter((x) => !x.none && x.max != null);
     let jump = null;
     for (let i = 1; i < ds.length; i++) { if (Math.round((Date.parse(ds[i].date) - Date.parse(ds[i - 1].date)) / 864e5) !== 1) continue; const dv = Math.round((ds[i].max - ds[i - 1].max) * 10) / 10; if (Math.abs(dv) >= 5 && (!jump || Math.abs(dv) > Math.abs(jump.dv))) jump = { dv, a: ds[i - 1], b: ds[i] }; }
-    if (jump) out.push({ ico: jump.dv < 0 ? "drop" : "rise", t: `${dayWord(jump.b.date, d.date)} 최고기온 ${jump.b.max}℃ — 전날(${jump.a.max}℃)보다 ${sg(jump.dv)}`, sub: "이웃한 두 날 최고기온 차이가 가장 큰 날", src: `${jump.b.maxSource} ${hm(jump.b.maxBase)} 발표` });
+    if (jump) out.push({ ico: jump.dv < 0 ? "drop" : "rise", t: `${dayWord(jump.b.date, d.date)} 최고기온 ${jump.b.max}℃ — 전날(${jump.a.max}℃)보다 ${sg(jump.dv)}`, sub: `이웃한 두 날 최고기온 차이가 가장 큰 날${jump.a.maxSource !== jump.b.maxSource ? ` (전날은 ${jump.a.maxSource}, 이날은 ${jump.b.maxSource} 값)` : ""}`, src: `${jump.b.maxSource} ${hm(jump.b.maxBase)} 발표` });
     return out;
   }
   function changeCard(d) {
@@ -180,7 +181,7 @@
       return `<li${x.offset === 0 ? ' class="today"' : ""}><span class="fv-d"><b>${x.offset === 0 ? "오늘" : x.offset === 1 ? "내일" : `${+x.date.slice(8, 10)}일`}</b><small>${dow(x.date)}</small></span><span class="fv-i">${x.none ? "–" : iconSvg(k, false, 28, x.wf || x.sky || "")}</span><span class="fv-p">${x.pop == null ? "" : `<small class="${x.pop >= 60 ? "wet" : ""}">☂${x.pop}%</small>`}</span>
         <span class="fv-v lo">${x.none ? "" : x.min ?? "–"}°</span><span class="fv-track">${base}${bar}</span><span class="fv-v hi">${x.none ? "" : x.max ?? "–"}°${dm != null && Math.abs(dm) >= 1 ? `<em class="${cls(dm)}">${sg(dm)}</em>` : ""}</span>${x.none ? `<span class="fv-none rt-ins">예보 없음</span>` : ""}<small class="fv-src">${esc((x.maxSource || x.minSource || x.wxSource || "").replace("예보", ""))}</small></li>`;
     }).join("");
-    return `<section class="card fv-pills" aria-label="10일 예보"><h2>${ds.length}일 예보 <span class="rt-badge fc">예보</span></h2><div class="rt-legend"><span><i class="fv-key rng"></i> 예보 최저~최고</span><span><i class="fv-key base"></i> ${esc(per ? `${per.label} ${per.range}` : "기준 평균")} 같은 시기 최저~최고</span></div><ul>${rows}</ul><p class="rt-note">최고기온 옆 숫자 = 기준 평균 최고기온과의 차이(1℃ 이상만). 단기 = 단기예보(대략 3일), 중기 = 중기예보(발표 ${esc(hm(d.releases?.midTa) || "없음")}). 강수확률은 하루 중 가장 큰 값.</p></section>`;
+    return `<section class="card fv-pills" aria-label="10일 예보"><h2>${ds.length}일 예보 <span class="rt-badge fc">예보</span></h2><div class="rt-legend"><span><i class="fv-key rng"></i> 예보 최저~최고</span><span><i class="fv-key base"></i> ${esc(per ? `${per.label.replace(" 평균", "")}(${per.range}) 평균` : "기준 평균")} 같은 시기 최저~최고</span></div><ul>${rows}</ul><p class="rt-note">최고기온 옆 숫자 = 기준 평균 최고기온과의 차이(1℃ 이상만). 단기 = 단기예보(대략 3일), 중기 = 중기예보(발표 ${esc(hm(d.releases?.midTa) || "없음")}). 강수확률은 하루 중 가장 큰 값.</p></section>`;
   }
   window.RTFV = { hero, changeCard, releaseLine, chart72, pills, xOf, idxAt, iconSvg, kind };
 })();
