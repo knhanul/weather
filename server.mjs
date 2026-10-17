@@ -20,6 +20,7 @@ import { handlePrefs, createPgPrefsStore, createMysqlPrefsStore, createJsonPrefs
 import { createStatsData } from "./stats-data.mjs";
 import { createStatsApi } from "./stats-api.mjs";
 import { createRtApi } from "./rt-api.mjs";
+import { createRtSnapshotDb } from "./rt-snapshot-db.mjs";
 import { createStatsHourly } from "./stats-hourly.mjs";
 import { collectForecast, FORECAST_KINDS, releaseTimes } from "./kma-forecast.mjs";
 import { collectMid, MID_KINDS, midReleaseTimes } from "./kma-mid.mjs";
@@ -127,7 +128,16 @@ function seedIfEmpty() {
 async function upsert(rows) {
   const out = await upsertHourlyStore(rows);
   statsHourly.invalidateRows(rows); // 날씨 통계(시간자료 기반)가 오래된 값을 쓰지 않게 — 저장한 지점의 그 날짜부터 다시 읽음
+  notifyRt("asos-hourly", rows, (r) => r.observation_datetime, "H"); // 5단계: 저장 성공 뒤 영향 지점 사전 계산
   return out;
+}
+// 5단계(12-3): 저장 성공 → 영향 지점 사전 계산. 끝난 해(올해 1월 1일 전) 자료가 있으면 그 지점의 기준 분포 판을 올린다
+function notifyRt(source, rows, dateOf, kind) {
+  if (!rows?.length) return;
+  const y0 = `${new Date(Date.now() + KST_MS).getUTCFullYear()}-01-01`;
+  const stations = [...new Set(rows.map((r) => String(r.station_id)))];
+  const old = rows.some((r) => String(dateOf(r) || "").slice(0, 10) < y0);
+  handleRt.notify({ source, stations, oldKinds: old ? [kind] : [] });
 }
 async function upsertHourlyStore(rows) {
   if (db.usingPg()) return db.upsertHourly(rows);
@@ -422,7 +432,9 @@ async function collectOfficial({ stationId = "108", from, to, trigger = "MANUAL"
 
 async function upsertDaily(rows) {
   try {
-    return await upsertDailyStore(rows);
+    const out = await upsertDailyStore(rows);
+    notifyRt("asos-daily", rows, (r) => r.observation_date, "D");
+    return out;
   } finally {
     // 날씨 통계가 오래된 일자료로 계산하지 않게 저장한 지점의 메모리 자료를 버린다(다음 요청이 다시 읽음)
     statsData.invalidate([...new Set(rows.map((r) => String(r.station_id)))]);
@@ -1212,6 +1224,7 @@ async function collectForecastJob({ dataset, hours = 24, trigger = "MANUAL" }) {
       job.status = r.failed === 0 ? "COMPLETED" : r.releases > 0 ? "PARTIAL" : "FAILED";
       job.message = `구역 ${regions.length}곳 · 새 발표 ${r.releases} · 이미 받음 ${r.skipped} · 아직 없음/제공 기간 지남 ${r.none} · 실패 ${r.failed}` + (r.errors.length ? ` · ${r.errors.join(" / ")}` : "");
       await saveJobs(job);
+      if (r.releases > 0) handleRt.notify({ source: dataset }); // 5단계: 중기는 여기서 끝나므로(조기 return) 이 자리에서 알림
       return job;
     }
     const grids = (await store.grids()).map((g) => ({ nx: Number(g.nx), ny: Number(g.ny) }));
@@ -1221,6 +1234,7 @@ async function collectForecastJob({ dataset, hours = 24, trigger = "MANUAL" }) {
     Object.assign(job, { from: r.from, to: r.to, received: r.received, inserted: r.inserted, updated: r.updated, chunks: r.chunks });
     job.status = r.failed === 0 ? "COMPLETED" : r.releases > 0 ? "PARTIAL" : "FAILED";
     job.message = `격자 ${uniq.length}곳 · 새 발표 ${r.releases} · 이미 받음 ${r.skipped} · 아직 없음/제공 기간 지남 ${r.none} · 실패 ${r.failed}` + (r.errors.length ? ` · ${r.errors.join(" / ")}` : "");
+    if (r.releases > 0) handleRt.notify({ source: dataset }); // 5단계: 초단기실황·초단기예보·단기예보 새 발표 저장 뒤
   } catch (err) {
     job.status = "FAILED";
     job.message = err instanceof Error ? err.message : String(err);
@@ -1261,7 +1275,12 @@ const handleStats = createStatsApi({
 });
 
 // 실시간·예보 분석(/api/rt/*): 새 엔드포인트. 과거 3개 기준 평균은 위 statsHourly·statsData 메모리를 그대로 쓴다(새 DB 표 없음).
-const handleRt = createRtApi({ rt: () => db.rtStore(), statsHourly, statsData, stations, json });
+// 5단계: 사전 계산 스냅샷(MySQL 새 표). RT_SNAPSHOT_NS = 이름공간(시험 컨테이너는 test — 운영 스냅샷·게시 이력과 섞이지 않게), RT_PRECOMPUTE=0 이면 끔
+const APP_REV = (() => { try { return fs.readFileSync(path.join(__dirname, "REVISION"), "utf8").trim() || "dev"; } catch { return "dev"; } })();
+const handleRt = createRtApi({
+  rt: () => db.rtStore(), statsHourly, statsData, stations, json, appRev: APP_REV, log: (line) => console.log(line), dbStats: () => db.queryStats(),
+  snap: () => (db.storageKind() === "mysql" && process.env.RT_PRECOMPUTE !== "0" ? createRtSnapshotDb(db.getPool(), { ns: process.env.RT_SNAPSHOT_NS || "main", log: (line) => console.log(line) }) : null),
+});
 
 // 카카오 로그인(관리 기능 보호). 서버 시작 시 DB 연결 뒤에 만든다. 키가 없으면 꺼진 상태(기존과 동일).
 let auth = createAuth({ env: {} });
@@ -1561,6 +1580,8 @@ const ready = (async () => {
     if (n) console.log(`auth expired sessions removed=${n}`);
     setInterval(() => auth.cleanup(), 3600000).unref();
   }
+  // 저장된 스냅샷은 과거 자료를 읽기 전부터 응답에 쓴다(첫 화면이 빨리)
+  await handleRt.initSnapshots().then((on) => console.log(`rt snapshots ${on ? "on" : "off"}`)).catch((e) => console.error("rt snapshots init failed", e?.message || e));
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`weather-hub ${PORT} latest=${latestOfficialHour()} storage=${db.storageKind()}`);
     // 날씨 통계 첫 요청이 기다리지 않게 사용 중인 지점의 일자료를 뒤에서 한 지점씩 읽어 둔다
@@ -1586,8 +1607,9 @@ const ready = (async () => {
         await handleRt.warmNation();
         handleRt.setWarming(false);
         console.log(`rt warm done ms=${Date.now() - t0}`);
+        handleRt.startPrecompute().catch((e) => console.error("rt precompute start failed", e?.message || e));
       })().catch(() => {});
-    }
+    } else handleRt.startPrecompute().catch((e) => console.error("rt precompute start failed", e?.message || e));
   });
 })();
 await ready;

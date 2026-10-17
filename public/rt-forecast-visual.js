@@ -169,7 +169,18 @@
       if (a >= 0 && b >= a) s += `<rect class="fv-hl" x="${(X(a) - step / 2).toFixed(1)}" y="0" width="${(X(b) - X(a) + step).toFixed(1)}" height="${H}" fill="#fff1c2" stroke="#c98a00" stroke-width="1.4" opacity=".9"/><text x="${(X(a) - step / 2 + 3).toFixed(1)}" y="${H - 3}" font-size="10.5" font-weight="700" fill="#8a4b00">${esc(hl.label || "")}</text>`;
     }
     for (let t = Math.ceil(lo / 2) * 2; t <= hi; t += 2) s += `<line x1="${PAD.L}" x2="${W - PAD.R}" y1="${Y(t)}" y2="${Y(t)}" stroke="#e0e8f4"/><text x="${PAD.L - 5}" y="${Y(t) + 4}" text-anchor="end" font-size="11" fill="#5e7090">${t}</text>`;
-    hrs.forEach((x, i) => { const h = hh(x.time); if (h === 0) s += `<line x1="${X(i)}" x2="${X(i)}" y1="0" y2="${H}" stroke="#b9c8de"/><text x="${X(i) + 4}" y="${tB + 14}" font-size="11" font-weight="700" fill="#0d1b3d">${esc(dlab(x.time.slice(0, 10)))}</text>`; else if (h % 6 === 0) s += `<text x="${X(i)}" y="${tB + 14}" text-anchor="middle" font-size="10.5" fill="#5e7090">${h}시</text>`; });
+    // 날짜 표시: 0시 + 그래프 첫 칸(0시가 아니면 첫 날짜가 안 보이던 문제). 날짜 글자와 겹치는 'N시' 는 뺌(5단계)
+    const dayX = []; // [시작 x, 끝 x]
+    hrs.forEach((x, i) => {
+      const h = hh(x.time);
+      if (h !== 0 && i !== 0) return;
+      const lab = dlab(x.time.slice(0, 10)), x0 = h === 0 ? X(i) + 4 : Math.max(2, X(i) - step / 2 + 2);
+      if (h === 0) s += `<line x1="${X(i)}" x2="${X(i)}" y1="0" y2="${H}" stroke="#b9c8de"/>`;
+      else if (hrs.some((y, j) => j > 0 && j * step < 64 && hh(y.time) === 0)) return; // 곧 0시 날짜가 나오면 첫 칸 날짜는 생략
+      s += `<text class="fv-day" x="${x0.toFixed(1)}" y="${tB + 14}" font-size="11" font-weight="700" fill="#0d1b3d">${esc(lab)}</text>`;
+      dayX.push([x0 - 2, x0 + lab.length * 6.6 + 4]);
+    });
+    hrs.forEach((x, i) => { const h = hh(x.time); if (h === 0 || h % 6 !== 0) return; const c = X(i); if (dayX.some(([a, b]) => c + 9 > a && c - 9 < b)) return; s += `<text x="${c}" y="${tB + 14}" text-anchor="middle" font-size="10.5" fill="#5e7090">${h}시</text>`; });
     // 날씨 그림 띠(3시간마다)
     hrs.forEach((x, i) => { if (hh(x.time) % 3 === 0 || i === 0) s += `<g transform="translate(${X(i).toFixed(1)},15) scale(.95)"><title>${esc(hm(x.time))} ${esc(x.pty && x.pty !== "없음" ? x.pty : x.sky || "자료 없음")}</title>${icon(kind(x.sky, x.pty), night(hh(x.time)), 11)}</g>`; });
     for (const k of lines) s += `<path d="${path((x) => x.avg?.[k])}" fill="none" stroke="${colors[k]}" stroke-width="1.5" opacity=".85"/>`;
@@ -214,5 +225,5 @@
     }).join("");
     return `<section class="card fv-pills" aria-label="10일 예보"><h2>${ds.length}일 예보 <span class="rt-badge fc">예보</span></h2><div class="rt-legend"><span><i class="fv-key rng"></i> 예보 최저~최고</span><span><i class="fv-key base"></i> ${esc(per ? `${per.label.replace(" 평균", "")}(${per.range}) 평균` : "기준 평균")} 같은 시기 최저~최고</span></div><ul>${rows}</ul><p class="rt-note">최고기온 옆 숫자 = 기준 평균 최고기온과의 차이(1℃ 이상만). 단기 = 단기예보(대략 3일), 중기 = 중기예보(발표 ${esc(hm(d.releases?.midTa) || "없음")}). 강수확률은 하루 중 가장 큰 값.</p></section>`;
   }
-  window.RTFV = { hero, changeCard, releaseLine, revisionCard, outlookFold, chart72, pills, xOf, idxAt, iconSvg, kind };
+  window.RTFV = { hero, changeCard, releaseLine, revisionCard, outlookFold, chart72, pills, xOf, idxAt, iconSvg, kind, dlab };
 })();

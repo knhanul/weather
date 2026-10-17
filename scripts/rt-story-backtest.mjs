@@ -14,7 +14,7 @@ import { seasonEvent, forecastCrossing, seasonCands, SEASON_IDS } from "../rt-se
 import { regionFacts, regionCands } from "../rt-region.mjs";
 import { revisionFlow, popRevisions, revisionCands } from "../rt-revision.mjs";
 import { bigChanges } from "../rt-changes.mjs";
-import { LIFE_VALUE, SEASON_EVENTS } from "../rt-story-rules.mjs";
+import { LIFE_VALUE, SEASON_EVENTS, REGION_RULES } from "../rt-story-rules.mjs";
 
 // 4단계 규칙(계절·지역·발표 흐름·가장 큰 변화) 되돌려 보기 — 실서비스와 같은 모듈 함수
 const tv0 = () => 0.8;
@@ -89,12 +89,17 @@ async function main() {
   const S4 = { season: {}, region: {}, F01: 0, F01pop: 0, big: {}, bigDays: 0, revDays: 0, regionSnaps: 0, regionDays: 0 };
   const bump = (o, k) => { o[k] = (o[k] || 0) + 1; };
   const regionDaySet = {};
+  const G01U = [];
   for (let k = days; k >= 1; k--) {
     const D = dnToYmd(ymdToDn(today) - k);
     const fired = new Set();
     for (const H of [8, 13, 18]) { const r = stage4Region({ D, H, all: ALL }); if (r.F.N) S4.regionSnaps++; for (const c of r.cands) if (!c.exclude) { fired.add(c.ruleId); if (process.env.DUMP?.split(",").includes(c.ruleId)) console.error(`  ${D} ${H}시 ${c.ruleId} U=${c.U.toFixed(2)} ${c.title}`); if (process.env.CHARTS && c.chart && !charts[c.ruleId]) charts[c.ruleId] = { station: "8개 지점", at: `${D} ${pad(H)}:00`, title: c.title, text: c.text, kind: c.kind, chart: c.chart }; } }
     for (const id of fired) bump(S4.region, id);
     S4.regionDays++;
+    // 5단계: G01 문턱 점검 — 그날 세 시각 중 G01(문턱 0 으로 다시 계산, 다른 제외 사유는 그대로) U 최대
+    let mu = null;
+    for (const H of [8, 13, 18]) { const r = stage4Region({ D, H, all: ALL }); const g = regionCands(r.F, { sid: ALL[0]?.sid, tv: tv0, LIFE_VALUE, basisId: "all", R: { ...REGION_RULES, topMinU: 0 } }).find((c) => c.ruleId === "G01" && !c.exclude); if (g && (mu == null || g.U > mu)) mu = g.U; }
+    G01U.push([D, mu == null ? null : Math.round(mu * 1000) / 1000]);
   }
   for (const s of list) {
     const sid = String(s.station_id);
@@ -147,7 +152,7 @@ async function main() {
     console.error(`${sid} ${s.station_name}: ${row.days}일 ` + Object.keys(row.fired).map((id) => `${id}=${row.fired[id]}`).join(" "));
   }
   if (process.env.CHARTS) console.log(`CHARTS ${JSON.stringify(charts)}`);
-  console.log(JSON.stringify({ days, stations: per.length, stationDays: stDays, snapshotsWithStoredForecast: storedFc, firedDays: tot, selectedDays: sel, perStation: per, stage4: { regionFiredDays: S4.region, regionDays: S4.regionDays, regionSnapshots: S4.regionSnaps, revisionDaysWithData: S4.revDays, note: "S:* = 계절 신호 후보(노출 기간 안), F01(*) = 발표 흐름, B:* = 가장 큰 변화 항목(* = ASOS 대체 앞 시간 — 완전 예보 가정)" } }, null, 1));
+  console.log(JSON.stringify({ days, stations: per.length, stationDays: stDays, snapshotsWithStoredForecast: storedFc, firedDays: tot, selectedDays: sel, perStation: per, stage4: { regionFiredDays: S4.region, regionDays: S4.regionDays, regionSnapshots: S4.regionSnaps, revisionDaysWithData: S4.revDays, g01: { current: REGION_RULES.topMinU, firedDaysAt: Object.fromEntries([0.8, 0.85, 0.9, 0.95].map((th) => [th, G01U.filter(([, u]) => u != null && u >= th).length])), daysWithCandidate: G01U.filter(([, u]) => u != null).length, maxUByDay: G01U }, note: "S:* = 계절 신호 후보(노출 기간 안), F01(*) = 발표 흐름, B:* = 가장 큰 변화 항목(* = ASOS 대체 앞 시간 — 완전 예보 가정)" } }, null, 1));
   process.exit(0);
 }
 if (process.argv[1] && process.argv[1].endsWith("rt-story-backtest.mjs")) main().catch((e) => { console.error(e); process.exit(1); });

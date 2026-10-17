@@ -41,6 +41,8 @@ export async function pingDb() {
   return Date.now() - t;
 }
 
+// 5단계: MySQL 질의 수(측정용, 없으면 null)
+export const queryStats = () => (my?.queryStats ? my.queryStats() : null);
 export async function initDb() {
   if (dbDriver() === "mysql") {
     const murl = process.env.MYSQL_URL?.trim();

@@ -118,6 +118,7 @@
     for (const sm of out.querySelectorAll("details > summary")) if (wasOpen.has(sm.textContent.slice(0, 12))) sm.parentElement.open = true;
     const sc = out.querySelector("#fcChartHost .rt-hscroll"); if (sc) sc.scrollLeft = sx;
     bindFull();
+    bindDayTag();
   }
   // 값이 바뀐 발표만(첫 발표 + 바뀐 회차), 최근 6개
   const changesOnly = (a) => a.filter((x, i) => i === 0 || x.value !== a[i - 1].value || x.source !== a[i - 1].source);
@@ -151,6 +152,22 @@
   function fcTip(x, ids) {
     if (!x) return "";
     return `<b>${esc(hm(x.time))}</b> ${esc(x.pty && x.pty !== "없음" ? x.pty : x.sky || "")} · 기온 <b>${x.ta ?? "–"}℃</b> ${ids.map((id) => `<span class="${cls(x.diff[id])}">${sg(x.diff[id])}</span>`).join(" ")} · 강수확률 ${x.pop == null ? "–" : `${x.pop}%`} · 강수량 ${esc(x.pcp ?? "–")} · 습도 ${x.hm ?? "–"}% · 풍속 ${x.ws ?? "–"}m/s${windAt(x.time)} <small>${esc(x.source)} ${esc(hm(x.base))}</small>`;
+  }
+  // 가로로 밀면 왼쪽에 지금 보이는 날짜 고정 표시(날짜 글자가 왼쪽 밖으로 잘리지 않게)
+  function bindDayTag() {
+    const host = $("fcChartHost"), sc = host?.querySelector(".rt-hscroll"), svg = sc?.querySelector("svg.fv-svg");
+    if (!sc || !svg) return;
+    const hrs = state.data.hours.slice(0, 72), n = hrs.length, W = +svg.getAttribute("width"), H = +svg.getAttribute("height");
+    let tag = host.querySelector(".fv-daytag");
+    if (!tag) { tag = document.createElement("span"); tag.className = "fv-daytag"; tag.setAttribute("aria-hidden", "true"); host.appendChild(tag); }
+    tag.style.top = `${Math.round(H * 0.58) + 2}px`;
+    const upd = () => {
+      if (sc.scrollLeft < 8) { tag.hidden = true; return; }
+      const i = window.RTFV.idxAt((sc.scrollLeft + 40) / W, n, W), ymd = hrs[Math.max(0, Math.min(n - 1, i))]?.time.slice(0, 10);
+      tag.textContent = ymd ? window.RTFV.dlab(ymd) : ""; tag.hidden = !ymd;
+    };
+    sc.addEventListener("scroll", upd, { passive: true });
+    upd();
   }
   function bindFull() {
     const host = $("fcChartHost");

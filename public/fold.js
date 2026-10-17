@@ -147,7 +147,12 @@
   function syncMeta() {
     const m = document.getElementById("abMeta");
     const c = document.querySelector("#phChips li:first-child .chip");
-    if (m) m.textContent = c ? short(c.textContent).replace(/^공식\s*/, "") : "";
+    // 5단계: 이 시각은 ASOS 공식 시간자료가 나온 최신 정시(보통 어제 23시)이지 지금 실황 시각이 아님 → 'ASOS' 로 밝혀 씀
+    if (!m) return;
+    const t = c ? short(c.textContent).replace(/^공식\s*/, "").replace(/^최신\s*/, "") : "";
+    m.textContent = t ? `ASOS ${t}` : "";
+    m.title = t ? `기상청 ASOS 공식 관측자료가 제공된 최신 시각 ${t} (KST). 지금 실황(초단기실황) 시각과는 달라요.` : "";
+    m.setAttribute("aria-label", t ? `ASOS 공식 관측자료 최신 제공 시각 ${t}` : "ASOS 공식 관측자료 최신 제공 시각");
   }
   window.NWFold = { refresh, setOpen: (id, v) => { const r = REG.find((x) => x.id === id); if (r) setOpen(r, v); }, isOpen: (id) => !!open.get(id) };
   const chips = document.getElementById("phChips");

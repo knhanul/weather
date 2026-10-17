@@ -79,46 +79,99 @@ function collect(period, md, getVal, expectedPerDay, w, filter = null) {
   return { years, samples };
 }
 
-function summarize(period, { years, samples }, value, digits, minRank = MIN_SAMPLES_RANK) {
+// ---- 5단계(12-2): 분포를 먼저 만들고(buildReferenceDistribution, 현재값과 무관) 현재값을 대입(evaluateValue).
+// 참조 분포 = 기준기간 정보 + 연도 상태 + 평균(반올림 전) + 최고·최저(값·날짜) + p10·p90(반올림 전) + 값별 도수표(오름차순 vals·cnts).
+// 정렬 표본 대신 도수표: 같은 값이 많아(0.1℃ 단위) 작고, lt/eq/gt·분위수를 그대로 재현한다. JSON 왕복해도 같은 수(배정밀도 문자열 왕복).
+export const BASELINE_ALGO = "ref1";
+export function buildReferenceDistribution(period, { years, samples }, digits, minRank = MIN_SAMPLES_RANK) {
   const good = years.filter((y) => y.ok);
-  const out = {
-    id: period.id, label: period.label, from: period.from, to: period.to, yearsInPeriod: period.years,
-    validYears: good.length, samples: samples.length, missingYears: years.filter((y) => !y.ok).map((y) => y.year),
-    weighting: "연도별 평균의 산술평균(해마다 같은 무게)",
+  const ref = {
+    algo: BASELINE_ALGO, id: period.id, label: period.label, from: period.from, to: period.to, yearsInPeriod: period.years, minYears: period.minYears,
+    validYears: good.length, samples: samples.length, missingYears: years.filter((y) => !y.ok).map((y) => y.year), digits, minRank,
   };
-  if (period.years === 0 || good.length < period.minYears) return { ...out, status: "insufficient", statusText: "비교 데이터 부족", mean: null, diff: null };
-  const gm = good.filter((y) => y.mean != null); // 조건부 분포에서 그 해에 조건을 만족한 값이 없으면 평균에서만 빠짐(유효한 해로는 셈)
-  out.occurrenceYears = gm.length;
-  if (!gm.length) return { ...out, status: "insufficient", statusText: "비교 표본 없음", mean: null, diff: null, rankNote: "표본 부족 — 순위·백분위 표시 안 함" };
-  const mean = gm.reduce((s, y) => s + y.mean, 0) / gm.length;
-  out.status = good.length === period.years ? "ok" : "partial";
-  out.statusText = out.status === "ok" ? "" : `${period.years - good.length}개 해 자료 부족 — 나머지 ${good.length}개 해로 계산`;
-  out.mean = round(mean, digits);
-  out.diff = Number.isFinite(value) ? round(value - mean, digits) : null;
+  if (period.years === 0 || good.length < period.minYears) return { ...ref, state: "insufficient" };
+  const gm = good.filter((y) => y.mean != null);
+  ref.occurrenceYears = gm.length;
+  if (!gm.length) return { ...ref, state: "nosample" };
+  ref.state = good.length === period.years ? "ok" : "partial";
+  ref.meanRaw = gm.reduce((s, y) => s + y.mean, 0) / gm.length;
   let mx = null, mn = null;
   for (const x of samples) {
     if (!mx || x.v > mx.v) mx = x;
     if (!mn || x.v < mn.v) mn = x;
   }
-  out.max = mx ? { value: round(mx.v, digits), date: dnToYmd(mx.dn) } : null;
-  out.min = mn ? { value: round(mn.v, digits), date: dnToYmd(mn.dn) } : null;
-  if (Number.isFinite(value) && samples.length >= minRank) {
-    let lt = 0, eq = 0, gt = 0;
-    for (const x of samples) x.v < value ? lt++ : x.v > value ? gt++ : eq++;
-    out.p = (lt + eq / 2) / samples.length; // 0~1(반올림 전) — 이례성 U 계산용
-    out.percentile = round(out.p * 100, 1);
-    out.rankHigh = gt + 1; // 높은 쪽에서 몇 번째(같은 값 다음)
-    out.rankLow = lt + 1;
-    const sorted = samples.map((x) => x.v).sort((p, q) => p - q);
+  ref.max = mx ? [mx.v, mx.dn] : null;
+  ref.min = mn ? [mn.v, mn.dn] : null;
+  const sorted = samples.map((x) => x.v).sort((p, q) => p - q);
+  const vals = [], cnts = [];
+  for (const v of sorted) { if (vals.length && vals[vals.length - 1] === v) cnts[cnts.length - 1]++; else { vals.push(v); cnts.push(1); } }
+  ref.vals = vals; ref.cnts = cnts;
+  if (sorted.length) {
     const q = (p) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(p * (sorted.length - 1))))];
-    out.p10 = round(q(0.1), digits);
-    out.p90 = round(q(0.9), digits);
-    out.outside = value > out.p90 ? round(value - out.p90, digits) : value < out.p10 ? round(value - out.p10, digits) : 0; // 평년 범위(10~90%) 밖으로 나간 정도
-    out.newHigh = value > mx.v; // 관측값이면 '같은 시기 표본 최고보다 높음', 예보값이면 확정하지 않음(호출 쪽에서 표시)
-    out.newLow = value < mn.v;
+    ref.q10 = q(0.1); ref.q90 = q(0.9);
+  }
+  return ref;
+}
+// 도수표에서 lt(작은 값 수)·eq(같은 값 수) — 이진 탐색
+function ltEq(ref, value) {
+  const { vals, cnts } = ref;
+  let lo = 0, hi = vals.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (vals[m] < value) lo = m + 1; else hi = m; }
+  let lt = 0;
+  for (let i = 0; i < lo; i++) lt += cnts[i];
+  const eq = lo < vals.length && vals[lo] === value ? cnts[lo] : 0;
+  return { lt, eq };
+}
+export function evaluateValue(ref, value) {
+  const digits = ref.digits;
+  const out = {
+    id: ref.id, label: ref.label, from: ref.from, to: ref.to, yearsInPeriod: ref.yearsInPeriod,
+    validYears: ref.validYears, samples: ref.samples, missingYears: ref.missingYears.slice(),
+    weighting: "연도별 평균의 산술평균(해마다 같은 무게)",
+  };
+  if (ref.state === "insufficient") return { ...out, status: "insufficient", statusText: "비교 데이터 부족", mean: null, diff: null };
+  out.occurrenceYears = ref.occurrenceYears;
+  if (ref.state === "nosample") return { ...out, status: "insufficient", statusText: "비교 표본 없음", mean: null, diff: null, rankNote: "표본 부족 — 순위·백분위 표시 안 함" };
+  const mean = ref.meanRaw;
+  out.status = ref.state;
+  out.statusText = out.status === "ok" ? "" : `${ref.yearsInPeriod - ref.validYears}개 해 자료 부족 — 나머지 ${ref.validYears}개 해로 계산`;
+  out.mean = round(mean, digits);
+  out.diff = Number.isFinite(value) ? round(value - mean, digits) : null;
+  out.max = ref.max ? { value: round(ref.max[0], digits), date: dnToYmd(ref.max[1]) } : null;
+  out.min = ref.min ? { value: round(ref.min[0], digits), date: dnToYmd(ref.min[1]) } : null;
+  if (Number.isFinite(value) && ref.samples >= ref.minRank) {
+    const { lt, eq } = ltEq(ref, value);
+    const gt = ref.samples - lt - eq;
+    out.p = (lt + eq / 2) / ref.samples;
+    out.percentile = round(out.p * 100, 1);
+    out.rankHigh = gt + 1;
+    out.rankLow = lt + 1;
+    out.p10 = round(ref.q10, digits);
+    out.p90 = round(ref.q90, digits);
+    out.outside = value > out.p90 ? round(value - out.p90, digits) : value < out.p10 ? round(value - out.p10, digits) : 0;
+    out.newHigh = value > ref.max[0];
+    out.newLow = value < ref.min[0];
   } else out.rankNote = "표본 부족 — 순위·백분위 표시 안 함";
   return out;
 }
+// 예전 summarize 와 같은 결과(분포 → 대입)
+function summarize(period, coll, value, digits, minRank = MIN_SAMPLES_RANK) {
+  return evaluateValue(buildReferenceDistribution(period, coll, digits, minRank), value);
+}
+// 참조 분포만(값 없이) — 사전 계산·DB 저장용. 세 기준기간 배열
+export function hourlyReference(hs, ymd, hour, field, { periods = basePeriods(ymd), w = WINDOW_DAYS } = {}) {
+  const md = ymd.slice(5, 10);
+  const arr = hs[field];
+  const get = (dn) => { const i = (dn - hs.base) * 24 + hour; return i >= 0 && i < hs.n && hs.src[i] ? [hval(arr, i)] : [NaN]; };
+  const digits = HOURLY_FIELDS[field]?.digits ?? 1;
+  return periods.map((p) => buildReferenceDistribution(p, collect(p, md, get, 1, w), digits));
+}
+export function dailyReference(store, ymd, field, { periods = basePeriods(ymd), w = WINDOW_DAYS } = {}) {
+  const md = ymd.slice(5, 10);
+  const get = (dn) => { const i = dn - store.base; return [i >= 0 && i < store.n && store.present[i] ? store[field][i] : NaN]; };
+  return periods.map((p) => buildReferenceDistribution(p, collect(p, md, get, 1, w), 1));
+}
+export const evaluateRefs = (refs, value = NaN) => refs.map((r) => evaluateValue(r, value));
 
 export const HOURLY_FIELDS = { ta: { label: "기온", unit: "℃", digits: 1 }, hm: { label: "습도", unit: "%", digits: 0 }, rn: { label: "1시간 강수량", unit: "mm", digits: 1 }, ws: { label: "풍속", unit: "m/s", digits: 1 } };
 // 시간자료(ASOS) — 같은 시기(±7일) 같은 시각 hour 의 값

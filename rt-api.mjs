@@ -25,6 +25,10 @@ import { seasonEvent, forecastCrossing, seasonChart, seasonHome, seasonCands, SE
 import { regionFacts, regionCands } from "./rt-region.mjs";
 import { revisionFlow, popRevisions, revisionCands } from "./rt-revision.mjs";
 import { bigChanges } from "./rt-changes.mjs";
+import { hourlyReference, dailyReference, evaluateRefs, BASELINE_ALGO } from "./rt-baseline.mjs";
+import { createDbHistory, SNAPSHOT_SCHEMA } from "./rt-snapshot-db.mjs";
+import { createPrecomputeQueue, createHourTicker } from "./rt-precompute.mjs";
+import { nextHourMs, sourcesOf, freshInputs, invalidReason, decorate } from "./rt-snapshot-serve.mjs";
 import { SEASON_EVENTS } from "./rt-story-rules.mjs";
 export { PTY, SKY, windDir, rainText };
 export function freshness(baseWall, nowMs, limitMin) {
@@ -35,7 +39,8 @@ export function freshness(baseWall, nowMs, limitMin) {
   return { state: stale ? "stale" : "fresh", ageMin: age, text: stale ? `${h ? `${h}시간 ` : ""}${m}분 전 자료 — 최신 자료가 늦어지고 있습니다` : "최신" };
 }
 
-export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json, now = () => Date.now() }) {
+export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json, now = () => Date.now(), snap: snapSrc = null, appRev = "dev", log = () => {}, dbStats = () => null }) {
+  let snap = null; // 사전 계산 저장소(initSnapshots 에서 snapSrc() 로 정함 — DB 연결 뒤)
   const cache = createBaselineCache();
   const todayCache = new Map();
   // 60초 캐시. 60초~5분 지난 값은 바로 돌려주고 뒤에서 새로 계산(stale-while-revalidate), 5분 넘으면 기다려 새로 계산.
@@ -65,15 +70,68 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     if (!st) throw new StatsError(`알 수 없는 관측지점입니다: ${id.slice(0, 20)}`);
     return st;
   }
-  // 시간 비교(캐시: 지점|자료판|지표|날짜|시각)
-  function hourBase(hs, stId, ymd, hour, field, value) {
-    const key = `H|${stId}|${statsHourly.version()}|${hs.lastIdx}|${field}|${ymd}|${hour}`;
-    const base = cache.get(key, () => hourlyCompare(hs, ymd, hour, field, NaN));
-    return Number.isFinite(value) ? hourlyCompare(hs, ymd, hour, field, value) : base;
+  // ---- 5단계(12-2) 참조 분포: 지점·날짜·지표마다 세 기준기간의 도수표를 한 번 만들고(현재값과 무관) 값마다 evaluateValue.
+  //   결과는 4단계 hourlyCompare/dailyCompare 와 같다(scripts/rt-stage5.test.mjs·rt-baseline-equiv.mjs). 기준은 끝난 해(Y−1년까지)만 쓰므로
+  //   올해 자료가 들어와도 바뀌지 않고, 끝난 해 자료가 다시 저장될 때만(지점별 data_rev) 새로 만든다.
+  //   메모리 → DB(wx_baseline_snapshot) → 시간·일자료로 만들기 순. 그래서 서버를 막 시작해 시간자료를 읽기 전에도 히어로 비교가 된다.
+  const refMem = new Map(); const REF_MAX = 2400;
+  const memGet = (k) => { const v = refMem.get(k); if (v !== undefined) { refMem.delete(k); refMem.set(k, v); } return v; };
+  const memSet = (k, v) => { refMem.set(k, v); while (refMem.size > REF_MAX) refMem.delete(refMem.keys().next().value); return v; };
+  let dataRevs = {};
+  const drev = (kind, sid) => String(dataRevs[`${kind}|${sid}`] || "0");
+  const refKey = (kind, sid, ymd, field) => `${kind}|${sid}|${ymd}|${field}|${drev(kind, sid)}`;
+  function hourRefs(hs, sid, ymd, hour, field) {
+    const k = refKey("H", sid, ymd, field);
+    let day = memGet(k);
+    if (!day) day = memSet(k, {});
+    if (!day[hour]) { if (!hs) return null; day[hour] = hourlyReference(hs, ymd, hour, field); }
+    return day[hour];
   }
-  function dayBase(store, stId, ymd, field, value) {
-    if (!Number.isFinite(value)) return cache.get(`D|${stId}|${statsData.version()}|${store.lastDate}|${field}|${ymd}`, () => dailyCompare(store, ymd, field, NaN));
-    return dailyCompare(store, ymd, field, value);
+  function dayRefs(store, sid, ymd, field) {
+    const k = refKey("D", sid, ymd, field);
+    let r = memGet(k);
+    if (!r) { if (!store) return null; r = memSet(k, dailyReference(store, ymd, field)); }
+    return r;
+  }
+  const haveHourDay = (sid, ymd, field) => { const d = memGet(refKey("H", sid, ymd, field)); return !!d && Object.keys(d).length === 24; };
+  // 시간 비교(참조 분포 + 값)
+  function hourBase(hs, stId, ymd, hour, field, value) { return evaluateRefs(hourRefs(hs, String(stId), ymd, hour, field), value); }
+  function dayBase(store, stId, ymd, field, value) { return evaluateRefs(dayRefs(store, String(stId), ymd, field), value); }
+  // DB 에 저장된 참조 분포를 메모리로(없거나 자료 수정판이 다르면 건너뜀 — 그때는 자료로 만든다)
+  async function loadRefs(sid, kind, ymds, fields) {
+    if (!snapOn()) return 0;
+    await revsReady;
+    const need = [];
+    for (const d of ymds) for (const f of fields) { const k = refKey(kind, sid, d, f); const m = memGet(k); if (!m || (kind === "H" && Object.keys(m).length < 24)) need.push([d, f]); }
+    if (!need.length) return 0;
+    let rows = [];
+    try { rows = await snap.getBaselines(sid, kind, [...new Set(need.map((x) => x[0]))], [...new Set(need.map((x) => x[1]))], BASELINE_ALGO); } catch (e) { log(`rt baseline read failed ${e?.code || e?.message}`); return 0; }
+    let n = 0;
+    for (const r of rows) {
+      if (r.dataRev !== drev(kind, sid)) continue;
+      try { const v = JSON.parse(r.payload); memSet(refKey(kind, sid, r.ymd, r.metric), v); n++; } catch { /* 깨진 행 — 다시 만듦 */ }
+    }
+    return n;
+  }
+  // 사전 계산 때 자주 쓰는 날짜·지표만 저장(12-4 ⑪): 오늘 24시 × 기온·습도·강수·풍속, 내일·모레·글피 기온(72시간), 일자료 최고·최저 지난 6일~앞으로 10일
+  const savedRefs = new Set();
+  async function saveRefs(sid, hs, store, ymd) {
+    if (!snapOn()) return 0;
+    const hourly = [[ymd, ["ta", "hm", "rn", "ws"]], ...[1, 2, 3].map((i) => [addDays(ymd, i), ["ta"]])];
+    const out = { H: [], D: [] };
+    for (const [d, fs] of hourly) for (const f of fs) {
+      const k = refKey("H", sid, d, f);
+      if (savedRefs.has(k)) continue;
+      for (let h = 0; h < 24; h++) hourRefs(hs, sid, d, h, f);
+      out.H.push({ k, ymd: d, metric: f, dataRev: drev("H", sid), cutoff: `${+d.slice(0, 4) - 1}-12-31`, payload: JSON.stringify(memGet(k)) });
+    }
+    for (let i = -6; i <= 10; i++) for (const f of ["max", "min"]) {
+      const d = addDays(ymd, i), k = refKey("D", sid, d, f);
+      if (savedRefs.has(k)) continue;
+      out.D.push({ k, ymd: d, metric: f, dataRev: drev("D", sid), cutoff: `${+d.slice(0, 4) - 1}-12-31`, payload: JSON.stringify(dayRefs(store, sid, d, f)) });
+    }
+    for (const kind of ["H", "D"]) if (out[kind].length) { await snap.putBaselines(sid, kind, out[kind], BASELINE_ALGO); for (const x of out[kind]) savedRefs.add(x.k); }
+    return out.H.length + out.D.length;
   }
   const brief = (list) => list.map((b) => ({ id: b.id, label: b.label, range: `${b.from}~${b.to}`, mean: b.mean, diff: b.diff, status: b.status, statusText: b.statusText, validYears: b.validYears, yearsInPeriod: b.yearsInPeriod, samples: b.samples, missingYears: b.missingYears, percentile: b.percentile ?? null, rankHigh: b.rankHigh ?? null, rankLow: b.rankLow ?? null, p10: b.p10 ?? null, p90: b.p90 ?? null, outside: b.outside ?? null, max: b.max ?? null, min: b.min ?? null, newHigh: b.newHigh ?? null, newLow: b.newLow ?? null, rankNote: b.rankNote ?? null }));
 
@@ -113,14 +171,17 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     const out = { ok: true, now: k.text, date: k.ymd, station: { id: String(st.station_id), name: st.station_name }, method, periods: basePeriods(k.ymd) };
     const grid = rt ? await rt.gridOf(st.station_id) : null;
     out.grid = grid && grid.nx != null ? { nx: Number(grid.nx), ny: Number(grid.ny), note: `동네예보 5km 격자(${grid.nx},${grid.ny}) — ASOS 관측소 위치와 같지 않을 수 있습니다` } : null;
-    const hs = await statsHourly.get(st.station_id);
+    const sid = String(st.station_id);
+    // 히어로(lite): 시간자료 메모리를 기다리지 않고 DB 참조 분포로 먼저(없으면 시간자료로)
+    let hs = lite ? null : await statsHourly.get(st.station_id);
+    if (lite) await loadRefs(sid, "H", [k.ymd], ["ta", "hm", "rn", "ws"]);
     // NAS 왕복을 줄이려고 서로 기대지 않는 조회는 한꺼번에
     const G = out.grid;
     const [ncstRows, ultraRel, vilRel, ext] = G && rt
       ? await Promise.all([rt.ncst(G.nx, G.ny, `${k.ymd} 00:00:00`, `${k.ymd} 23:59:59`), lite ? null : rt.latestRelease("KMA_ULTRA_FCST", G.nx, G.ny), lite ? null : rt.latestRelease("KMA_VILAGE_FCST", G.nx, G.ny), rt.dayExtremes(G.nx, G.ny, k.ymd)])
       : [[], null, null, {}];
     const [ultraRows, vilRows] = lite ? [[], []] : await Promise.all([ultraRel ? rt.fcst("KMA_ULTRA_FCST", G.nx, G.ny, ultraRel.base) : [], vilRel ? rt.fcst("KMA_VILAGE_FCST", G.nx, G.ny, vilRel.base) : []]);
-    out.asos = { lastDay: hourlyLastDay(hs), note: "ASOS 시간자료는 매일 11시 30분에 전날까지 받습니다(오늘 관측은 아직 없음)" };
+    if (hs) out.asos = { lastDay: hourlyLastDay(hs), note: "ASOS 시간자료는 매일 11시 30분에 전날까지 받습니다(오늘 관측은 아직 없음)" };
     // 실황(오늘 00시 ~ 지금)
     const obs = new Map();
     let lastBase = null;
@@ -132,6 +193,7 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
       }
     }
     const fr = freshness(lastBase, nowMs, STALE_MIN.NCST);
+    if (!hs) { const hr = lastBase ? +lastBase.slice(11, 13) : 0; if (!haveHourDay(sid, k.ymd, "ta") || !["hm", "rn", "ws"].every((f) => hourRefs(null, sid, k.ymd, hr, f))) hs = await statsHourly.get(st.station_id); }
     let cur = null;
     if (lastBase) {
       const o = obs.get(lastBase);
@@ -169,7 +231,8 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     out.hours = hours;
     out.baseStatus = Object.fromEntries(hourBase(hs, st.station_id, k.ymd, 15, "ta", NaN).map((x) => [x.id, { status: x.status, statusText: x.statusText, validYears: x.validYears, yearsInPeriod: x.yearsInPeriod, samples: x.samples }]));
     // 오늘 최고·최저 예보(단기예보 TMX·TMN) vs 공식 일자료 최고·최저 과거 평균
-    const store = await statsData.get(st.station_id);
+    if (lite) await loadRefs(sid, "D", [k.ymd], ["max", "min"]);
+    const store = lite && dayRefs(null, sid, k.ymd, "max") && dayRefs(null, sid, k.ymd, "min") ? null : await statsData.get(st.station_id);
     const dayOut = {};
     for (const [cat, field] of [["TMX", "max"], ["TMN", "min"]]) {
       const v = ext[cat] ? num(ext[cat].value) : NaN;
@@ -543,10 +606,13 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     return { ...head, source: `오늘: 초단기실황(격자 ${t.grid?.nx},${t.grid?.ny}) 정시 기온 / 과거: ASOS ${st.station_name}(${sid}) 정시 관측 — 위치가 같지 않을 수 있음`, kind: `진행 중 — 0시~${last ?? "-"}시 관측만 비교(예보 미포함)`, partial: true, stale: t.current?.freshness?.state === "stale", ...r };
   }
   const dnToYmdLocal = (dn) => { const d = new Date(dn * 86400000); return d.toISOString().slice(0, 10); };
-  const history = createMemoryHistory(); // 게시 이력(지금은 서버 메모리 — 재시작하면 비워짐, 5단계에서 DB 로 같은 인터페이스)
+  // 게시 이력: 5단계부터 DB(wx_story_publication, 재시작 뒤에도 반복 방지). DB 가 없거나 표가 없으면 서버 메모리(예전과 같음)
+  const memHistory = createMemoryHistory();
+  let history = memHistory;
+  const pubOut = new Map(); // 사전 계산: 지점|기준 → 게시할 이력(스냅샷 저장과 같은 트랜잭션에서 기록)
   const BASIS_IDX = { all: 0, r10: 1, r5: 2 };
   const BASIS_NAME = { all: "1990년 이후", r10: "최근 10년", r5: "최근 5년" };
-  async function storiesRt(id, basis = "all") {
+  async function storiesRt(id, basis = "all", opts = {}) {
     if (!(basis in BASIS_IDX)) basis = "all";
     const bi = BASIS_IDX[basis];
     const st = await stationParam(U(id));
@@ -619,10 +685,12 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     const cat = runCatalog(ctx);
     C.push(...cat.cands);
     const hkey = basis === "all" ? sid : `${sid}|${basis}`; // 기준별 이력(전체 기준 이력을 다른 기준 조회가 흔들지 않게)
-    const hist = await history.list(hkey);
+    const hist = await history.list(hkey, nowW);
     const sel = selectV2(C, { history: hist, slot: k.ymd, nowW });
     const emptyReason = emptyReasonOf(sel, { fresh, candidates: C, failedParts });
-    await history.record(hkey, k.ymd, sel.stories.map((x) => ({ eventId: x.eventId, materialHash: x.materialHash, ruleId: x.ruleId })), nowW);
+    const entries = sel.stories.map((x) => ({ eventId: x.eventId, materialHash: x.materialHash, ruleId: x.ruleId, topic: x.topic ?? null, score: x.score ?? null, reason: x.reasons?.[0] ?? null }));
+    if (opts.defer) pubOut.set(`${sid}|${basis}`, { key: hkey, slot: k.ymd, entries, nowW, cands: C.map((c) => ({ key: c.key, ruleId: c.ruleId, eventId: c.eventId, U: c.U ?? null, exclude: c.exclude || null })) });
+    else await history.record(hkey, k.ymd, entries, nowW);
     const explore = exploreCard({ sid, k, sm, store });
     return { ok: true, station: { id: sid, name: nm }, now: k.text, rulesVersion: RULES_VERSION, basisId: basis, basisName: BASIS_NAME[basis], basisNote: `이야기 선별은 ${BASIS_NAME[basis]} 기준으로 합니다${basis === "all" ? "(전체 비교일 때도 이 기준)" : ""}`, rainCalendar: { days: rainCalendar(store, k.ymd, 30), note: "ASOS 공식 일강수량 0.1mm 이상 = 비 온 날, 자료 없는 날은 따로(0으로 보지 않음), 오늘은 집계 전" }, seasons: seasons.map((e) => ({ id: e.id, label: e.label, season: e.season, current: e.current, forecast: e.forecast, home: seasonHome(e.id, e, k.ymd), chart: seasonChart(e, basis) })), stale: !fresh, staleNote: fresh ? null : `실황 ${c?.freshness?.text || "없음"} — 지금 기온 이야기는 뺐습니다`, candidates: C.length, stories: sel.stories.map((x) => toStory(x, { station: sid, asOf: k.text })), emptyReason, emptyText: emptyText(emptyReason), explore: emptyReason === "normal" ? explore : null, exploreAlt: explore, failedParts, dropped: sel.dropped, rules: cat.diag, history: { kind: history.kind, slot: k.ymd }, rule: { ...SELECT_V2, text: "점수 전: 노출 기간 밖·지연·만료 제외 → 통계 경로는 표본 조건과 이례성 U ≥ 0.3, 생활·전환 경로는 규칙 조건만 → 점수 = 0.35U + 0.35A(생활 관련성) + 0.15T(시점) + 0.15F(새 정보) − R(반복) → 강수 사건은 하나로 묶음 → 같은 주제 1개(다른 생활 결정이면 2개) → 생활 슬롯 확보 → 첫 카드는 지금·가까운 미래 → 최대 4개. 예보 일괄 감점 없음." } };
   }
@@ -702,6 +770,137 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
   const sign = (d) => (d > 0 ? `+${d}` : `${d}`);
   const round1 = (v) => Math.round(v * 10) / 10;
 
+  // ---------------------------------------------------------------- 5단계(12장): 수집 직후 사전 계산 · 완료 스냅샷
+  // 화면 API 는 완료된 스냅샷(wx_story_snapshot)을 먼저 읽고, 없거나·만료됐거나·지연 상태가 응답 시각 기준으로 달라졌으면 예전 요청 계산으로.
+  // 스냅샷 판(rules_version) = 규칙판 + 앱 판 — 배포하면 새 코드가 다시 계산할 때까지 옛 스냅샷을 쓰지 않는다.
+  let snapReady = false;
+  const snapOn = () => Boolean(snap?.enabled && snapReady);
+  let revsResolve = null;
+  const revsReady = new Promise((r) => { revsResolve = r; });
+  const RV = `${RULES_VERSION}+${String(appRev || "dev").slice(0, 12)}`.slice(0, 32);
+  const snapMem = new Map(), snapLoad = new Map();
+  const SNAP_STATS = { served: {}, fallback: {}, written: 0, rejected: 0, writeFailed: 0, dbReads: 0 };
+  const bump = (o, k) => { o[k] = (o[k] || 0) + 1; };
+  const sKey = (kind, sid, basis) => `${kind}|${sid}|${basis}`;
+  async function snapGet(kind, sid, basis) {
+    const key = sKey(kind, sid, basis);
+    const e = snapMem.get(key);
+    if (e && !(e.miss && now() - e.at > 20000)) return e.miss ? null : e;
+    if (!snapLoad.has(key)) snapLoad.set(key, (async () => {
+      SNAP_STATS.dbReads++;
+      let r = null;
+      try { r = await snap.getSnapshot(kind, sid, basis); } catch (err) { log(`rt snapshot read failed ${err?.code || err?.message}`); }
+      let v = { miss: true, at: now() };
+      if (r && r.rules_version === RV && Number(r.schema_version) === SNAPSHOT_SCHEMA) {
+        try { v = { version: Number(r.version), payload: JSON.parse(r.payload), expiresMs: Number(r.expires_ms), publishedMs: Number(r.published_ms), sourceRev: r.source_rev, fresh: JSON.parse(r.sources || "{}").fresh || {}, at: now() }; } catch { /* 깨진 행 → 요청 계산 */ }
+      }
+      const cur = snapMem.get(key);
+      if (!cur || cur.miss || (v.version && v.version > cur.version)) snapMem.set(key, v);
+      return snapMem.get(key);
+    })().finally(() => snapLoad.delete(key)));
+    const v = await snapLoad.get(key);
+    return v && !v.miss ? v : null;
+  }
+  async function viaSnap(kind, sid, basis, fallback) {
+    if (snapOn()) {
+      const e = await snapGet(kind, sid, basis);
+      const why = invalidReason(e, now(), freshness);
+      if (!why) { bump(SNAP_STATS.served, kind); return decorate(kind, e.payload, e, now(), freshness, STALE_MIN); }
+      bump(SNAP_STATS.fallback, `${kind}:${why}`);
+    }
+    return fallback();
+  }
+  // 캐시 키가 같은 새 계산(사전 계산이 요청 캐시도 채움)
+  const refresh = (key, fn) => compute(`${key}|${statsHourly.version()}|${statsData.version()}`, fn);
+  let lastVersion = 0;
+  async function putSnap(kind, sid, basis, payload, base, fresh, pub = null, candidates = null) {
+    const version = Math.max(now(), lastVersion + 1); lastVersion = version;
+    const row = { ...base, kind, stationId: sid, basisId: basis, version, payload: JSON.stringify(payload), candidates, sources: JSON.stringify({ ...base.sourcesObj, fresh }) };
+    try {
+      const r = await snap.putSnapshot(row, pub);
+      if (!r.written) { SNAP_STATS.rejected++; return false; }
+      SNAP_STATS.written++;
+      snapMem.set(sKey(kind, sid, basis), { version, payload, expiresMs: base.expiresMs, publishedMs: base.publishedMs, sourceRev: base.sourceRev, fresh, at: now() });
+      return true;
+    } catch (e) { SNAP_STATS.writeFailed++; log(`rt snapshot write failed ${kind} ${sid} ${basis} ${e?.code || e?.message}`); return false; }
+  }
+  const BASES_ID = ["all", "r10", "r5"];
+  async function enabledIds() { return (await stations()).filter((x) => x.enabled !== false && x.enabled !== 0).map((x) => String(x.station_id)); }
+  // 한 묶음: ① 대상 지점 오늘(실황) ② 지역(8개 지점 같은 시각) ③ 지점마다 예보·이야기·계절(기준 3개) → 스냅샷, 참조 분포 저장
+  async function precomputeBatch(ids, reason) {
+    const t0 = now(), k = kst(t0);
+    const byStation = {};
+    await eachLimit(ids, 2, async (sid) => { try { await refresh(`T|${sid}`, () => today(U(sid))); } catch (e) { byStation[sid] = { error: `today: ${e?.message || e}` }; } });
+    const R = await refresh("R", () => regions()).catch((e) => { log(`rt precompute regions failed ${e?.message || e}`); return null; });
+    if (R) await putSnap("regions", "*", "-", R, { rulesVersion: RV, inputFp: "0".repeat(40), sourceRev: `${String(R.time || "").padEnd(19, " ").slice(0, 19)}|${k.text}`, slot: `${k.ymd} ${pad(k.hour)}`, publishedMs: now(), expiresMs: nextHourMs(t0), sourcesObj: { regionsTime: R.time || null }, buildMs: now() - t0 }, {});
+    let refsSaved = 0;
+    await eachLimit(ids.filter((x) => !byStation[x]), 2, async (sid) => {
+      const t1 = now();
+      try {
+        const T = await refresh(`T|${sid}`, () => today(U(sid)));
+        const F = await refresh(`F|${sid}`, () => forecast(U(sid)));
+        const [hs, store] = await Promise.all([statsHourly.get(sid), statsData.get(sid)]);
+        const { sources, cutoff, fp } = sourcesOf({ today: T, forecast: F, dailyLast: store.lastDate, rulesVersion: RV });
+        const sourceRev = `${cutoff}|${k.text}`;
+        const fresh = freshInputs(T, STALE_MIN);
+        const base = { rulesVersion: RV, inputFp: fp, sourceRev, slot: `${k.ymd} ${pad(k.hour)}`, publishedMs: now(), expiresMs: nextHourMs(t0), sourcesObj: sources };
+        await putSnap("today", sid, "-", T, { ...base, buildMs: now() - t1 }, fresh);
+        await putSnap("forecast", sid, "-", F, base, { ultra: fresh.ultra, vilage: fresh.vilage });
+        for (const b of BASES_ID) {
+          const S = await refresh(`ST|${sid}|${b}`, () => storiesRt(sid, b, { defer: true }));
+          const pub = pubOut.get(`${sid}|${b}`) || null; pubOut.delete(`${sid}|${b}`);
+          const ok = await putSnap("stories", sid, b, S, { ...base, buildMs: now() - t1 }, fresh, pub, JSON.stringify({ candidates: pub?.cands ?? null, dropped: S.dropped ?? null, failedParts: S.failedParts ?? [], emptyReason: S.emptyReason ?? null }));
+          if (ok && pub) await memHistory.record(pub.key, pub.slot, pub.entries, pub.nowW);
+          const SE = await refresh(`SE|${sid}|${b}`, () => seasonsRt(sid, b));
+          await putSnap("seasons", sid, b, SE, base, {});
+        }
+        refsSaved += await saveRefs(sid, hs, store, k.ymd).catch((e) => { log(`rt baseline save failed ${sid} ${e?.code || e?.message}`); return 0; });
+        byStation[sid] = { ms: now() - t1, sourceRev };
+      } catch (e) { byStation[sid] = { error: e?.message || String(e), ms: now() - t1 }; }
+    });
+    return { byStation, note: `refs+${refsSaved} written=${SNAP_STATS.written} rejected=${SNAP_STATS.rejected}` };
+  }
+  let queue = null, ticker = null;
+  // 서버 시작 직후(시간자료를 읽기 전): 표 확인·자료 수정판·DB 게시 이력. 이때부터 저장된 스냅샷을 응답에 쓴다
+  async function initSnapshots() {
+    snap = typeof snapSrc === "function" ? snapSrc() : snapSrc;
+    if (!snap?.enabled) { revsResolve(); return false; }
+    try { snapReady = await snap.ensure(); } catch { snapReady = false; }
+    if (snapReady) {
+      try { dataRevs = await snap.dataRevs(); } catch (e) { log(`rt data revs read failed ${e?.code || e?.message}`); }
+      history = createDbHistory(snap, memHistory, { keepDays: SELECT_V2.historyDays, log });
+    }
+    revsResolve();
+    return snapReady;
+  }
+  // 과거 자료를 다 읽은 뒤: 대기열·정시 시계를 켜고 전 지점 한 번
+  async function startPrecompute() {
+    if (!snapOn() || queue) return false;
+    queue = createPrecomputeQueue({ run: precomputeBatch, gate: () => !warming, jobs: snap, rulesVersion: RV, log });
+    ticker = createHourTicker(({ midnight, hour }) => { enabledIds().then((ids) => queue.enqueue(ids, midnight ? "midnight" : `hour-${hour}`, { delay: 1000 })).catch(() => {}); });
+    queue.enqueue(await enabledIds(), "startup", { delay: 0 });
+    return true;
+  }
+  // 수집 저장 성공 알림(server.mjs): source = 자료 종류, stations = 영향 지점(없으면 사용 중 전 지점), oldKinds = 끝난 해 자료가 저장된 종류(H/D)
+  function notify({ source, stations: ids = null, oldKinds = [] }) {
+    (async () => {
+      const all = await enabledIds();
+      const list = ids ? [...new Set(ids.map(String))].filter((x) => all.includes(x)) : all;
+      for (const kind of oldKinds) for (const sid of list) {
+        const rev = String(now());
+        dataRevs[`${kind}|${sid}`] = rev;
+        if (snapOn()) await snap.bumpDataRev(kind, sid, rev).catch((e) => log(`rt data rev write failed ${e?.code || e?.message}`));
+      }
+      if (queue && list.length) queue.enqueue(list, String(source).slice(0, 24));
+    })().catch((e) => log(`rt notify failed ${e?.message || e}`));
+  }
+  // GET /api/rt/precompute — 읽기 전용 상태(작업을 만들지 않음)
+  async function precomputeStatus() {
+    let jobs = [];
+    if (snapOn()) { try { jobs = await snap.listJobs(); } catch { jobs = []; } }
+    return { ok: true, now: kst(now()).text, enabled: snapOn(), ns: snap?.ns ?? null, rulesVersion: RV, queue: queue ? { ...queue.stats, pending: queue.pendingIds(), running: queue.isRunning() } : null, snapshots: SNAP_STATS, memory: { refs: refMem.size, snapshots: snapMem.size, requestCache: todayCache.size }, db: dbStats(), dataRevs, jobs: jobs.map((j) => ({ ...j, started: j.started_ms ? kst(Number(j.started_ms)).text : null, completed: j.completed_ms ? kst(Number(j.completed_ms)).text : null })) };
+  }
+
   // 응답: 짧은 캐시 + 약한 ETag(본문 해시) → 같은 내용이면 304. 오류는 저장하지 않음
   const send = (req, res, data, status = 200) => {
     if (typeof res.writeHead !== "function") return json(res, data, status); // 시험용 가짜 응답
@@ -720,18 +919,19 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
   const basisOf = (url) => { const b = String(url.searchParams.get("basis") || "all"); return b === "r10" || b === "r5" ? b : "all"; }; // cmp(전체 비교)·없음 → all
   async function route(url, res) {
     const p = url.pathname;
-    if (p === "/api/rt/now") return nowOf(station(url));
-    if (p === "/api/rt/today") return todayOf(station(url));
-    if (p === "/api/rt/forecast") return forecastOf(station(url));
+    if (p === "/api/rt/now") { const id = station(url); return viaSnap("today", id, "-", async () => ({ __now: await nowOf(id) })).then((d) => (d.__now ? d.__now : { ...nowPart(d), snapshot: d.snapshot })); }
+    if (p === "/api/rt/today") { const id = station(url); return viaSnap("today", id, "-", () => todayOf(id)); }
+    if (p === "/api/rt/forecast") { const id = station(url); return viaSnap("forecast", id, "-", () => forecastOf(id)); }
+    if (p === "/api/rt/precompute") return precomputeStatus();
     if (p === "/api/rt/forecast-wind") return cached(`FW|${station(url)}`, () => forecastWind(url));
     if (p === "/api/rt/ytd") return cached(`Y|${url.search}`, () => ytd(url));
     if (p === "/api/rt/nation-hours") return nationHoursSWR();
-    if (p === "/api/rt/regions") return cached("R", () => regions());
+    if (p === "/api/rt/regions") return viaSnap("regions", "*", "-", () => cached("R", () => regions()));
     if (p === "/api/rt/life") return cached(`L|${url.search}`, () => life(url));
     if (p === "/api/rt/records") return cached(`C|${url.search}`, () => recordsRt(url));
     if (p === "/api/rt/similar") { const id = station(url); const day = url.searchParams.get("day") === "yesterday" ? "yesterday" : "today"; return cached(`S|${id}|${day}`, () => similar(id, day)); }
-    if (p === "/api/rt/stories") { const id = station(url); const b = basisOf(url); return cached(`ST|${id}|${b}`, () => storiesRt(id, b)); }
-    if (p === "/api/rt/seasons") { const id = station(url); const b = basisOf(url); return cached(`SE|${id}|${b}`, () => seasonsRt(id, b)); }
+    if (p === "/api/rt/stories") { const id = station(url); const b = basisOf(url); return viaSnap("stories", id, b, () => cached(`ST|${id}|${b}`, () => storiesRt(id, b))); }
+    if (p === "/api/rt/seasons") { const id = station(url); const b = basisOf(url); return viaSnap("seasons", id, b, () => cached(`SE|${id}|${b}`, () => seasonsRt(id, b))); }
     if (p === "/api/rt/baseline") return cached(`B|${url.search}`, () => baseline(url));
     return undefined;
   }
@@ -772,6 +972,10 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
   handle.setWarming = (v) => { warming = Boolean(v); };
   handle.warmNation = () => nhRefresh().catch(() => null);
   handle.warmStations = (ids) => eachLimit(ids, 3, (id) => todayOf(String(id)).catch(() => null));
+  handle.initSnapshots = initSnapshots;
+  handle.startPrecompute = startPrecompute;
+  handle.notify = notify;
+  handle.precomputeIdle = () => !queue || queue.idle();
   return handle;
 }
 const WARM = Symbol("warm");

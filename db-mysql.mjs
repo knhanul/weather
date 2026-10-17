@@ -74,7 +74,15 @@ export async function createMysqlPool(url) {
 }
 
 // 읽기: 연결이 끊긴 경우에만 한 번 다시 시도. 결과는 행 배열(또는 OkPacket).
+// 5단계: NAS 질의 부하 측정용(이 프로세스가 보낸 질의 수·누적 시간)
+const QSTATS = { queries: 0, ms: 0, tx: 0, since: Date.now() };
+export const queryStats = () => ({ ...QSTATS, ms: Math.round(QSTATS.ms) });
 async function q(sql, params = [], { retry = true } = {}) {
+  QSTATS.queries++;
+  const t0 = performance.now();
+  try { return await q0(sql, params, retry); } finally { QSTATS.ms += performance.now() - t0; }
+}
+async function q0(sql, params, retry) {
   try {
     const [rows] = await pool.query({ sql, timeout: QUERY_TIMEOUT_MS }, params);
     return rows;
@@ -90,7 +98,8 @@ async function tx(fn) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const run = async (sql, params = []) => (await conn.query({ sql, timeout: QUERY_TIMEOUT_MS }, params))[0];
+    QSTATS.tx++;
+    const run = async (sql, params = []) => { QSTATS.queries++; return (await conn.query({ sql, timeout: QUERY_TIMEOUT_MS }, params))[0]; };
     const out = await fn(run);
     await conn.commit();
     return out;
