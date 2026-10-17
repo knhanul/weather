@@ -317,7 +317,7 @@ export async function dailySeriesPg(stationId, fromDate, toDate) {
 export async function statsDailyRows(stationId) {
   if (my) return my.statsDailyRows(...arguments);
   const r = await pool.query(
-    `SELECT observation_date::text AS observation_date, avg_temperature, max_temperature, min_temperature, precipitation, avg_humidity, avg_wind_speed, max_new_snow, max_snow_depth
+    `SELECT observation_date::text AS observation_date, avg_temperature, max_temperature, min_temperature, precipitation, avg_humidity, avg_wind_speed, max_new_snow, max_snow_depth, max_inst_wind_speed, max_wind_speed, sunshine, possible_sunshine
      FROM observations_daily WHERE station_id = $1 AND source_kind = 'OFFICIAL' ORDER BY observation_date`,
     [stationId],
   );

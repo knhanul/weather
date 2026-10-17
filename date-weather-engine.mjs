@@ -10,7 +10,7 @@
 //  - 시간 강수량은 기상청 정시값 = 앞 1시간 누적. 그날 h~h+1시 구간 = (h+1)시 값, 23~24시 = 다음날 00시 값. 하루 강수량으로 더하지 않는다(공식 일강수량을 따로 씀).
 //  - 시간 평균은 같은 시각끼리 '해마다 한 값'을 평균(관측이 많은 해에 가중치 없음). 보간하지 않는다.
 import { resolveYear, specLabel, specKey, CALENDAR_VERSION, solarToLunar } from "./calendar-resolver.mjs";
-import { ymdToDn, dnToYmd, hval, QC_BITS, HOURLY_FROM } from "./stats-engine.mjs";
+import { ymdToDn, dnToYmd, hval, QC_BITS, HOURLY_FROM, DAILY_QC } from "./stats-engine.mjs";
 
 export const POLICY_VERSION = "date-stats.2026-10-17.v1";
 export const STORY_VERSION = "date-story.2026-10-17.v1";
@@ -50,6 +50,9 @@ export const DAILY_METRICS = {
   rain: { label: "평균 일강수량", unit: "mm", digits: 1, def: "유효한 일강수량 합 ÷ N(무강수 0 포함). 비 온 해만의 평균이 아님" },
   wind: { label: "평균 풍속", unit: "m/s", digits: 1, def: "각 해 그날 공식 일평균 풍속의 평균(최대 풍속 아님)" },
   hum: { label: "평균 상대습도", unit: "%", digits: 0, def: "각 해 그날 공식 일평균 상대습도의 평균" },
+  // 선택 확장(2026-10-18): 공식 일자료의 최대 순간풍속·합계 일조시간. 공란 = 자료 없음(0 으로 세지 않음), 범위·일관성 확인에서 빠지면 '품질 확인으로 제외'
+  gust: { label: "평균 최대 순간풍속", unit: "m/s", digits: 1, extra: true, def: "각 해 그날 공식 일최대 순간풍속의 평균. 0~75m/s 이고 그날 최대 풍속(10분 평균) 이상인 값만" },
+  sun: { label: "평균 일조시간", unit: "시간", digits: 1, extra: true, def: "각 해 그날 공식 합계 일조시간의 평균. 0 이상·가조시간(없으면 14.8시간) 이하인 값만" },
 };
 export const HOURLY_METRICS = {
   ta: { label: "기온", unit: "℃", digits: 1, chart: "line" },
@@ -106,10 +109,11 @@ export function dailyYear(store, res, ctx) {
   const present = i >= 0 && i < store.n && store.present[i] === 1;
   out.rowPresent = present;
   const get = (f) => (present ? fin(store[f][i]) : null);
-  const v = { avg: get("avg"), max: get("max"), min: get("min"), rain: get("rain"), wind: get("wind"), hum: get("hum"), nsnow: get("nsnow") };
+  const v = { avg: get("avg"), max: get("max"), min: get("min"), rain: get("rain"), wind: get("wind"), hum: get("hum"), nsnow: get("nsnow"), gust: store.gust ? get("gust") : null, sun: store.sun ? get("sun") : null };
   v.range = v.max != null && v.min != null ? v.max - v.min : null;
   out.values = v;
-  for (const k of Object.keys(DAILY_METRICS)) out.fieldStatus[k] = v[k] == null ? "missing" : "ok";
+  const dq = present && store.dq ? store.dq[i] : 0;
+  for (const k of Object.keys(DAILY_METRICS)) out.fieldStatus[k] = v[k] != null ? "ok" : DAILY_QC[k] && dq & DAILY_QC[k] ? "qc" : "missing";
   out.rainNorm = !present ? "noRow" : v.rain == null ? "missing" : store.rainBlank[i] === 1 ? "blank0" : "value";
   return out;
 }

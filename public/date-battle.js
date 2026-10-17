@@ -11,7 +11,7 @@
   const dot = (ymd) => (ymd ? `${+ymd.slice(0, 4)}.${+ymd.slice(5, 7)}.${+ymd.slice(8, 10)}` : "–");
   const PERIODS = [["recent5", "최근 5년"], ["recent10", "최근 10년"], ["recent20", "최근 20년"], ["recent30", "최근 30년"], ["all", "전체"], ["custom", "직접 지정"]];
   const HM = { ta: ["기온", "℃", 1], rn: ["강수량", "mm", 1], ws: ["풍속", "m/s", 1], hm: ["습도", "%", 0] };
-  const YR = { avg: "평균기온", rain_mean: "일강수량", wind: "평균 풍속", max: "최고기온", min: "최저기온", hum: "습도" };
+  const YR = { avg: "평균기온", rain_mean: "일강수량", wind: "평균 풍속", max: "최고기온", min: "최저기온", hum: "습도", gust: "순간풍속", sun: "일조시간" };
   const EXAMPLES = [["5월 5일 vs 10월 9일", [["S", 5, 5, 0], ["S", 10, 9, 0]]], ["양력 1월 1일 vs 음력 1월 1일", [["S", 1, 1, 0], ["L", 1, 1, 0]]], ["추석(음력 8/15) vs 개천절", [["L", 8, 15, 0], ["S", 10, 3, 0]]], ["봄·여름·가을·겨울 1일", [["S", 3, 1, 0], ["S", 6, 1, 0], ["S", 9, 1, 0], ["S", 12, 1, 0]]]];
   const st = { cases: [], diff: false, period: "recent10", to: THIS_YEAR - 1, from: THIS_YEAR - 10, hm: "ta", yr: "avg", year: null };
   let meta = null;
@@ -73,7 +73,7 @@
     p.innerHTML = `<div class="card ds-head"><h2 class="sx-q">날씨 배틀<small>날짜 2~4개를 같은 기간, 서로 자료가 있는 같은 기준연도끼리 비교합니다. 생일·기념일 등록 없이 날짜만 넣으면 됩니다.</small></h2>
         <div class="db-ex"><span class="muted">예시:</span>${EXAMPLES.map(([l], i) => `<button type="button" class="sec" data-ex="${i}">${E(l)}</button>`).join("")}</div>
         <div id="dbCases" class="db-cases"></div>
-        <div class="sx-ctl" id="dbCtl"></div><p class="ds-banner" id="dbBanner" role="status"></p></div>
+        <div class="sx-ctl" id="dbCtl"></div><p class="ds-banner" id="dbBanner" role="status"></p><div class="fav-row" id="dbFav"></div><p class="ds-toast" id="dbToast" role="status" hidden></p></div>
       <div class="card" id="dbCore"></div><div class="card" id="dbHour"></div><div class="card" id="dbYears"></div><div class="card" id="dbPeriods"></div>`;
     p.addEventListener("change", onChange);
     p.addEventListener("click", onClick);
@@ -91,8 +91,27 @@
       ${st.diff ? `<select data-c="${c.id}" data-f="station" aria-label="${c.id} 관측지점">${opt(stations, c.station)}</select>` : ""}
       <a class="db-more" href="${dayHref(c)}">이 날짜 자세히 ›</a></div></div>`).join("") + (st.cases.length < 4 ? `<button type="button" class="sec db-add" id="dbAdd">+ 날짜 추가 (${st.cases.length}/4)</button>` : "");
     const toYears = []; for (let y = THIS_YEAR; y >= 1971; y--) toYears.push([y, `${y}년`]);
-    $("dbCtl").innerHTML = `<div class="ds-wide"><label>공통 기간(모든 카드)</label>${seg("period", PERIODS, st.period)}</div>${st.period === "custom" ? `<div><label for="dbFrom">시작 기준연도</label><input id="dbFrom" type="number" class="sx-num" min="1900" max="${st.to}" value="${st.from}"></div>` : ""}<div><label for="dbTo">끝 기준연도</label><select id="dbTo">${opt(toYears, st.to)}</select></div>${st.diff ? "" : `<div><label for="dbSt">관측지점(공통)</label><select id="dbSt">${opt(stations, st.cases[0].station)}</select></div>`}<div><label class="sx-check"><input type="checkbox" id="dbDiff"${st.diff ? " checked" : ""}> 지점도 다르게</label></div>`;
+    renderFav();
+    $("dbCtl").innerHTML = `<div class="ds-wide"><label>공통 기간(모든 카드)</label>${seg("period", PERIODS, st.period)}</div>${st.period === "custom" ? `<div><label for="dbFrom">시작 기준연도</label><input id="dbFrom" type="number" class="sx-num" min="1900" max="${st.to}" value="${st.from}"></div>` : ""}<div><label for="dbTo">끝 기준연도</label><select id="dbTo">${opt(toYears, st.to)}</select></div>${st.diff ? "" : `<div><label for="dbSt">관측지점(공통)</label><select id="dbSt">${opt(stations, st.cases[0].station)}</select></div>`}<div><label class="sx-check"><input type="checkbox" id="dbDiff"${st.diff ? " checked" : ""}> 지점도 다르게</label></div><div class="ds-acts"><button type="button" class="sec" id="dbCardImg">카드 이미지</button><button type="button" class="sec" id="dbCopy">공유 링크 복사</button></div>`;
   }
+  // ---- 자주 보는 배틀 조합(이 브라우저에만)
+  const favKey = () => casesParam();
+  function favLabel(x) { const ls = String(x.labels || "").split(",").map((v) => { try { return decodeURIComponent(v); } catch { return ""; } }); return x.cases.split(",").map((c, i) => { const p = c.split("."); return ls[i] || (p[2] === "L" ? `음${p[3]}/${p[4]}${p[5] === "1" ? "윤" : ""}` : `${p[3]}/${p[4]}`); }).join(" vs ") + (x.ds ? " · 여러 지점" : ` · ${stationName(x.cases.split(".")[1])}`); }
+  function favHref(x) { const q = new URLSearchParams({ cases: x.cases, period: st.period, to: String(st.to) }); if (st.period === "custom") q.set("from", String(st.from)); if (x.ds) q.set("ds", "1"); if (x.labels) q.set("labels", x.labels); return `#/stories/battle?${q}`; }
+  function renderFav() {
+    const el = $("dbFav");
+    if (!el || !window.StoryFavs) return;
+    const on = StoryFavs.has("battle", favKey());
+    el.innerHTML = `<button type="button" class="sec fav-star${on ? " on" : ""}" id="dbFavBtn" aria-pressed="${on}" title="이 브라우저에 저장">${on ? "★ 저장됨" : "☆ 이 조합 저장"}</button><span class="fav-list" aria-label="자주 보는 배틀 조합">${StoryFavs.chips("battle", { label: favLabel, href: favHref, current: favKey() })}</span>`;
+  }
+  function toast(msg) { const t = $("dbToast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 6000); }
+  const labelsParam = () => (st.cases.some((c) => c.label) ? st.cases.map((c) => encodeURIComponent(c.label || "")).join(",") : "");
+  function shareUrl() { const q = new URLSearchParams({ cases: casesParam(), period: st.period, to: String(st.to) }); if (st.period === "custom") q.set("from", String(st.from)); if (st.diff) q.set("ds", "1"); const l = labelsParam(); if (l) q.set("labels", l); return `${location.origin}/s/battle?${q}`; }
+  function openCard() {
+    if (!B || !window.StoryShare) { toast("자료를 다 불러온 뒤 카드를 만들 수 있습니다"); return; }
+    StoryShare.module().then((m) => StoryShare.open({ spec: m.battleSpec(B, { labels: st.cases.map((c) => c.label) }), filename: `inal-battle-${casesParam().replace(/[.,]/g, "")}-${B.window.fromYear}-${B.window.toYear}`, shareUrl: shareUrl(), title: "날씨 배틀 카드" }));
+  }
+  async function copyLink() { const u = shareUrl(); try { await navigator.clipboard.writeText(u); toast("공유 링크를 복사했습니다 — 메신저 미리보기에 비교 숫자가 나옵니다"); } catch { prompt("이 주소를 복사하세요", u); } }
   function dayHref(c) {
     const q = new URLSearchParams({ station: c.station, cal: c.cal === "L" ? "lunar" : "solar", m: String(c.m), d: String(c.d) });
     if (c.cal === "L") q.set("leap", c.leap ? "1" : "0");
@@ -132,6 +151,10 @@
     if (ds.year) { st.year = +ds.year; replaceView(); renderYears(); return loadYear(); }
     if (b.id === "dbYearClose") { st.year = null; YB = null; replaceView(); return renderYears(); }
     if (b.id === "dbRetry") { cache.clear(); return load(); }
+    if (b.id === "dbCardImg") return openCard();
+    if (b.id === "dbCopy") return copyLink();
+    if (b.id === "dbFavBtn") { const on = StoryFavs.toggle("battle", { key: favKey(), cases: casesParam(), labels: labelsParam(), ds: st.diff ? 1 : 0 }); toast(on ? "이 배틀 조합을 이 브라우저에 저장했습니다" : "저장을 지웠습니다"); return renderFav(); }
+    if (ds.favdel) { StoryFavs.remove("battle", ds.favdel); return renderFav(); }
   }
 
   async function load() {
@@ -201,7 +224,7 @@
     const core = B.coreMetrics;
     const more = Object.keys(B.metrics).filter((k) => !core.includes(k));
     $("dbCore").innerHTML = `<h3 class="ds-h">핵심 비교 <small>지표마다 따로 비교 · 종합점수·전체 승자 없음</small></h3><div class="db-grid">${core.map(metricCard).join("")}</div>
-      <details class="db-moremc"><summary>다른 지표 펼쳐 보기(최고·최저기온, 일교차, 강수 관측 비율, 선택 날짜 누적 강수량, 습도)</summary><div class="db-grid">${more.map(metricCard).join("")}</div></details>
+      <details class="db-moremc"><summary>다른 지표 펼쳐 보기(최고·최저기온, 일교차, 강수 관측 비율, 선택 날짜 누적 강수량, 습도, 최대 순간풍속, 일조시간)</summary><div class="db-grid">${more.map(metricCard).join("")}</div></details>
       <div class="sx-tools"><span class="muted">카드·그래프·표·CSV 는 같은 서버 계산입니다. 강수일수·비율·평균·누적은 같은 강수 공통 연도로 계산합니다.</span><a class="dl-chip-btn" href="${api("summary")}&format=csv${st.cases.some((c) => c.label) ? `&labels=${st.cases.map((c) => encodeURIComponent(c.label || "")).join(",")}` : ""}" download>배틀 결과 CSV</a></div>`;
   }
   function renderHour() {

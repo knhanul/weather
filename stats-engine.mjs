@@ -180,7 +180,24 @@ export function truncatedPeriod(p, year, refYear, asOf) {
 // - 그날 공식 일자료 행이 없으면 모든 항목 = 자료 없음(NaN).
 // - 행이 있고 일강수량이 공란(NULL)이면 기상청 일자료 관례대로 무강수(0)로 센다. 단, 그 행의 기온 3개도 모두 비어 있으면 강수도 자료 없음.
 // - 그 밖의 NULL 은 그 항목만 자료 없음.
-const FIELDS = ["avg", "max", "min", "rain", "hum", "wind", "nsnow", "sdep"];
+const FIELDS = ["avg", "max", "min", "rain", "hum", "wind", "nsnow", "sdep", "gust", "sun"];
+// 추가 지표(날씨 이야기 선택 확장): 최대 순간풍속(m/s)·일조시간(hr). 품질 확인에서 빠진 값은 NaN + dq 비트(자료 없음과 구분)
+export const DAILY_QC = { gust: 1, sun: 2 };
+export const GUST_MAX = 75; // m/s — 국내 관측 최댓값(2003 매미 60m/s)보다 넉넉한 물리 한계
+export const SUN_MAX = 14.8; // hr — 가조시간이 없을 때 쓰는 국내 최장 낮 길이 상한
+// 최대 순간풍속: 0~75m/s 이고, 같은 날 최대 풍속(10분 평균)보다 작지 않아야 함
+export function qcGust(g, maxWind) {
+  if (!Number.isFinite(g)) return { v: NaN, bad: false };
+  if (g < 0 || g > GUST_MAX || (Number.isFinite(maxWind) && g + 1e-9 < maxWind)) return { v: NaN, bad: true };
+  return { v: g, bad: false };
+}
+// 일조시간: 0 이상, 가조시간(없으면 14.8시간) + 0.1 이하
+export function qcSun(s, possible) {
+  if (!Number.isFinite(s)) return { v: NaN, bad: false };
+  const cap = (Number.isFinite(possible) && possible > 0 ? possible : SUN_MAX) + 0.1;
+  if (s < 0 || s > cap) return { v: NaN, bad: true };
+  return { v: s, bad: false };
+}
 export function buildDailyStore(stationId, rows) {
   const list = rows
     .map((r) => ({ ...r, dn: ymdToDn(r.observation_date) }))
@@ -191,6 +208,7 @@ export function buildDailyStore(stationId, rows) {
   const arr = Object.fromEntries(FIELDS.map((f) => [f, new Float64Array(n).fill(NaN)]));
   const present = new Uint8Array(n);
   const rainBlank = new Uint8Array(n);
+  const dq = new Uint8Array(n);
   const num = (v) => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? NaN : Number(v));
   for (const r of list) {
     const i = r.dn - base;
@@ -212,6 +230,13 @@ export function buildDailyStore(stationId, rows) {
     const sd = num(r.max_snow_depth);
     arr.nsnow[i] = Number.isFinite(ns) ? ns : hasTemp ? 0 : NaN;
     arr.sdep[i] = Number.isFinite(sd) ? sd : hasTemp ? 0 : NaN;
+    // 공란은 0 으로 채우지 않음(자료 없음). 범위·일관성 확인에서 빠지면 dq 비트
+    const g = qcGust(num(r.max_inst_wind_speed), num(r.max_wind_speed));
+    arr.gust[i] = g.v;
+    if (g.bad) dq[i] |= DAILY_QC.gust;
+    const su = qcSun(num(r.sunshine), num(r.possible_sunshine));
+    arr.sun[i] = su.v;
+    if (su.bad) dq[i] |= DAILY_QC.sun;
   }
   return {
     stationId: String(stationId),
@@ -220,6 +245,7 @@ export function buildDailyStore(stationId, rows) {
     ...arr,
     present,
     rainBlank,
+    dq,
     firstDate: n ? dnToYmd(base) : null,
     lastDate: n ? dnToYmd(base + n - 1) : null,
     rows: list.length,

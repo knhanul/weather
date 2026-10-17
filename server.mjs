@@ -20,6 +20,7 @@ import { handlePrefs, createPgPrefsStore, createMysqlPrefsStore, createJsonPrefs
 import { createStatsData } from "./stats-data.mjs";
 import { createStatsApi } from "./stats-api.mjs";
 import { createDateApi } from "./date-api.mjs";
+import { createShareApi } from "./share-api.mjs";
 import { createRtApi } from "./rt-api.mjs";
 import { createRtSnapshotDb } from "./rt-snapshot-db.mjs";
 import { createStatsHourly } from "./stats-hourly.mjs";
@@ -1113,11 +1114,11 @@ async function dashboard() {
 // 정적 파일: 처음 요청 때 읽어 br·gzip 을 미리 만들어 메모리에 둔다(앱 파일은 이미지 안에서 바뀌지 않음, read_only).
 // 캐시: ?v= 가 붙은 요청은 1년 immutable, 그 밖(HTML 등)은 no-cache + ETag(같으면 304). Caddy encode 는 이미 압축된 응답을 다시 압축하지 않음.
 const STATIC_TYPES = {
-  ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+  ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
   ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webp": "image/webp",
   ".json": "application/json; charset=utf-8", ".webmanifest": "application/manifest+json; charset=utf-8",
 };
-const COMPRESSIBLE = new Set([".html", ".css", ".js", ".svg", ".json", ".webmanifest", ".ico"]);
+const COMPRESSIBLE = new Set([".html", ".css", ".js", ".mjs", ".svg", ".json", ".webmanifest", ".ico"]);
 const staticCache = new Map();
 function staticEntry(full) {
   if (staticCache.has(full)) return staticCache.get(full);
@@ -1288,6 +1289,8 @@ const handleDate = createDateApi({
   json,
   log: (line) => console.log(line),
 });
+// 공유 경로(/s/day · /s/battle + .svg): 링크 미리보기용 HTML(og 메타)과 카드 SVG. 같은 date-api 계산·캐시를 씀
+const handleShare = createShareApi({ dateApi: handleDate, log: (line) => console.log(line) });
 
 // 실시간·예보 분석(/api/rt/*): 새 엔드포인트. 과거 3개 기준 평균은 위 statsHourly·statsData 메모리를 그대로 쓴다(새 DB 표 없음).
 // 5단계: 사전 계산 스냅샷(MySQL 새 표). RT_SNAPSHOT_NS = 이름공간(시험 컨테이너는 test — 운영 스냅샷·게시 이력과 섞이지 않게), RT_PRECOMPUTE=0 이면 끔
@@ -1332,6 +1335,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname.startsWith("/api/stats/") && ((await handleDate(req, res, url)) || (await handleStats(req, res, url)))) return;
     if (url.pathname.startsWith("/api/rt/") && (await handleRt(req, res, url))) return;
+    if (url.pathname.startsWith("/s/") && (await handleShare(req, res, url))) return;
     if (req.method === "GET" && url.pathname === "/api/hourly") {
       return json(res, await queryHourly(Object.fromEntries(url.searchParams)));
     }

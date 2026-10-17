@@ -13,7 +13,7 @@
   const dow = (ymd) => DOW[new Date(`${ymd}T00:00:00Z`).getUTCDay()];
   const dot = (ymd) => (ymd ? `${+ymd.slice(0, 4)}.${+ymd.slice(5, 7)}.${+ymd.slice(8, 10)}` : "–");
   const HM = { ta: ["기온", "℃", 1], rn: ["강수량", "mm", 1], ws: ["풍속", "m/s", 1], hm: ["습도", "%", 0] };
-  const YM = { avg: ["평균기온", "℃", 1, "line"], max: ["최고기온", "℃", 1, "line"], min: ["최저기온", "℃", 1, "line"], rain: ["일강수량", "mm", 1, "bar"], wind: ["평균 풍속", "m/s", 1, "line"], hum: ["평균 습도", "%", 0, "line"] };
+  const YM = { avg: ["평균기온", "℃", 1, "line"], max: ["최고기온", "℃", 1, "line"], min: ["최저기온", "℃", 1, "line"], rain: ["일강수량", "mm", 1, "bar"], wind: ["평균 풍속", "m/s", 1, "line"], hum: ["평균 습도", "%", 0, "line"], gust: ["최대 순간풍속", "m/s", 1, "line"], sun: ["일조시간", "시간", 1, "bar"] };
   const PERIODS = [["recent5", "최근 5년"], ["recent10", "최근 10년"], ["recent20", "최근 20년"], ["recent30", "최근 30년"], ["all", "전체"], ["custom", "직접 지정"]];
   const st = { station: "108", cal: "solar", m: 10, d: 17, leap: false, year: THIS_YEAR, cmp: [], period: "recent10", to: THIS_YEAR - 1, from: THIS_YEAR - 10, hm: "ta", ym: "avg", hk: "ta", hd: "raw", alias: "", showLunar: true };
   let meta = null;
@@ -87,7 +87,7 @@
     p.innerHTML = `
       <div class="card ds-head"><div class="ds-head-t">${ART}<div><h2 class="sx-q">날짜로 보는 날씨<small>아무 날짜나 양력·음력으로 넣으면 해마다 그날의 날씨를 과거 관측으로 보여 줍니다. 예보·확률이 아닙니다.</small></h2></div></div>
         <div class="sx-ctl ds-ctl" id="dsCtl"></div>
-        <p class="ds-banner" id="dsBanner" role="status"></p><p class="ds-toast" id="dsToast" role="status" hidden></p></div>
+        <p class="ds-banner" id="dsBanner" role="status"></p><div class="fav-row" id="dsFav"></div><p class="ds-toast" id="dsToast" role="status" hidden></p></div>
       <div class="card" id="dsCard"></div>
       <div class="card" id="dsKey"></div>
       <div class="card" id="dsHour" data-sec="hourly"></div>
@@ -119,10 +119,22 @@
       ${st.period === "custom" ? `<div><label for="dsFrom">시작 기준연도</label><input id="dsFrom" type="number" class="sx-num" min="1900" max="${st.to}" value="${st.from}"></div>` : ""}
       <div><label for="dsTo">끝 기준연도</label><select id="dsTo">${opt(toYears, st.to)}</select></div>
       <div><label for="dsAlias">별칭(선택)</label><input id="dsAlias" maxlength="30" placeholder="예: 우리 집 기념일" value="${E(st.alias)}"></div>
-      <div class="ds-acts"><button type="button" id="dsGo">날씨 보기</button><button type="button" class="sec" id="dsBattle">이 날짜로 배틀</button></div>`;
+      <div class="ds-acts"><button type="button" id="dsGo">날씨 보기</button><button type="button" class="sec" id="dsBattle">이 날짜로 배틀</button><button type="button" class="sec" id="dsCardImg">카드 이미지</button></div>`;
     $("dsBanner").innerHTML = `<b>매년 ${E(specLabel())}을 비교 중</b> · ${E(periodText())} · 선택 연도 ${st.year}년${st.cmp.length ? ` + 비교 ${st.cmp.join("·")}년` : ""} <span class="muted">· 일자료 1970~ / 시간자료 1990~</span>`;
     const art = document.getElementById("dsArtDay");
     if (art) art.textContent = String(st.d);
+    renderFav();
+  }
+  // ---- 자주 보는 날짜(이 브라우저에만)
+  const favKey = () => `${st.station}|${st.cal}|${st.m}|${st.d}|${st.leap ? 1 : 0}`;
+  const stName = (id) => (meta?.stations || []).find((s) => String(s.station_id) === String(id))?.station_name || id;
+  function favLabel(x) { const sl = x.cal === "lunar" ? `음력 ${x.m}/${x.d}${x.leap ? "(윤)" : ""}` : `${x.m}월 ${x.d}일`; return `${x.alias ? `${x.alias} · ` : ""}${sl} · ${stName(x.station)}`; }
+  function favHref(x) { const q = new URLSearchParams({ station: x.station, cal: x.cal, m: String(x.m), d: String(x.d) }); if (x.cal === "lunar") q.set("leap", x.leap ? "1" : "0"); q.set("period", st.period); q.set("to", String(st.to)); if (st.period === "custom") q.set("from", String(st.from)); if (x.alias) q.set("alias", x.alias); return `#/stories/day?${q}`; }
+  function renderFav() {
+    const el = $("dsFav");
+    if (!el || !window.StoryFavs) return;
+    const on = StoryFavs.has("day", favKey());
+    el.innerHTML = `<button type="button" class="sec fav-star${on ? " on" : ""}" id="dsFavBtn" aria-pressed="${on}" title="이 브라우저에 저장">${on ? "★ 저장됨" : "☆ 이 날짜 저장"}</button><span class="fav-list" aria-label="자주 보는 날짜">${StoryFavs.chips("day", { label: favLabel, href: favHref, current: favKey() })}</span>`;
   }
   const periodText = () => { const p = PERIODS.find(([x]) => x === st.period)[1]; if (st.period === "custom") return `${st.from}~${st.to}년`; if (st.period === "all") return `전체(~${st.to}년)`; const n = +st.period.slice(6); return `${p}(${st.to - n + 1}~${st.to})`; };
   function toast(msg) { const t = $("dsToast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 6000); }
@@ -171,6 +183,9 @@
     if (b.id === "dsGo") return go();
     if (b.id === "dsBattle" || b.id === "dsSelBattle") { location.hash = battleHref(b.id === "dsSelBattle"); return; }
     if (b.id === "dsCopy") return copyLink();
+    if (b.id === "dsCardImg" || b.id === "dsCardImg2") return openCard();
+    if (b.id === "dsFavBtn") { const on = StoryFavs.toggle("day", { key: favKey(), station: st.station, cal: st.cal, m: st.m, d: st.d, leap: st.leap, alias: st.alias }); toast(on ? "이 날짜를 이 브라우저에 저장했습니다(위 목록에서 바로 열기)" : "저장을 지웠습니다"); return renderFav(); }
+    if (ds.favdel) { StoryFavs.remove("day", ds.favdel); return renderFav(); }
     if (ds.ev !== undefined) { e.preventDefault(); return showEvidence(+ds.ev); }
     if (b.id === "dsRetry") { cache.clear(); return load(); }
   }
@@ -182,9 +197,18 @@
     if (st.alias) q.set("labels", encodeURIComponent(st.alias));
     return `#/stories/battle?${q}`;
   }
+  // 공유 링크 = 서버가 읽는 /s/day?…(미리보기 문구에 숫자) → 열면 같은 화면(#/stories/day?…)으로 이동
+  const shareUrl = (withAlias) => `${location.origin}/s/day?${query({ view: false, alias: !!withAlias })}`;
+  function openCard() {
+    if (!D || !window.StoryShare) { toast("자료를 다 불러온 뒤 카드를 만들 수 있습니다"); return; }
+    StoryShare.module().then((m) => {
+      const withAlias = !!st.alias;
+      StoryShare.open({ spec: m.daySpec(D, { alias: st.alias }), filename: `inal-${st.station}-${st.cal === "lunar" ? "L" : "S"}${p2(st.m)}${p2(st.d)}-${D.window.fromYear}-${D.window.toYear}`, shareUrl: shareUrl(withAlias && $("dsShareAlias")?.checked), title: "이날의 날씨 카드" });
+    });
+  }
   async function copyLink() {
     const withAlias = $("dsShareAlias")?.checked;
-    const url = `${location.origin}/${hashOf({ alias: !!withAlias })}`;
+    const url = shareUrl(withAlias);
     try { await navigator.clipboard.writeText(url); toast("링크를 복사했습니다" + (withAlias ? " (별칭 포함)" : "")); } catch { prompt("이 주소를 복사하세요", url); }
   }
 
@@ -245,7 +269,7 @@
       <div class="sx-key ds-key">${card("평균기온", M.avg, "℃", 1)}
       <div><span>평균 최고 · 최저 ${badge(M.max)}</span><b>${M.max.n ? `${fmt(M.max.mean)} · ${fmt(M.min.mean)}℃` : "–"}</b><small>${M.max.n ? nText(M.max) : "자료 없음"}</small></div>
       <div><span>강수 있었던 해 ${badge(rn)}</span><b>${rn.n ? `${rn.k}<small class="ds-of">/ ${rn.n}개 해</small>` : "–"}</b><small>${rn.n ? `${fmt(rn.share, 0)}% · 일강수량 0.1mm 이상(비·눈 등) — 과거 비율이며 강수확률이 아님` : "자료 없음"}</small></div>
-      ${card("평균 일강수량", rn, "mm", 1, rn.n ? ` · 무강수 0 포함` : "")}${card("평균 풍속", M.wind, "m/s", 1)}</div>
+      ${card("평균 일강수량", rn, "mm", 1, rn.n ? ` · 무강수 0 포함` : "")}${card("평균 풍속", M.wind, "m/s", 1)}${M.gust ? card("평균 최대 순간풍속", M.gust, "m/s", 1) : ""}${M.sun ? card("평균 일조시간", M.sun, "시간", 1) : ""}</div>
       ${V.rainCells(rows, { selected: [st.year] })}<p class="ds-note">물방울 = 강수 있음 · 빈 원 = 강수 없음 · 빗금 = 자료 없음 · × = 그해 없는 날짜·아직 관측 전·자료 미제공</p>`;
   }
   // ---- 시간별 날씨 변화
@@ -291,7 +315,7 @@
     const [label, unit, dg, kind] = YM[k];
     const m = D.daily.metrics[k === "max" || k === "min" ? k : k];
     const rows = D.daily.rows.map((r) => ({ year: r.referenceYear, value: r.dateStatus === "ok" ? r.values[k] : null, status: r.dateStatus === "ok" ? r.fieldStatus[k] : r.dateStatus, statusText: STATUS(r.dateStatus === "ok" ? r.fieldStatus[k] : r.dateStatus), r }));
-    const ext = m.n ? `가장 ${kind === "bar" || k === "wind" || k === "hum" ? "많았던/강했던" : "높았던"} 해 ${m.maxYears.join("·")}년(${fmt(m.max, dg)}${unit}) · 가장 ${kind === "bar" ? "적었던" : "낮았던"} 해 ${m.minYears.join("·")}년(${fmt(m.min, dg)}${unit})${m.maxYears.length > 1 || m.minYears.length > 1 ? " · 동률 포함" : ""}` : "";
+    const ext = m.n ? `가장 ${kind === "bar" || k === "wind" || k === "gust" || k === "hum" ? "많았던/강했던" : "높았던"} 해 ${m.maxYears.join("·")}년(${fmt(m.max, dg)}${unit}) · 가장 ${kind === "bar" ? "적었던" : "낮았던"} 해 ${m.minYears.join("·")}년(${fmt(m.min, dg)}${unit})${m.maxYears.length > 1 || m.minYears.length > 1 ? " · 동률 포함" : ""}` : "";
     $("dsYear").innerHTML = `<h3 class="ds-h">해마다 달라진 이날 <small>기준연도마다 정확히 하루씩 뽑은 값 · 점·막대를 누르면 그해가 선택됩니다</small></h3>
       <div class="ds-tools">${seg("ym", Object.entries(YM).map(([v, x]) => [v, x[0]]), k)}</div>
       <div class="sx-chart" id="dsYearChart"></div>
@@ -344,7 +368,7 @@
     $("dsSel").innerHTML = `<h3 class="ds-h">선택 연도의 그날 <small>공식 일자료 + 시간자료(각각 있는 만큼)</small></h3>
       <div class="ds-selbar"><button type="button" class="sec" data-ystep="-1">‹ ${st.year - 1}년</button><b>${st.year}년${s.solarDate ? ` · ${dot(s.solarDate)}(${dow(s.solarDate)})` : ""}${cal?.lunar ? ` · ${E(cal.lunar.text)}` : ""}</b><button type="button" class="sec" data-ystep="1">${st.year + 1}년 ›</button></div>
       ${body}
-      <div class="sx-tools"><span class="ds-acts"><button type="button" class="sec" id="dsSelBattle">배틀에 추가</button><button type="button" class="sec" id="dsCopy">링크 복사</button><label class="sx-check"><input type="checkbox" id="dsShareAlias"> 링크에 별칭 넣기</label><label class="sx-check"><input type="checkbox" id="dsAliasSave"${(() => { try { return localStorage.getItem(aliasKey()) ? " checked" : ""; } catch { return ""; } })()}> 별칭을 이 브라우저에 저장</label></span><a class="dl-chip-btn" href="/api/stats/date-weather?${apiQuery("daily")}&format=csv" download>연도별 CSV</a></div>`;
+      <div class="sx-tools"><span class="ds-acts"><button type="button" class="sec" id="dsSelBattle">배틀에 추가</button><button type="button" class="sec" id="dsCopy">링크 복사</button><button type="button" class="sec" id="dsCardImg2">카드 이미지</button><label class="sx-check"><input type="checkbox" id="dsShareAlias"> 링크에 별칭 넣기</label><label class="sx-check"><input type="checkbox" id="dsAliasSave"${(() => { try { return localStorage.getItem(aliasKey()) ? " checked" : ""; } catch { return ""; } })()}> 별칭을 이 브라우저에 저장</label></span><a class="dl-chip-btn" href="/api/stats/date-weather?${apiQuery("daily")}&format=csv" download>연도별 CSV</a></div>`;
   }
   // ---- 이야기 + 근거 + 표
   let STORIES = [];
@@ -356,12 +380,13 @@
     for (const m of Object.values(D.daily.metrics)) for (const [r, ys] of Object.entries(m.excludedYearsByReason)) for (const y of ys) (exAll[r] ||= new Set()).add(y);
     $("dsStory").innerHTML = `<h3 class="ds-h">짧은 이야기와 근거 <small>조건을 만족할 때만, 실제 계산값으로(최대 3개)</small></h3>
       ${STORIES.length ? `<ol class="ds-stories">${STORIES.map((s, i) => `<li><p>${E(s.text)}</p><a href="#" data-ev="${i}" class="ds-ev">근거 보기 ›</a><div class="ds-evbox" id="dsEv${i}" hidden></div></li>`).join("")}</ol>` : `<p class="muted">조건을 만족하는 이야기가 없습니다(표본이 적거나 자료 제한).</p>`}
-      <details class="sx-rules"><summary>유효 연도 · 제외 사유</summary><ul>${Object.entries(D.daily.metrics).map(([k, m]) => `<li><b>${E(YM[k]?.[0] || { range: "일교차" }[k] || k)}</b>: 유효 ${m.n}개 해(${m.validYears.length ? `${m.validYears[0]}~${m.validYears[m.validYears.length - 1]}` : "-"}) / 대상 ${m.eligible} / 요청 ${m.candidateYears.length}${Object.keys(m.excludedYearsByReason).length ? ` — ${Object.entries(m.excludedYearsByReason).map(([r, ys]) => `${E(STATUS(r))} ${ys.join("·")}`).join(" / ")}` : ""}</li>`).join("")}</ul></details>
+      <details class="sx-rules"><summary>유효 연도 · 제외 사유</summary><ul>${Object.entries(D.daily.metrics).map(([k, m]) => `<li><b>${E(YM[k]?.[0] || { range: "일교차", gust: "최대 순간풍속", sun: "일조시간" }[k] || k)}</b>: 유효 ${m.n}개 해(${m.validYears.length ? `${m.validYears[0]}~${m.validYears[m.validYears.length - 1]}` : "-"}) / 대상 ${m.eligible} / 요청 ${m.candidateYears.length}${Object.keys(m.excludedYearsByReason).length ? ` — ${Object.entries(m.excludedYearsByReason).map(([r, ys]) => `${E(STATUS(r))} ${ys.join("·")}`).join(" / ")}` : ""}</li>`).join("")}</ul></details>
       ${tableHtml()}
       <details class="sx-rules"><summary>계산 기준</summary><ul>
         <li>각 기준연도의 정확히 그 날짜(${E(D.specLabel)})만 씁니다. 주변 날짜를 섞지 않고, 빠진 해가 있어도 기간을 늘려 표본을 채우지 않습니다.</li>
         <li>평균기온 = 공식 일평균기온의 평균(최고·최저의 중간값이 아님). 일교차 = 같은 해 최고−최저를 먼저 계산한 뒤 평균. 강수 있었던 해 = 일강수량 0.1mm 이상.</li>
         <li>평균 일강수량 = 유효한 일강수량 합 ÷ N(무강수 0 포함). 일강수량 공란은 그날 행과 기온이 있을 때만 기상청 관례대로 무강수 0, 행 없음·전부 공란은 자료 없음.</li>
+        <li>최대 순간풍속 = 공식 일최대 순간풍속(0~75m/s 이고 그날 최대 풍속 이상인 값만). 일조시간 = 공식 합계 일조시간(0 이상·가조시간 이하, 가조시간이 없으면 14.8시간 이하). 공란은 0 으로 세지 않고 자료 없음, 범위를 벗어나면 '품질 확인으로 제외'.</li>
         <li>시간 평균 = 같은 시각끼리 해마다 한 값을 평균(관측이 많은 해에 가중치 없음). 시간 강수 공란은 그 시각 행이 있고 품질 플래그가 결측(9)이 아닐 때만 무강수 0. 기온·강수·풍속·습도 플래그 9 는 '품질 확인으로 제외'.</li>
         <li>표본 정책(서비스 기준, 기상청 공식 기준 아님): N 1~2 = 참고 평균(승패·강한 요약·분포 밴드 없음), N≥3 = 통계, 유효/대상 80% 미만 = 자료 제한, P10~P90 밴드는 그 시각 N≥10·관측률 80% 이상(${E(D.sample.quantile)}).</li>
         <li>음력: 대한민국 음양력(한국천문연구원 자료 기반 표, ${E(D.lunarRange.solarFrom)}~${E(D.lunarRange.solarTo)}). 윤달은 그해 실제 있을 때만, 음력 30일이 없는 해·평년 2월 29일은 '그해에는 없는 날짜'(대체 없음). 기준연도 = 고른 달력의 연도.</li>
@@ -370,7 +395,7 @@
   }
   function tableHtml() {
     const lunar = st.showLunar;
-    return `<details class="sx-table"><summary>표로 보기 · 기준연도별 그날</summary><label class="sx-check"><input type="checkbox" id="dsLunarCol"${lunar ? " checked" : ""}> 음력 날짜도 보기(표시만, 비교 기준은 그대로)</label><div class="sx-table-wrap"><table><thead><tr><th>기준연도</th><th>양력 날짜</th>${lunar ? "<th>음력</th>" : ""}<th>상태</th><th>평균(℃)</th><th>최고</th><th>최저</th><th>강수(mm)</th><th>풍속</th><th>습도</th></tr></thead><tbody>${D.daily.rows.slice().reverse().map((r) => `<tr class="${r.dateStatus !== "ok" || !r.rowPresent ? "dim" : ""}${r.referenceYear === st.year ? " ds-tr-sel" : ""}"><td>${r.referenceYear}</td><td>${r.solarDate ? `${r.solarDate}(${dow(r.solarDate)})` : "–"}</td>${lunar ? `<td>${r.lunarDate ? `${r.isLeapMonth ? "윤" : ""}${r.lunarDate}` : "–"}</td>` : ""}<td>${E(r.dateStatus === "ok" ? (r.rowPresent ? (r.rainNorm === "blank0" ? "자료 있음(강수 공란=무강수)" : "자료 있음") : "자료 없음") : STATUS(r.dateStatus))}</td>${["avg", "max", "min", "rain", "wind", "hum"].map((k) => `<td class="num">${r.values[k] != null ? fmt(r.values[k], k === "hum" ? 0 : 1) : "–"}</td>`).join("")}</tr>`).join("")}</tbody></table></div><div class="sx-tools"><span class="muted">그래프·숫자·이야기·표·CSV 는 같은 서버 계산 결과입니다.</span><a class="dl-chip-btn" href="/api/stats/date-weather?${apiQuery("daily")}&format=csv" download>연도별 CSV</a></div></details>`;
+    return `<details class="sx-table"><summary>표로 보기 · 기준연도별 그날</summary><label class="sx-check"><input type="checkbox" id="dsLunarCol"${lunar ? " checked" : ""}> 음력 날짜도 보기(표시만, 비교 기준은 그대로)</label><div class="sx-table-wrap"><table><thead><tr><th>기준연도</th><th>양력 날짜</th>${lunar ? "<th>음력</th>" : ""}<th>상태</th><th>평균(℃)</th><th>최고</th><th>최저</th><th>강수(mm)</th><th>풍속</th><th>습도</th><th>순간풍속</th><th>일조(시간)</th></tr></thead><tbody>${D.daily.rows.slice().reverse().map((r) => `<tr class="${r.dateStatus !== "ok" || !r.rowPresent ? "dim" : ""}${r.referenceYear === st.year ? " ds-tr-sel" : ""}"><td>${r.referenceYear}</td><td>${r.solarDate ? `${r.solarDate}(${dow(r.solarDate)})` : "–"}</td>${lunar ? `<td>${r.lunarDate ? `${r.isLeapMonth ? "윤" : ""}${r.lunarDate}` : "–"}</td>` : ""}<td>${E(r.dateStatus === "ok" ? (r.rowPresent ? (r.rainNorm === "blank0" ? "자료 있음(강수 공란=무강수)" : "자료 있음") : "자료 없음") : STATUS(r.dateStatus))}</td>${["avg", "max", "min", "rain", "wind", "hum", "gust", "sun"].map((k) => `<td class="num">${r.values[k] != null ? fmt(r.values[k], k === "hum" ? 0 : 1) : r.fieldStatus?.[k] === "qc" ? `<span class="muted" title="품질 확인으로 제외">QC</span>` : "–"}</td>`).join("")}</tr>`).join("")}</tbody></table></div><div class="sx-tools"><span class="muted">그래프·숫자·이야기·표·CSV 는 같은 서버 계산 결과입니다.</span><a class="dl-chip-btn" href="/api/stats/date-weather?${apiQuery("daily")}&format=csv" download>연도별 CSV</a></div></details>`;
   }
   function showEvidence(i) {
     const s = STORIES[i];

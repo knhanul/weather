@@ -131,3 +131,27 @@ tr.ds-tr-sel td, tr.ds-tr-sel th { background:#fff4e6; }
 }
 .ds-selbar button { white-space:nowrap; flex:none; padding:0 10px; }
 .ds-selbar b { flex:1; text-align:center; }
+/* 자주 보는 날짜·배틀 조합(story-favs.js) */
+.fav-row { display:flex; flex-wrap:wrap; gap:6px 8px; align-items:center; margin-top:10px; }
+.fav-row:empty { display:none; }
+.fav-star { height:32px; padding:0 12px; font-size:13.5px; }
+.fav-star.on { color:#b45309; border-color:#f5c26b; background:#fff8eb; }
+.fav-list { display:flex; flex-wrap:wrap; gap:6px; min-width:0; }
+.fav-empty { font-size:12.5px; }
+.fav-chip { display:inline-flex; align-items:center; max-width:100%; border:1px solid var(--line); border-radius:16px; background:#fff; font-size:13px; }
+.fav-chip a { padding:5px 4px 5px 11px; color:var(--fg); text-decoration:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:240px; }
+.fav-chip.on { border-color:#026ef8; background:#eef5ff; }
+.fav-del { border:0; background:none; color:var(--muted); width:28px; height:28px; padding:0; font-size:15px; cursor:pointer; }
+/* 공유 카드 창(story-share.js) */
+.ssh-back { position:fixed; inset:0; z-index:1200; background:rgba(13,27,61,.55); display:grid; place-items:center; padding:12px; }
+.ssh-back[hidden] { display:none; }
+body.ssh-open { overflow:hidden; }
+.ssh { width:min(460px,100%); max-height:calc(100dvh - 24px); overflow:auto; background:#fff; border-radius:16px; padding:14px 16px 16px; box-shadow:0 10px 40px rgba(0,0,0,.25); }
+.ssh-h { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px; font-size:16px; }
+.ssh-x { width:36px; height:36px; padding:0; font-size:20px; }
+.ssh-img { background:#f4f8ff; border-radius:12px; min-height:200px; display:grid; place-items:center; overflow:hidden; }
+.ssh-img img { display:block; width:100%; height:auto; }
+.ssh-note { margin:8px 0 0; font-size:12.5px; color:var(--muted); }
+.ssh-acts { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.ssh-acts button { height:38px; padding:0 14px; }
+.ssh-msg { margin:8px 0 0; font-size:13px; min-height:1em; }

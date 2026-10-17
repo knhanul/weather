@@ -22,9 +22,11 @@ export const BATTLE_METRICS = {
   rain_share: { label: "강수 관측 비율", unit: "%", digits: 0, field: "rain", kind: "share", group: "rain", more: "강수 비율이 높았던 날", less: "강수 비율이 낮았던 날", diffUnit: "%p", def: "강수일수 ÷ N × 100(과거 비율, 앞으로의 강수확률 아님)" },
   rain_sum: { label: "선택 날짜 누적 강수량", unit: "mm", digits: 1, field: "rain", kind: "sum", group: "rain", more: "누적 강수량이 많았던 날", less: "누적 강수량이 적었던 날", diffUnit: "mm", def: "공통 N개 날짜의 일강수량 합(그 기간 모든 날의 강수량이 아님)" },
   hum: { label: "평균 상대습도", unit: "%", digits: 0, field: "hum", kind: "mean", group: "hum", more: "습도가 높았던 날", less: "습도가 낮았던 날", diffUnit: "%p", def: "각 해 공식 일평균 상대습도의 평균" },
+  gust: { label: "평균 최대 순간풍속", unit: "m/s", digits: 1, field: "gust", kind: "mean", group: "wind", more: "돌풍이 강했던 날", less: "돌풍이 약했던 날", diffUnit: "m/s", def: "각 해 공식 일최대 순간풍속의 평균(0~75m/s, 그날 최대 풍속 이상인 값만)" },
+  sun: { label: "평균 일조시간", unit: "시간", digits: 1, field: "sun", kind: "mean", group: "sun", more: "햇볕이 길었던 날", less: "햇볕이 짧았던 날", diffUnit: "시간", def: "각 해 공식 합계 일조시간의 평균(0~가조시간 범위 값만)" },
 };
 export const CORE_METRICS = Object.keys(BATTLE_METRICS).filter((k) => BATTLE_METRICS[k].core);
-const WORDS = { temp: ["높음", "낮음"], hum: ["높음", "낮음"], share: ["높음", "낮음"], rain: ["많음", "적음"], wind: ["강함", "약함"] };
+const WORDS = { temp: ["높음", "낮음"], hum: ["높음", "낮음"], share: ["높음", "낮음"], rain: ["많음", "적음"], wind: ["강함", "약함"], sun: ["김", "짧음"] };
 const rnd = (v, d) => (v == null ? null : Math.round(v * 10 ** d + (v >= 0 ? 1e-9 : -1e-9)) / 10 ** d);
 const DATE_EXCLUDE = new Set(["nodate", "range", "future", "ongoing", "unsupported", "pending", "error"]);
 
@@ -60,7 +62,7 @@ export function compareMetric(metricId, cases, rowsByCase) {
     cases.forEach((c, ci) => {
       const r = rowsByCase[ci][i];
       if (DATE_EXCLUDE.has(r.dateStatus)) { eligible = false; valid = false; reasons.push({ case: c.id, reason: r.dateStatus }); }
-      else if (r.values[m.field] == null) { valid = false; reasons.push({ case: c.id, reason: "missing" }); }
+      else if (r.values[m.field] == null) { valid = false; reasons.push({ case: c.id, reason: r.fieldStatus?.[m.field] === "qc" ? "qc" : "missing" }); }
     });
     if (eligible) eligibleCommon.push(y);
     if (valid) validCommon.push(y);

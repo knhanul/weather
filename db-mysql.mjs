@@ -567,7 +567,7 @@ export async function dailySeriesPg(stationId, fromDate, toDate) {
 // 날씨 통계: 지점 하나의 공식 일자료 전체(통계용 항목만). 기본 키 (station_id, observation_date) 범위 읽기
 export async function statsDailyRows(stationId) {
   return q(
-    `SELECT observation_date, avg_temperature, max_temperature, min_temperature, precipitation, avg_humidity, avg_wind_speed, max_new_snow, max_snow_depth
+    `SELECT observation_date, avg_temperature, max_temperature, min_temperature, precipitation, avg_humidity, avg_wind_speed, max_new_snow, max_snow_depth, max_inst_wind_speed, max_wind_speed, sunshine, possible_sunshine
      FROM observations_daily WHERE station_id = ? AND source_kind = 'OFFICIAL' ORDER BY observation_date`,
     [stationId],
   );

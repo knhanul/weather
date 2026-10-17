@@ -77,8 +77,8 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
   const policy = () => ({ policyVersion: POLICY_VERSION, calendarVersion: CALENDAR_VERSION, storyVersion: STORY_VERSION, battleVersion: BATTLE_VERSION, sample: SAMPLE_POLICY, dailyFrom: DAILY_FROM, hourlyFrom: HOURLY_FROM, lunarRange: LUNAR_RANGE, statusText: STATUS_TEXT });
 
   // ---------------------------------------------------------------- 날짜로 보는 날씨
-  async function dateWeatherApi(url, res) {
-    const q = url.searchParams;
+  // 계산(캐시 포함) — API 와 공유 경로(/s/day)가 같이 쓴다. 반환: { str(JSON 문자열) } 또는 CSV 용 { body, st, part }
+  async function dayResult(q, { csv = false } = {}) {
     const st = await stationById(q.get("station") || "108");
     const spec = specParam(q);
     const t = today();
@@ -86,7 +86,6 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
     const win = windowParam(q, thisYear);
     const part = ["daily", "hourly", "all"].includes(q.get("part")) ? q.get("part") : "daily";
     const sel = yearsList(q.get("years") || q.get("year") || String(thisYear), thisYear);
-    const csv = q.get("format") === "csv";
     const store = await statsData.get(st.station_id);
     if (!store.n) throw new StatsError("이 지점에는 공식 일자료가 없습니다", 404);
     const needH = part !== "daily";
@@ -96,7 +95,7 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
     const baseKey = ["dw", st.station_id, specKey(spec), windowKey(win), years.fromYear, part, CALENDAR_VERSION, POLICY_VERSION, STORY_VERSION, statsData.version(), needH ? statsHourly.version() : 0, store.lastDate, hs ? hs.lastIdx : -1, t].join("|");
     const key = `${baseKey}|${sel.join(".")}|${csv ? "csv" : "json"}`;
     const hit = recall(key);
-    if (hit && !csv) return sendJson(res, hit);
+    if (hit && !csv) return { str: hit };
     const ctx = ctxFor(store, hs, t);
     // 과거 평균(base)은 선택 연도와 무관 → 따로 기억해 선택 연도만 바뀌면 재사용
     let base = recall(baseKey);
@@ -116,8 +115,14 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
       hourlyInfo: hs ? { from: HOURLY_FROM, last: hourlyLastDay(hs) } : null, dataRevision: { daily: statsData.version(), hourly: statsHourly ? statsHourly.version() : null, dailyLast: store.lastDate },
       ...policy(), part, selectedYears: sel, selectedCalendars: r.selected ? r.selected.map((x) => bothCalendars(x.solarDate)) : undefined, official, ...r,
     };
-    if (csv) return dateCsv(res, st, body, part);
-    return sendJson(res, remember(key, JSON.stringify(body)));
+    if (csv) return { body, st, part };
+    return { str: remember(key, JSON.stringify(body)) };
+  }
+  async function dateWeatherApi(url, res) {
+    const csv = url.searchParams.get("format") === "csv";
+    const r = await dayResult(url.searchParams, { csv });
+    if (csv) return dateCsv(res, r.st, r.body, r.part);
+    return sendJson(res, r.str);
   }
   function dateCsv(res, st, b, part) {
     const head = [`이날 · 날짜로 보는 날씨 (집계 결과 — 원자료 다운로드 아님)`, `지점 ${st.station_id} ${st.station_name || ""} · ${b.compareText} · ${b.window.label} · 오늘 ${b.today}(Asia/Seoul) · 출처 ${SOURCE}`, `정책 ${POLICY_VERSION} · 달력 ${CALENDAR_VERSION} · 일자료 ${DAILY_FROM.slice(0, 4)}~ / 시간자료 ${HOURLY_FROM.slice(0, 4)}~`];
@@ -187,14 +192,12 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
       return { id, stationId: String(stationId || ""), spec: r.spec };
     });
   }
-  async function battleApi(url, res) {
-    const q = url.searchParams;
+  async function battleResult(q, { csv = false } = {}) {
     const cases0 = casesParam(q.get("cases"));
     const t = today();
     const thisYear = +t.slice(0, 4);
     const win = windowParam(q, thisYear);
     const part = ["summary", "hourly", "year"].includes(q.get("part")) ? q.get("part") : "summary";
-    const csv = q.get("format") === "csv";
     const labels = String(q.get("labels") || "").split(",").map((s) => safeText(decodeURIComponent(s)));
     const sts = [];
     for (const c of cases0) sts.push(await stationById(c.stationId));
@@ -211,7 +214,7 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
     const year = Number(q.get("year"));
     const key = ["db", cases.map((c) => `${c.id}${c.stationId}${specKey(c.spec)}`).join(""), windowKey(win), years.fromYear, part, part === "year" ? year : "", CALENDAR_VERSION, POLICY_VERSION, BATTLE_VERSION, statsData.version(), needH ? statsHourly.version() : 0, t, csv ? `csv${labels.join("~")}` : "json"].join("|");
     const hit = recall(key);
-    if (hit && !csv) return sendJson(res, hit);
+    if (hit && !csv) return { str: hit };
     const stInfo = cases.map((c, i) => ({ id: c.id, ...stOut(sts[i], c.store) }));
     let body;
     if (part === "year") {
@@ -231,8 +234,14 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
       body = { ok: true, part, ...b, periods };
     }
     Object.assign(body, { source: SOURCE, timezone: "Asia/Seoul", today: t, window: { ...win, ...years, label: windowLabel(win, years), allFrom }, stations: stInfo, metricsInfo: BATTLE_METRICS, coreMetrics: CORE_METRICS, ...policy(), dataRevision: { daily: statsData.version(), hourly: statsHourly ? statsHourly.version() : null } });
-    if (csv && part === "summary") return battleCsv(res, body, labels);
-    return sendJson(res, remember(key, JSON.stringify(body)));
+    if (csv && part === "summary") return { body, labels };
+    return { str: remember(key, JSON.stringify(body)) };
+  }
+  async function battleApi(url, res) {
+    const csv = url.searchParams.get("format") === "csv";
+    const r = await battleResult(url.searchParams, { csv });
+    if (r.body) return battleCsv(res, r.body, r.labels);
+    return sendJson(res, r.str);
   }
   function battleCsv(res, b, labels) {
     const ids = b.cases.map((c) => c.id);
@@ -246,7 +255,7 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
   }
 
   const ROUTES = { "/api/stats/date-weather": dateWeatherApi, "/api/stats/date-battle": battleApi, "/api/stats/calendar-map": calendarMap };
-  return async function handleDate(req, res, url) {
+  const handleDate = async function handleDate(req, res, url) {
     const fn = ROUTES[url.pathname];
     if (!fn) return false;
     if (req.method !== "GET" && req.method !== "HEAD") { json(res, { ok: false, message: "GET 만 지원합니다" }, 405); return true; }
@@ -256,4 +265,8 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
     finally { const ms = Date.now() - t0; if (ms > 2000) log(`date-api slow ${url.pathname} ${ms}ms`); }
     return true;
   };
+  // 공유 경로(share-api.mjs)용: 같은 계산·캐시를 객체로
+  handleDate.dayBody = async (q) => JSON.parse((await dayResult(q)).str);
+  handleDate.battleBody = async (q) => JSON.parse((await battleResult(q)).str);
+  return handleDate;
 }
