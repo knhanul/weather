@@ -270,8 +270,8 @@
   function segments(o, segs = loadSegs()) { return segs.map((s) => segment(s, o)).filter(Boolean).sort((a, b) => (a.startW < b.startW ? -1 : 1)); }
   const dayW = (d, today) => (d === today ? "오늘" : d === addDay(today, 1) ? "내일" : d === addDay(today, -1) ? "어제" : md(d));
   function segCard(s, today, on) {
-    const wear = s.wear ? (s.wear.one || `${s.wear.outer} + 안 ${s.wear.inner}`) : "기온 자료 없음";
-    return `<button type="button" class="vz-seg${on ? " on" : ""}" data-seg="${esc(s.id)}" aria-pressed="${on}"><span class="vz-segh"><b>${esc(s.label)}</b> <small>${dayW(s.date, today)} ${s.from}~${s.to}시</small></span><span class="vz-segw">${esc(wear)}</span>${s.items.length ? `<small class="vz-segi">${s.items.map(esc).join(" · ")}</small>` : ""}${fin(s.tmin) ? `<small>${f1(s.tmin)}~${f1(s.tmax)}℃</small>` : ""}</button>`;
+    const wear = s.wear ? (s.wear.one || `겉 ${s.wear.outer} / 안 ${s.wear.inner}`) : "기온 자료 없음";
+    return `<button type="button" class="vz-seg${on ? " on" : ""}" data-seg="${esc(s.id)}" aria-pressed="${on}"><span class="vz-segh"><b>${esc(s.label)}</b> <small>${dayW(s.date, today)} ${s.from}~${s.to}시</small></span><span class="vz-segw">${esc(wear)}</span>${s.items.length ? `<small class="vz-segi">${s.items.map(esc).join(" · ")}</small>` : ""}${fin(s.tmin) ? `<small>${s.tmin === s.tmax ? f1(s.tmin) : `${f1(s.tmin)}~${f1(s.tmax)}`}℃</small>` : ""}</button>`;
   }
   function segPanel(s, today) {
     if (!s) return "";

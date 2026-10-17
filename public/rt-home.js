@@ -234,7 +234,7 @@
     if (!window.RTArt) { if (fv?.hours?.[0] && wx(fv.hours[0])) el.innerHTML = `${icon(fv.hours[0])} ${esc(wx(fv.hours[0]))} <small>${Number(fv.hours[0].time.slice(11, 13))}시 예보</small>`; return; }
     const sc = window.RTArt.sceneOf({ obs: v.pty ? { pty: v.pty, time: c.time } : null, fc: fv?.hours || [], hour: c.hour ?? new Date().getHours() });
     if (!sc.k) { el.innerHTML = `<small>하늘 자료 없음</small>`; return; }
-    el.innerHTML = `${window.RTArt.iconSvg(sc.k, sc.night, 34, sc.text)} <span>${esc(sc.text)}</span> <small>${sc.borrowed ? `${esc(sc.note)} <span class="rt-badge fc">예보</span>` : `${esc(String(c.time || "").slice(11, 16))} 실황`}</small>`;
+    el.innerHTML = `${window.RTArt.iconSvg(sc.k, sc.night, 34, sc.text)} <span>${esc(sc.text)}</span> <small>${sc.borrowed ? `하늘은 ${esc(sc.note)}` : `${esc(String(c.time || "").slice(11, 16))} 실황`}</small>`;
   }
   // rt-stories.js 가 이야기를 받으면 맨 위 이야기를 히어로 한 줄로
   async function storyLine(s, st) {
