@@ -419,7 +419,7 @@
     const win = S && S.start ? `${S.referenceYear}년 기준 ${dot(S.start)} ~ ${dot(S.end)}` : (A.years.find((y) => y.start) ? `예: ${dot(A.years.find((y) => y.start).start)} ~ ${dot(A.years.find((y) => y.start).end)}` : "");
     $("dsAround").innerHTML = `<h3 class="ds-h">앞뒤 15일 날씨 통계 <small>해마다 그 날짜 앞뒤 15일(31일) · ${E(per)} · 하루가 아니라 '이 무렵'의 날씨</small></h3>
       <p class="ds-note ds-note-top">${E(win)}${st.cal === "lunar" ? " · 음력은 해마다 그해 음력 날짜의 양력 날짜를 가운데로" : ""} · 연말·연초는 해를 넘겨 이어 셉니다.</p>
-      <div class="sx-table-wrap"><table class="da-tbl"><thead><tr><th>지표</th><th>${E(per)}<small>${M.avg.n}개 해 · 유효 ${M.avg.validDays}일</small></th><th>${selHead}</th><th>차이</th></tr></thead><tbody>
+      <div class="da-wrap"><table class="da-tbl"><thead><tr><th>지표</th><th>${E(per)}<small>${M.avg.n}개 해 · 유효 ${M.avg.validDays}일</small></th><th>${selHead}</th><th>차이</th></tr></thead><tbody>
       ${rows.map(([k, label, kind]) => `<tr><th scope="row">${E(label)}</th>${perCell(k, kind)}${selCell(k, kind)}${diffCell(k, kind)}</tr>`).join("")}</tbody></table></div>
       <p class="ds-note">해 수: 요청 ${M.avg.requested}개 · 날짜가 있고 끝난 해 ${M.avg.eligible}개 · 쓴 해 ${M.avg.n}개(기온) / ${M.rainDays.n}개(강수)${exText ? ` · 뺀 해: ${E(exText)}` : ""}. 31일 중 자료 없는 날이 1일 이하인 해만 넣고(남은 날로만 집계, 채우지 않음), 2일 이상 빠지면 '자료 부족'으로 뺍니다. 강수일 비율 = 강수일(0.1mm 이상) ÷ 유효한 날, 하루 평균 강수량 = 강수량 합 ÷ 유효한 날(무강수 0 포함). 기온 평균은 해마다 31일 평균을 먼저 낸 뒤 해들끼리 평균합니다.</p>
       <details class="sx-table"><summary>해마다 31일 창 보기</summary><div class="sx-table-wrap"><table><thead><tr><th>연도</th><th>기간</th><th>평균(℃)</th><th>최고</th><th>최저</th><th>강수일</th><th>강수량(mm)</th><th>30℃↑</th><th>영하</th><th>상태</th></tr></thead><tbody>${[...(S && !A.years.some((y) => y.referenceYear === S.referenceYear) ? [S] : []), ...A.years.slice().reverse()].map((y) => { const g = (k, d = 1) => { const x = y.metrics[k]; return x && (x.status === "ok" || (y.sofarEnd && x.obs)) ? fmt(x.raw, d) : `<span class="muted">${x ? E(STATUS(x.status)) : "–"}</span>`; }; return `<tr class="${y.referenceYear === st.y ? "ds-tr-sel" : ""}"><td>${y.referenceYear}</td><td>${y.start ? `${md(y.start)}~${md(y.end)}${y.start.slice(0, 4) !== y.end.slice(0, 4) ? " <small>(해 넘김)</small>" : ""}` : "–"}</td><td class="num">${g("avg")}</td><td class="num">${g("max")}</td><td class="num">${g("min")}</td><td class="num">${g("rainDays", 0)}</td><td class="num">${g("rainSum")}</td><td class="num">${g("hot30", 0)}</td><td class="num">${g("frost", 0)}</td><td>${E(y.sofarEnd ? `진행 중(${md(y.sofarEnd)}까지)` : STATUS(y.status))}</td></tr>`; }).join("")}</tbody></table></div><div class="sx-tools"><span class="muted">표·CSV 는 같은 서버 계산 결과입니다.</span><a class="dl-chip-btn" href="/api/stats/date-weather?${apiQuery("around")}&format=csv" download>앞뒤 15일 CSV</a></div></details>`;
@@ -533,6 +533,7 @@
   async function show() {
     shell();
     readHash();
+    if (!/[?&]date=/.test(location.hash)) replaceView(); // 예전 주소(m·d·year) → 새 주소(date=)로 바꿔 둠(기록은 늘리지 않음)
     if (!meta) { try { meta = await getJson("/api/stats/meta"); } catch { meta = { stations: [{ station_id: st.station, station_name: st.station }] }; } }
     if (!(meta.stations || []).some((s) => String(s.station_id) === String(st.station))) st.station = "108";
     load();

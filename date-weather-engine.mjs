@@ -373,7 +373,7 @@ export function dailyStories(o) {
   const C = Object.fromEntries(counts.rules.map((c) => [c.id, c]));
   const rc = C.rain;
   if (rc.n >= 1) {
-    const yrs = rc.k ? ` (${yearList(rc.hitYears)})` : "";
+    const yrs = rc.k ? `(${yearList(rc.hitYears)})` : "";
     st.push({ id: "D-rainCount", priority: 2, text: `${per} 중 자료가 있는 ${rc.n}개 해에서, 이날 비나 눈이 온 해는 ${rc.k}번${yrs}이었습니다.${rc.tier === "reference" ? ` (참고 · ${rc.n}개 해)` : ""}`, evidence: { metric: "rain", years: rc.hitYears, formula: "일강수량 0.1mm 이상인 해를 셈(과거 관측 횟수이며 강수확률이 아님)", excluded: rc.excludedYearsByReason }, target: "yearly", metric: "rain" });
   }
   const tempLines = ["heat33", "hot30", "ice", "frost", "snow"].map((id) => C[id]).filter((c) => c.show && c.n >= 3 && !c.limited && c.k >= 1);

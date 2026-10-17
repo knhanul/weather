@@ -228,3 +228,10 @@ body.ssh-open { overflow:hidden; }
   .da-tbl th, .da-tbl td { padding:6px 5px; }
   .ds-date { width:136px; }
 }
+.dy-ic svg { width:26px; height:26px; flex:none; display:block; }
+@media (max-width:640px) {
+  .dy-pick { grid-template-columns:28px 64px minmax(0,1fr); }
+  .dy-w { grid-column:3; }
+  .ds-datef, .ds-ctl > div:nth-child(2) { flex-basis:100%; }
+}
+.da-wrap { overflow-x:auto; border:1px solid var(--line); border-radius:10px; }
