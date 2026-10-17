@@ -1,0 +1,128 @@
+/* 날씨 이야기(날짜로 보는 날씨 · 날씨 배틀) — date-viz / date-weather / date-battle 전용 */
+#sday, #sbattle { display:grid; gap:14px; }
+#sday > .card, #sbattle > .card { min-width:0; }
+.ds-head-t { display:flex; gap:14px; align-items:center; }
+.ds-art { width:96px; height:52px; flex:none; }
+.ds-ctl { margin-top:12px; }
+.ds-ctl input[type="date"] { width:auto; }
+.ds-wide { flex-basis:100%; }
+.ds-seg { display:flex; flex-wrap:wrap; gap:4px; }
+.ds-seg button { height:32px; padding:0 11px; font-size:13.5px; }
+.ds-acts { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.ds-acts button { height:36px; padding:0 14px; }
+.ds-yb { width:36px; padding:0; }
+.ds-banner { margin:12px 0 0; padding:9px 12px; border-radius:10px; background:var(--soft); color:var(--fg); font-size:13.5px; line-height:1.5; }
+.ds-banner:empty { display:none; }
+.ds-toast { margin:8px 0 0; padding:8px 12px; border-radius:10px; background:#0d1b3d; color:#fff; font-size:13.5px; }
+.ds-card { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:12px 20px; align-items:start; }
+.ds-card p { margin:4px 0 0; font-size:14px; }
+.ds-k { margin:0; font-size:12px; color:var(--muted); font-weight:600; }
+.ds-title { margin:2px 0 0; font-size:22px; line-height:1.3; }
+.ds-title small { display:block; font-size:13px; color:var(--muted); font-weight:500; }
+.ds-dl { display:grid; gap:6px; margin:0; font-size:13.5px; }
+.ds-dl > div { display:grid; grid-template-columns:84px minmax(0,1fr); gap:8px; padding:4px 0; border-top:1px dashed var(--line); }
+.ds-dl > div:first-child { border-top:0; }
+.ds-dl dt { color:var(--muted); font-size:12.5px; }
+.ds-dl dd { margin:0; font-variant-numeric:tabular-nums; }
+.ds-dl dd small { color:var(--muted); font-size:12px; }
+.ds-dl2 { grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); column-gap:18px; }
+.ds-dl2 > div:first-child { border-top:1px dashed var(--line); }
+.ds-h { margin:0 0 8px; font-size:16px; }
+.ds-h small { display:block; font-size:12.5px; font-weight:500; color:var(--muted); margin-top:2px; }
+.ds-key b small.ds-of, .ds-of { display:inline; font-size:13px; color:var(--muted); font-weight:500; margin-left:3px; }
+.ds-note { margin:8px 0 0; font-size:12.5px; color:var(--muted); line-height:1.5; }
+.ds-tools { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; margin-bottom:4px; }
+.ds-yrs { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.ds-yrs select { height:32px; }
+.ds-selbar { display:flex; gap:8px; align-items:center; justify-content:space-between; margin:4px 0 10px; font-size:14.5px; }
+.ds-selbar button { height:32px; font-size:13px; }
+.ds-stories { margin:0; padding-left:20px; display:grid; gap:10px; }
+.ds-stories p { margin:0; font-size:14.5px; line-height:1.55; }
+.ds-ev { font-size:12.5px; }
+.ds-evbox { margin-top:6px; padding:8px 10px; border-radius:8px; background:#f7faff; border:1px solid var(--line); font-size:12.5px; color:var(--muted); }
+tr.ds-tr-sel td, tr.ds-tr-sel th { background:#fff4e6; }
+.ds-flash { animation:dsFlash 1.6s ease-out 1; }
+@keyframes dsFlash { 0% { box-shadow:0 0 0 3px rgba(232,89,12,.65); } 100% { box-shadow:var(--shadow-sm); } }
+@media (prefers-reduced-motion:reduce) { .ds-flash { animation:none; outline:3px solid rgba(232,89,12,.6); } }
+.linkish { height:auto; padding:0; background:none; border:0; color:var(--pri-dark); font-weight:600; text-decoration:underline; cursor:pointer; }
+
+/* 그래프 공용 */
+.dv-svg { display:block; width:100%; height:auto; touch-action:pan-y; user-select:none; outline:none; }
+.dv-svg:focus-visible, .dv-heat:focus-visible { outline:3px solid rgba(2,110,248,.4); outline-offset:2px; border-radius:6px; }
+.dv-click { cursor:pointer; }
+.dv-grid { stroke:var(--line); stroke-width:1; }
+.dv-ax { fill:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+.dv-ax-sel { fill:#c2410c; font-weight:700; }
+.dv-hv { stroke:var(--fg); stroke-width:1; stroke-dasharray:3 3; opacity:.5; }
+.dv-tip { min-height:40px; margin-top:6px; padding:7px 10px; border-radius:8px; background:#f7faff; border:1px solid var(--line); font-size:12.5px; line-height:1.55; font-variant-numeric:tabular-nums; }
+.dv-cells { display:flex; flex-wrap:wrap; gap:4px; margin-top:10px; }
+.dv-cell { display:inline-flex; flex-direction:column; align-items:center; justify-content:center; gap:0; width:34px; height:40px; padding:2px 0; border-radius:8px; background:#fff; border:1px solid var(--line); color:var(--muted); }
+.dv-cell svg { width:14px; height:16px; }
+.dv-cell small { font-size:10.5px; line-height:1; font-variant-numeric:tabular-nums; }
+.dv-cell.wet { background:#eef5ff; }
+.dv-cell.na { opacity:.65; }
+.dv-cell.sel { border:2px solid #e8590c; color:#c2410c; font-weight:700; }
+.dv-heat-wrap { overflow-x:auto; max-height:460px; overflow-y:auto; margin-top:6px; border:1px solid var(--line); border-radius:10px; padding:4px; -webkit-overflow-scrolling:touch; }
+.dv-heat { display:block; }
+.dv-scale { display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; font-size:12px; color:var(--muted); }
+.dv-scale i { display:inline-block; width:20px; height:10px; border-radius:2px; }
+.dv-lgmiss { margin-left:10px; }
+.dv-scale i.hatch, .dv-lgmiss i { background:repeating-linear-gradient(45deg,#f1f4f9 0 3px,#a7b3c6 3px 4.5px); width:14px; vertical-align:middle; margin-right:4px; }
+
+/* 날씨 배틀 */
+.db-ex { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:10px; }
+.db-ex button { height:30px; padding:0 11px; font-size:12.5px; border-radius:999px; }
+.db-cases { display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); margin:12px 0; }
+.db-case { border:1px solid var(--line); border-left:5px solid var(--cc); border-radius:12px; padding:10px 12px; display:grid; gap:8px; min-width:0; }
+.db-case-h { display:flex; gap:8px; align-items:center; }
+.db-case-h input { flex:1; min-width:0; height:34px; }
+.db-del { width:34px; height:34px; padding:0; }
+.db-case-b { display:flex; flex-wrap:wrap; gap:6px 8px; align-items:center; }
+.db-case-b select { height:34px; }
+.db-more { font-size:12.5px; margin-left:auto; }
+.db-add { height:auto; min-height:80px; border:2px dashed var(--line); background:#fafcff; }
+.db-tag { display:inline-flex; align-items:center; justify-content:center; min-width:34px; height:22px; padding:0 6px; border-radius:6px; color:#fff; font-size:12px; font-weight:800; letter-spacing:.02em; flex:none; }
+.db-dup { color:var(--warn); }
+.db-grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); }
+.db-mc { border:1px solid var(--line); border-radius:12px; padding:10px 12px; min-width:0; }
+.db-mc h4 { margin:0 0 8px; font-size:14.5px; }
+.db-mc h4 small { font-weight:500; color:var(--muted); font-size:12px; margin-left:4px; }
+.db-row { display:grid; grid-template-columns:auto minmax(60px,110px) 1fr auto; gap:6px 8px; align-items:center; font-size:13px; font-variant-numeric:tabular-nums; }
+.db-row + .db-row { margin-top:5px; }
+.db-row > b { white-space:nowrap; }
+.db-row > b small { font-weight:500; color:var(--muted); }
+.db-row .sx-badge, .db-rank { grid-column:2 / 5; justify-self:start; margin-left:0; }
+.db-rank { font-size:11.5px; color:var(--muted); }
+.db-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--fg); }
+.db-track { position:relative; height:14px; background:#eef3fa; border-radius:4px; overflow:hidden; }
+.db-track i { display:block; height:100%; border-radius:4px; }
+.db-track.dot { overflow:visible; background:linear-gradient(#eef3fa,#eef3fa) center/100% 4px no-repeat; }
+.db-dot { position:absolute; top:50%; width:13px; height:13px; margin:-6.5px 0 0 -6.5px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(13,27,61,.25); }
+.db-zero { position:absolute; top:-2px; bottom:-2px; width:0; border-left:1px dashed #8a97ad; }
+.db-cmp { margin:8px 0 4px; font-size:13.5px; font-weight:600; }
+.db-moremc { margin-top:12px; }
+.db-moremc > summary { cursor:pointer; font-weight:600; color:var(--pri-dark); font-size:13.5px; margin-bottom:8px; }
+.db-ytab tr[data-year] { cursor:pointer; }
+.db-yd { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
+.db-yd h4 { display:flex; justify-content:space-between; align-items:center; gap:8px; margin:0; font-size:14.5px; }
+.db-yd h4 button { height:30px; font-size:12.5px; }
+.db-ptab td { white-space:normal !important; min-width:130px; vertical-align:top; font-variant-numeric:tabular-nums; }
+.db-ptab td small { display:block; font-size:11.5px; margin-top:2px; }
+.db-pv { display:flex; gap:6px; align-items:center; margin-bottom:2px; }
+.db-pv .db-tag { min-width:28px; height:18px; font-size:11px; }
+
+@media (max-width:800px) {
+  .ds-card { grid-template-columns:1fr; }
+  .ds-title { font-size:19px; }
+  .ds-art { width:72px; height:40px; }
+  .ds-acts { flex-basis:100%; }
+  .ds-acts button { flex:1 1 auto; }
+  .ds-selbar { font-size:13.5px; }
+  .ds-selbar b { text-align:center; }
+  .db-grid { grid-template-columns:1fr; }
+  .db-cases { grid-template-columns:1fr; }
+  .db-add { min-height:44px; }
+  .db-row { grid-template-columns:auto minmax(0,1fr) auto; }
+  .db-row .db-track { grid-column:1 / 4; grid-row:2; }
+  .db-row .sx-badge, .db-rank { grid-column:1 / 4; }
+}

@@ -915,12 +915,23 @@
     for (const [k, v] of Object.entries(extra)) if (v !== null && v !== undefined) q.set(k, String(v));
     return q;
   }
+  // 기념일·생일 / 매년 같은 날 / 그날의 날씨 → 날씨 이야기 › 날짜로 보는 날씨(#/stories/day)로 옮김. 지점·날짜(·연도)를 넘김.
+  function storyDayHref({ md = null, ymd = null } = {}) {
+    const q = new URLSearchParams({ station: state.station, cal: "solar" });
+    const x = ymd && /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd.slice(5) : md && /^\d{2}-\d{2}$/.test(md) ? md : null;
+    if (x) { q.set("m", String(+x.slice(0, 2))); q.set("d", String(+x.slice(3))); }
+    if (ymd && /^\d{4}-\d{2}-\d{2}$/.test(ymd)) q.set("year", ymd.slice(0, 4));
+    return `#/stories/day?${q}`;
+  }
   function lifeHref(view) {
+    if (view === "day") return storyDayHref({ md: life.md });
     if (view === "cards") return questionsHref(state.station); // '질문 모아 보기'는 주 메뉴 '질문으로 보는 날씨'로 옮김
     const q = lifeQuery({ view });
     return `#/stats/life?${q}`;
   }
   function recHref(view, extra = {}) {
+    if (view === "day") return storyDayHref({ md: extra.date || life.md });
+    if (view === "date") return storyDayHref({ ymd: extra.date || rec.date });
     const q = new URLSearchParams({ view, station: state.station });
     if (rec.period !== "all") q.set("period", rec.period);
     for (const [k, v] of Object.entries(extra)) q.set(k, v);
@@ -1287,8 +1298,8 @@
       if (b.dataset.md) life.md = b.dataset.md;
       if (b.dataset.date) {
         e.preventDefault();
-        rec.view = "date";
-        rec.date = b.dataset.date;
+        location.hash = storyDayHref({ ymd: b.dataset.date }); // 그날의 날씨 → 날짜로 보는 날씨(그해 선택)
+        return;
       }
       renderRecCtl();
       loadRec();

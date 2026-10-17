@@ -66,8 +66,8 @@
     const S = r.summary || {};
     const one = !row ? `<p class="rt-ins">${ymd.slice(0, 4)}년은 이 지점 보유 자료 범위(${r.fromYear}~${r.toYear}년) 밖이에요.</p>` : row.status === "future" ? `<p class="rt-ins">아직 오지 않은 날이에요.</p>` : row.status !== "ok" ? `<p class="rt-ins">${ymdK(ymd)}: 자료 부족(관측 자료 없음)</p>` : `<p class="rhc-memo1"><b>${ymdK(ymd)}(${esc(row.weekday || "")})</b> 최고 <b>${row.max ?? "–"}℃</b> · 최저 <b>${row.min ?? "–"}℃</b> · ${row.rain == null ? `<span class="rt-ins">강수 자료 없음</span>` : row.rainy ? `강수 ${row.rain}mm` : "강수 없음(0.1mm 미만)"}</p>`;
     const share = `${location.origin}${location.pathname}#/today?${new URLSearchParams({ station: st, memo: ymd })}`;
-    const stats = `#/stats/life?${new URLSearchParams({ view: "day", station: st, date: ymd.slice(5) })}`;
-    return `${one}${memoChart(r, ymd)}<p class="rt-note">매년 ${mdK(ymd)}: 자료가 있는 ${S.validYears ?? 0}개 해 중 강수가 있었던 해 ${S.rainyYears ?? 0}개${S.share != null ? `(${S.share}%)` : ""}, 평균 최고 ${S.meanMax ?? "–"}℃ · 최저 ${S.meanMin ?? "–"}℃. 과거 관측이며 예보가 아닙니다.</p><p class="rhc-links"><button type="button" class="rhc-share" data-share="${esc(share)}">이날 링크 복사</button> <a href="${esc(stats)}">매년 같은 날 표 보기 ›</a></p>`;
+    const stats = `#/stories/day?${new URLSearchParams({ station: st, cal: "solar", m: String(+ymd.slice(5, 7)), d: String(+ymd.slice(8, 10)), year: ymd.slice(0, 4) })}`;
+    return `${one}${memoChart(r, ymd)}<p class="rt-note">매년 ${mdK(ymd)}: 자료가 있는 ${S.validYears ?? 0}개 해 중 강수가 있었던 해 ${S.rainyYears ?? 0}개${S.share != null ? `(${S.share}%)` : ""}, 평균 최고 ${S.meanMax ?? "–"}℃ · 최저 ${S.meanMin ?? "–"}℃. 과거 관측이며 예보가 아닙니다.</p><p class="rhc-links"><button type="button" class="rhc-share" data-share="${esc(share)}">이날 링크 복사</button> <a href="${esc(stats)}">매년 같은 날 날씨 보기 ›</a></p>`;
   }
   function memoHtml(st) {
     const v = memoDate();

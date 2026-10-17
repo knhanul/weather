@@ -526,6 +526,7 @@
   <link rel="stylesheet" href="/drawer.css?v=2" />
   <link rel="stylesheet" href="/fold.css?v=1" />
   <link rel="stylesheet" href="/rt.css?v=31" />
+  <link rel="stylesheet" href="/date-stories.css?v=1" />
 </head>
 <body>
   <div class="appbar" id="appbar">
@@ -556,7 +557,12 @@
             <a href="#/stats/life" data-sub="life">생활 속 날씨</a>
             <a href="#/stats/records" data-sub="records">날씨 기록</a>
           </div>
-          <a href="#/questions" data-page="questions">질문으로 보는 날씨</a>
+          <div class="nav-row"><a href="#/stories/day" data-grp="story" class="nav-parent">날씨 이야기</a><button type="button" class="nav-exp" id="navExpStory" data-name="날씨 이야기" aria-controls="navStories" aria-expanded="false" aria-label="날씨 이야기 하위 메뉴 펼치기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
+          <div class="nav-sub" id="navStories" role="group" aria-label="날씨 이야기 하위 메뉴">
+            <a href="#/stories/day" data-page="sday">날짜로 보는 날씨</a>
+            <a href="#/stories/battle" data-page="sbattle">날씨 배틀</a>
+            <a href="#/questions" data-page="questions">질문으로 보는 날씨</a>
+          </div>
           <div class="nav-row"><a href="#/hourly-weather" data-grp="lib" class="nav-parent">날씨 자료실</a><button type="button" class="nav-exp" id="navExpLib" data-name="날씨 자료실" aria-controls="navLib" aria-expanded="false" aria-label="날씨 자료실 하위 메뉴 펼치기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
           <div class="nav-sub" id="navLib" role="group" aria-label="날씨 자료실 하위 메뉴">
             <a href="#/hourly-weather" data-page="hourly">시간별 날씨</a>
@@ -636,6 +642,8 @@
           </div>
           <div id="rtx" aria-live="polite"></div>
         </section>
+        <section class="page" id="sday" aria-label="날짜로 보는 날씨"></section>
+        <section class="page" id="sbattle" aria-label="날씨 배틀"></section>
         <section class="page" id="hourly">
           <div class="card">
             <div class="row">
@@ -831,7 +839,7 @@
               <li><a href="#/today">오늘 날씨</a> — 지금 기온이 과거 같은 날·같은 시각보다 얼마나 다른지, 앞으로 12시간과 오늘의 이야기</li>
               <li><a href="#/forecast">내일 날씨</a> — 72시간·10일 예보를 그림과 그래프로, 과거 평균과 함께</li>
               <li><a href="#/stats/overview">지난 날씨</a> — 연도별·지역별 비교, 생활 속 날씨, 날씨 기록</li>
-              <li><a href="#/questions">질문으로 보는 날씨</a> — “예전보다 더워졌을까?” 같은 질문을 관측으로 답합니다</li>
+              <li><a href="#/stories/day">날씨 이야기</a> — 날짜로 보는 날씨(양력·음력 아무 날짜나 해마다), 날씨 배틀(날짜끼리 비교), 질문으로 보는 날씨</li>
               <li><a href="#/hourly-weather">날씨 자료실</a> — 시간별·일별 관측 원자료 보기와 CSV 내려받기</li>
             </ul>
             <p><b>자료</b> 기상청 ASOS 시간·일 관측(1990년~), 초단기실황, 단기예보·중기예보. 관측소 8곳: 서울·인천·수원·대전·대구·광주·부산·제주.</p>
@@ -1945,7 +1953,9 @@
       today: ["조회", "오늘 날씨", "지금 날씨가 1990년 이후·최근 10년·최근 5년 같은 시기와 비교해 얼마나 다른지"],
       forecast: ["조회", "내일 날씨", "앞으로의 날씨가 과거 같은 시기와 얼마나 다를지 — 단기·중기예보와 1990년 이후·최근 10년·최근 5년 평균"],
       dash: ["조회", "지난 날씨", "1990년부터 쌓인 관측 자료로 보는 우리 동네 날씨"],
-      questions: ["조회", "질문으로 보는 날씨", "예전보다 더워졌을까? 비가 더 자주 올까? — 일상적인 질문을 과거 관측으로"],
+      sday: ["날씨 이야기", "날짜로 보는 날씨", "양력·음력 아무 날짜나 — 해마다 그날의 날씨를 1970년부터의 관측으로"],
+      sbattle: ["날씨 이야기", "날씨 배틀", "두 날짜 이상을 같은 기간·같은 연도끼리 맞대어 보기"],
+      questions: ["날씨 이야기", "질문으로 보는 날씨", "예전보다 더워졌을까? 비가 더 자주 올까? — 일상적인 질문을 과거 관측으로"],
       hourly: ["날씨 자료실", "시간별 날씨", "지점·기간별 한 시간 단위 관측값 — 레이아웃으로 컬럼을 고르고 그리드·카드로 보기"],
       daily: ["날씨 자료실", "일별 날씨", "하루 단위 관측값 — 레이아웃으로 컬럼을 고르고 그리드·카드로 보기"],
       download: ["날씨 자료실", "보기 설정", "시간별·일별 날씨에 보여 줄 컬럼 구성(레이아웃) 만들기·저장"],
@@ -2160,9 +2170,9 @@
       const nv = document.querySelector("aside nav");
       nv.classList.toggle("stats-on", name === "dash");
       // 묶음 메뉴 강조: 지난 날씨(통계 탭·질문), 날씨 자료실(시간별·일별·보기 설정)
-      const grp = name === "dash" ? "past" : ["hourly", "daily", "download"].includes(name) ? "lib" : null;
+      const grp = name === "dash" ? "past" : ["hourly", "daily", "download"].includes(name) ? "lib" : ["sday", "sbattle", "questions"].includes(name) ? "story" : null;
       nv.querySelectorAll("a[data-grp]").forEach((a) => a.classList.toggle("active", a.dataset.grp === grp));
-      nv.querySelectorAll(".nav-sub").forEach((s) => s.classList.toggle("cur", !!s.querySelector("a.active") || (grp === "past" && s.id === "navStats") || (grp === "lib" && s.id === "navLib")));
+      nv.querySelectorAll(".nav-sub").forEach((s) => s.classList.toggle("cur", !!s.querySelector("a.active") || (grp === "past" && s.id === "navStats") || (grp === "lib" && s.id === "navLib") || (grp === "story" && s.id === "navStories")));
       renderHeadChips();
       renderAuth(); // 로그인 버튼의 돌아올 화면(next) 갱신
       if (target === "locked") { renderLocked(name); return; }
@@ -2175,10 +2185,12 @@
       if (name === "stations") loadStations();
       if (name === "today" && window.RT) RT.show();
       if (name === "forecast" && window.RTF) RTF.show();
+      if (name === "sday" && window.DateDay) DateDay.show();
+      if (name === "sbattle" && window.DateBattle) DateBattle.show();
     }
     // 예전 주소(#/hourly, #/daily, #/download)는 새 주소로 바꿔 계속 쓸 수 있게(뒤에 붙은 ?조건은 그대로)
     const ROUTE_ALIAS = { "/hourly": "/hourly-weather", "/daily": "/daily-weather", "/download": "/view-settings" };
-    const ROUTE_KNOWN = new Set(["/stats/overview", "/questions", "/today", "/forecast", "/stats/yearly", "/stats/region", "/stats/life", "/stats/records", "/hourly-weather", "/daily-weather", "/view-settings", "/collect", "/gaps", "/jobs", "/stations", "/provider", "/users", ...Object.keys(ROUTE_ALIAS)]);
+    const ROUTE_KNOWN = new Set(["/stats/overview", "/questions", "/today", "/forecast", "/stats/yearly", "/stats/region", "/stats/life", "/stats/records", "/hourly-weather", "/daily-weather", "/view-settings", "/collect", "/gaps", "/jobs", "/stations", "/provider", "/users", "/stories/day", "/stories/battle", ...Object.keys(ROUTE_ALIAS)]);
     function route() {
       {
         const [p0, q0] = location.hash.replace("#", "").split("?");
@@ -2194,13 +2206,32 @@
         }
       }
       {
+        // 예전 '기념일·생일'(#/stats/life?view=day&date=MM-DD)·'매년 같은 날'(#/stats/records?view=day&date=MM-DD)·'그날의 날씨'(#/stats/records?view=date&date=YYYY-MM-DD)
+        // → 날씨 이야기 › 날짜로 보는 날씨(지점·날짜·기간 조건 그대로). 북마크도 계속 쓸 수 있게 주소만 바꿔 줌.
+        const [p3, q3] = location.hash.replace("#", "").split("?");
+        const qp = new URLSearchParams(q3 || "");
+        const v = qp.get("view");
+        const d = qp.get("date") || "";
+        if ((p3 === "/stats/life" && v === "day") || (p3 === "/stats/records" && (v === "day" || v === "date"))) {
+          const nq = new URLSearchParams();
+          if (qp.get("station")) nq.set("station", qp.get("station"));
+          nq.set("cal", "solar");
+          const md = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.slice(5) : /^\d{2}-\d{2}$/.test(d) ? d : "";
+          if (md) { nq.set("m", String(+md.slice(0, 2))); nq.set("d", String(+md.slice(3))); }
+          if (/^\d{4}-\d{2}-\d{2}$/.test(d)) nq.set("year", d.slice(0, 4));
+          const fr = qp.get("from"), to = qp.get("to");
+          if (/^\d{4}$/.test(fr || "") && /^\d{4}$/.test(to || "")) { nq.set("period", "custom"); nq.set("from", fr); nq.set("to", to); }
+          history.replaceState(history.state, "", `#/stories/day?${nq}`);
+        }
+      }
+      {
         // 첫 화면: 주소에 화면이 없거나(#, #/) 모르는 화면이면 오늘의 날씨(#/today)로(뒤에 붙은 ?조건은 그대로)
         const [p2, q2] = location.hash.replace("#", "").split("?");
         if (!ROUTE_KNOWN.has(p2 || "/") || (p2 || "/") === "/") history.replaceState(history.state, "", `#/today${q2 ? `?${q2}` : ""}`);
       }
       const h = location.hash.replace("#", "").split("?")[0] || "/";
       const statsTab = { "/": "overview", "/stats/overview": "overview", "/stats/yearly": "yearly", "/stats/region": "region", "/stats/life": "life", "/stats/records": "records", "/questions": "questions" }[h] || (h.startsWith("/stats/") ? "overview" : null);
-      const map = { "/": "dash", "/stats/overview": "dash", "/questions": "questions", "/today": "today", "/forecast": "forecast", "/stats/yearly": "dash", "/stats/region": "dash", "/stats/life": "dash", "/stats/records": "dash", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/users": "users" };
+      const map = { "/": "dash", "/stats/overview": "dash", "/questions": "questions", "/today": "today", "/forecast": "forecast", "/stats/yearly": "dash", "/stats/region": "dash", "/stats/life": "dash", "/stats/records": "dash", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/users": "users", "/stories/day": "sday", "/stories/battle": "sbattle" };
       let name = map[h] || "dash";
       if (name === "users" && !me.authEnabled) name = "dash";
       show(name);
@@ -2834,15 +2865,16 @@
     // views.js(시간별·일별 날씨)가 읽기만 하는 연결점
     window.NW = { me: () => me, stations: () => (dashCache && dashCache.stations) || [], loginHref: () => loginHref(), fromPicker, toPicker };
     window.addEventListener("hashchange", route);
-    setPageHead(({ "/today": "today", "/forecast": "forecast", "/questions": "questions", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider" })[location.hash.replace("#", "").split("?")[0]] || "dash");
+    setPageHead(({ "/today": "today", "/forecast": "forecast", "/questions": "questions", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/stories/day": "sday", "/stories/battle": "sbattle" })[location.hash.replace("#", "").split("?")[0]] || "dash");
     showLoginNote();
     // 대시보드 자료가 늦거나 실패해도 다른 화면은 그대로 뜨게
     // 기본 지점(geo.js): 지금 화면의 지점, 나중에 정해진 기본 지점(위치·내 계정) 반영 — 주소에 지점을 넣었거나 직접 고른 뒤에는 바꾸지 않음
     if (window.NWStation) {
-      NWStation.current = () => (currentPage === "hourly" ? $("hStation").value : currentPage === "daily" ? $("dStation").value : currentPage === "questions" || (currentPage === "dash" && !/^#\/(stats\/overview)?(\?|$)/.test(location.hash || "#/")) ? (window.Stats && Stats.station && Stats.station()) || dashState.station : dashState.station);
+      NWStation.current = () => (currentPage === "sday" && window.DateDay ? DateDay.station() : currentPage === "hourly" ? $("hStation").value : currentPage === "daily" ? $("dStation").value : currentPage === "questions" || (currentPage === "dash" && !/^#\/(stats\/overview)?(\?|$)/.test(location.hash || "#/")) ? (window.Stats && Stats.station && Stats.station()) || dashState.station : dashState.station);
       NWStation.onApply((id) => {
         // 주소의 station 을 바꾸고 route() 로 다시 그림(한눈에 보기는 route 가 지점 바뀜을 보고 다시 불러옴)
         if (window.Stats) window.Stats.onStation(id);
+        if (currentPage === "sday" && window.DateDay) { DateDay.onStation(id); return; }
         for (const sel of ["hStation", "dStation"]) if ([...$(sel).options].some((o) => o.value === id)) $(sel).value = id;
         const [p, q] = (location.hash || "#/").split("?");
         if (!["dash", "questions", "hourly", "daily"].includes(currentPage) || p === "#/stats/region") { dashState.station = id; return; }
@@ -2854,22 +2886,22 @@
     }
     // 오늘의 날씨·날씨 예보(조회 화면, 로그인 불필요)로 시작하면 대시보드(/api/dashboard·/api/series)를 기다리지 않고 바로 그린다.
     // 상단 '공식 최신' 칩용 대시보드 자료는 첫 화면 자료가 온 뒤(또는 4초 뒤) 뒤에서 읽고, 한눈에 보기 그래프(/api/series)는 그 화면에 갈 때 읽는다.
-    const FAST_START = /^#\/(today|forecast)?(\?|$)/.test(location.hash || "#/") || !location.hash || location.hash === "#" ;
+    const FAST_START = /^#\/(today|forecast|stories\/day|stories\/battle)?(\?|$)/.test(location.hash || "#/") || !location.hash || location.hash === "#" ;
     const after = () => { if (window.NWStation) { NWStation.start(); NWStation.syncServer(); } };
     if (FAST_START) {
       dashDeferred = true;
       // 화면 스크립트(rt.js 등)는 이 아래에서 읽히므로, 문서를 다 읽은 직후(DOMContentLoaded) 그린다
       const first = () => route();
       if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", first, { once: true }); else first();
-      loadMe().then(() => { if (!["today", "forecast"].includes(currentPage)) route(); });
+      loadMe().then(() => { if (!["today", "forecast", "sday", "sbattle"].includes(currentPage)) route(); });
       let started = false;
-      const go = () => { if (started) return; started = true; loadDash().then(() => { if (!["today", "forecast"].includes(currentPage)) route(); else renderHeadChips(); }).then(after); };
+      const go = () => { if (started) return; started = true; loadDash().then(() => { if (!["today", "forecast", "sday", "sbattle"].includes(currentPage)) route(); else renderHeadChips(); }).then(after); };
       document.addEventListener("rt:ready", go, { once: true });
       setTimeout(go, 4000);
     } else Promise.allSettled([loadMe(), loadDash()]).then(route).then(after);
   </script>
   <script src="/views.js?v=4"></script>
-  <script src="/stats.js?v=11"></script>
+  <script src="/stats.js?v=12"></script>
   <script src="/drawer.js?v=2"></script>
   <script src="/fold.js?v=2"></script>
   <script src="/rt-weather-art.js?v=1"></script>
@@ -2879,8 +2911,11 @@
   <script src="/rt-forecast-visual.js?v=6"></script>
   <script src="/rt-forecast.js?v=10"></script>
   <script src="/rt-stories.js?v=10"></script>
-  <script src="/rt-home-cards.js?v=1"></script>
+  <script src="/rt-home-cards.js?v=2"></script>
   <script src="/rt-ext.js?v=7"></script>
   <script src="/rt-admin.js?v=2"></script>
+  <script src="/date-viz.js?v=1"></script>
+  <script src="/date-weather.js?v=1"></script>
+  <script src="/date-battle.js?v=1"></script>
 </body>
 </html>
