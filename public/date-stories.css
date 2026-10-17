@@ -240,3 +240,37 @@ body.ssh-open { overflow:hidden; }
 .da-tbl tbody th { min-width:78px; word-break:keep-all; }
 .da-tbl thead th { word-break:keep-all; }
 @media (max-width:640px) { .da-tbl td small { font-size:10.5px; } .da-tbl tbody th { min-width:70px; } }
+/* 날씨 배틀 v2 */
+.db-dateline { flex:1 1 200px; min-width:0; }
+.db-dateline .ds-date { flex:1 1 0; min-width:0; width:0; }
+.db-chosen { display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); }
+.db-ch { border:1px solid var(--line); border-top:4px solid var(--cc); border-radius:12px; padding:9px 12px; min-width:0; }
+.db-ch p { margin:3px 0; font-size:13px; }
+.db-ch-h { display:flex; gap:6px; align-items:center; min-width:0; }
+.db-ch-h b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.db-chv { font-size:20px !important; font-variant-numeric:tabular-nums; }
+.db-chv small { font-size:12px; color:var(--muted); }
+.db-cnts { display:grid; gap:8px; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); margin:4px 0 12px; }
+.db-cnt { border:1px solid var(--line); border-radius:12px; padding:9px 11px; display:grid; gap:4px; }
+.db-cnt-h { display:flex; justify-content:space-between; gap:6px; align-items:baseline; flex-wrap:wrap; }
+.db-cnt-h b { font-size:13.5px; }
+.db-cnt-h small, .db-cnt .dy-cond { font-size:11.5px; color:var(--muted); }
+.db-cnt-r { display:grid; grid-template-columns:auto 1fr 48px; gap:8px; align-items:center; font-variant-numeric:tabular-nums; }
+.db-cnt-r > b { text-align:right; font-size:17px; }
+.db-cnt-r > b small { font-size:11.5px; font-weight:600; margin-left:1px; }
+.db-cnt-bar { height:10px; background:#eef3fa; border-radius:5px; overflow:hidden; }
+.db-cnt-bar i { display:block; height:100%; border-radius:5px; }
+.db-sub { margin:6px 0 6px; font-size:14px; }
+.db-sub small { font-weight:500; color:var(--muted); font-size:12px; margin-left:4px; }
+.db-tl { list-style:none; margin:0 0 12px; padding:0; display:grid; gap:6px; }
+.db-tl li { border:1px solid var(--line); border-radius:10px; padding:7px 10px; display:flex; flex-wrap:wrap; gap:4px 12px; align-items:center; justify-content:space-between; font-size:13px; }
+.db-tl-v { display:flex; gap:6px; align-items:center; flex-wrap:wrap; font-variant-numeric:tabular-nums; }
+.db-tl-v .db-tag { min-width:28px; height:18px; font-size:11px; }
+.db-yc { white-space:nowrap; vertical-align:top; font-variant-numeric:tabular-nums; }
+.db-yc.mine { background:#f3f8ff; box-shadow:inset 0 0 0 2px #bcd6ff; }
+.db-cv { display:block; }
+.db-cr, .db-yd8 { display:block; font-size:11.5px; }
+.db-atbl td small, .db-atbl th small { display:block; font-size:11.5px; color:var(--muted); font-weight:500; }
+.db-df { display:flex; gap:4px; align-items:center; justify-content:flex-end; white-space:nowrap; font-size:12.5px; }
+.db-df .db-tag { min-width:26px; height:17px; font-size:10.5px; }
+@media (max-width:640px) { .db-chosen { grid-template-columns:1fr 1fr; } .db-chv { font-size:17px !important; } .db-atbl th, .db-atbl td { padding:6px 4px; font-size:12.5px; } }

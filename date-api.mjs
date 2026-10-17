@@ -4,7 +4,7 @@
 import { StatsError, toCsv, hourlyLastDay } from "./stats-engine.mjs";
 import { parseDateSpec, specKey, specLabel, resolveYears, CALENDAR_VERSION, LUNAR_RANGE, switchBasis, solarToLunar } from "./calendar-resolver.mjs";
 import { dateWeather, withSelected, windowYears, windowKey, windowLabel, allFromYear, DAILY_FROM, HOURLY_FROM, POLICY_VERSION, STORY_VERSION, DAY_VERSION, SAMPLE_POLICY, DAILY_METRICS, HOURLY_METRICS, STATUS_TEXT, WINDOW_YEARS, bothCalendars, COUNT_RULES, AROUND, AROUND_METRICS } from "./date-weather-engine.mjs";
-import { battle, battleYear, BATTLE_METRICS, CORE_METRICS, CASE_IDS, BATTLE_VERSION } from "./date-battle-engine.mjs";
+import { battleYear, battleV2, battleChosen, CASE_IDS, BATTLE_V2, BATTLE_VERSION, TALLY_RULES } from "./date-battle-engine.mjs";
 
 const SOURCE = "기상청 ASOS 공식 일자료·시간자료(관측지점 한 곳)";
 export const kstToday = (now = new Date()) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
@@ -209,25 +209,28 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
   }
 
   // ---------------------------------------------------------------- 날씨 배틀
-  // cases=A.108.S.10.17.0,B.108.L.8.15.0  (id.지점.S|L.월.일.윤달0|1) — 2~4개, id 는 A~D 고정
-  function casesParam(raw) {
+  // cases=A.108.S.10.17.0.2025,B.108.L.8.15.0.2024  (id.지점.S|L.월.일.윤달0|1.연도) — 2~4개, id 는 A~D 고정
+  // v2: 카드마다 연도(입력한 날짜의 해 = 강조할 해·시간별 맞대결의 해). 예전 주소(연도 없음)는 끝 기준연도(to, 기본 작년)로 연다.
+  function casesParam(raw, defYear) {
     const parts = String(raw || "").split(",").map((s) => s.trim()).filter(Boolean);
     if (parts.length < 2 || parts.length > 4) throw new StatsError("비교할 날짜는 2~4개입니다");
     const seen = new Set();
     return parts.map((p) => {
-      const [id, stationId, cal, m, d, leap] = p.split(".");
+      const [id, stationId, cal, m, d, leap, y] = p.split(".");
       if (!CASE_IDS.includes(id) || seen.has(id)) throw new StatsError("카드 표식은 A~D 중 서로 다른 글자입니다");
       seen.add(id);
       const r = parseDateSpec({ calendar: cal === "L" ? "lunar" : cal === "S" ? "solar" : "x", month: m, day: d, leap: leap === "1" });
       if (!r.ok) throw new StatsError(`${id}: ${r.message}`);
-      return { id, stationId: String(stationId || ""), spec: r.spec };
+      let year = defYear;
+      if (y != null && y !== "") { year = Number(y); if (!Number.isInteger(year) || year < LUNAR_RANGE.fromYear || year > LUNAR_RANGE.toYear) throw new StatsError(`${id}: 연도는 ${LUNAR_RANGE.fromYear}~${LUNAR_RANGE.toYear} 사이입니다`); }
+      return { id, stationId: String(stationId || ""), spec: r.spec, year };
     });
   }
   async function battleResult(q, { csv = false } = {}) {
-    const cases0 = casesParam(q.get("cases"));
     const t = today();
     const thisYear = +t.slice(0, 4);
     const win = windowParam(q, thisYear);
+    const cases0 = casesParam(q.get("cases"), win.toYear);
     const part = ["summary", "hourly", "year"].includes(q.get("part")) ? q.get("part") : "summary";
     const labels = String(q.get("labels") || "").split(",").map((s) => safeText(decodeURIComponent(s)));
     const sts = [];
@@ -239,11 +242,10 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
     const hss = needH ? await Promise.all(sts.map((s) => statsHourly.get(s.station_id))) : sts.map(() => null);
     const cases = cases0.map((c, i) => ({ ...c, stationId: String(sts[i].station_id), store: stores[i], hs: hss[i] }));
     const ctxOf = (c) => ctxFor(c.store, c.hs, t);
-    // 전체: 카드들의 지원 범위 안 가장 이른 기준연도(공통 끝 E)
     const allFrom = Math.min(...cases.map((c) => allFromYear(c.spec, c.store.firstDate)));
     const years = windowYears(win, allFrom);
     const year = Number(q.get("year"));
-    const key = ["db", cases.map((c) => `${c.id}${c.stationId}${specKey(c.spec)}`).join(""), windowKey(win), years.fromYear, part, part === "year" ? year : "", CALENDAR_VERSION, POLICY_VERSION, BATTLE_VERSION, statsData.version(), needH ? statsHourly.version() : 0, t, csv ? `csv${labels.join("~")}` : "json"].join("|");
+    const key = ["db2", cases.map((c) => `${c.id}${c.stationId}${specKey(c.spec)}y${c.year}`).join(""), windowKey(win), years.fromYear, part, part === "year" ? year : "", CALENDAR_VERSION, POLICY_VERSION, BATTLE_V2, statsData.version(), needH ? statsHourly.version() : 0, t, csv ? `csv${labels.join("~")}` : "json"].join("|");
     const hit = recall(key);
     if (hit && !csv) return { str: hit };
     const stInfo = cases.map((c, i) => ({ id: c.id, ...stOut(sts[i], c.store) }));
@@ -252,19 +254,12 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
       if (!Number.isInteger(year) || year < LUNAR_RANGE.fromYear || year > thisYear) throw new StatsError("연도를 확인하세요");
       body = { ok: true, part, year, cases: battleYear({ cases, year, ctxOf }) };
     } else if (part === "hourly") {
-      const b = battle({ cases, years, ctxOf, withHourly: true, metrics: [] });
-      body = { ok: true, part, years, hourly: b.hourly };
+      // 시간별 맞대결: 카드마다 입력한 날짜(그해) 하루의 실제 정시 관측 — 평균 없음
+      body = { ok: true, part, years, chosen: battleChosen({ cases, ctxOf, withHourly: true, withAround: false }), hourlyMetrics: HOURLY_METRICS };
     } else {
-      const b = battle({ cases, years, ctxOf });
-      // 기간별 비교 표: 같은 카드 조합의 최근 5·10·20·30년·전체(핵심 지표)
-      const periods = [...WINDOW_YEARS.map((n) => ({ mode: "recent", years: n, toYear: win.toYear })), { mode: "all", toYear: win.toYear }].map((w) => {
-        const ys = windowYears(w, allFrom);
-        const bb = battle({ cases, years: ys, ctxOf, metrics: [...CORE_METRICS, "max", "min"] });
-        return { window: { ...w, ...ys, label: windowLabel(w, ys), key: windowKey(w) }, metrics: Object.fromEntries(Object.entries(bb.metrics).map(([k, m]) => [k, { n: m.n, eligible: m.eligible, tier: m.tier, limited: m.limited, results: m.results, comparison: m.comparison, firstYear: m.validYears[0] ?? null, lastYear: m.validYears[m.validYears.length - 1] ?? null }])) };
-      });
-      body = { ok: true, part, ...b, periods };
+      body = { ok: true, part, ...battleV2({ cases, years, ctxOf }) };
     }
-    Object.assign(body, { source: SOURCE, timezone: "Asia/Seoul", today: t, window: { ...win, ...years, label: windowLabel(win, years), allFrom }, stations: stInfo, metricsInfo: BATTLE_METRICS, coreMetrics: CORE_METRICS, ...policy(), dataRevision: { daily: statsData.version(), hourly: statsHourly ? statsHourly.version() : null } });
+    Object.assign(body, { source: SOURCE, timezone: "Asia/Seoul", today: t, window: { ...win, ...years, label: windowLabel(win, years), allFrom }, stations: stInfo, countRules: COUNT_RULES.map(({ test, ...x }) => x), tallyRules: TALLY_RULES, aroundInfo: { ...AROUND, metrics: AROUND_METRICS }, ...policy(), battleVersion: BATTLE_V2, dataRevision: { daily: statsData.version(), hourly: statsHourly ? statsHourly.version() : null } });
     if (csv && part === "summary") return { body, labels };
     return { str: remember(key, JSON.stringify(body)) };
   }
@@ -274,15 +269,21 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
     if (r.body) return battleCsv(res, r.body, r.labels);
     return sendJson(res, r.str);
   }
+  // CSV: 해마다 한 줄(카드별 그날 실제 값) + 머리말에 횟수·누가 더·앞뒤 15일 요약
   function battleCsv(res, b, labels) {
-    const ids = b.cases.map((c) => c.id);
-    const columns = [{ key: "metric", label: "지표" }, { key: "unit", label: "단위" }, { key: "n", label: "공통 연도 수" }, { key: "e", label: "공통 대상 연도" }, { key: "years", label: "공통 연도" }, ...ids.map((id) => ({ key: id, label: `${id} 값` })), { key: "cmp", label: "비교" }, { key: "state", label: "표본 상태" }];
-    const rows = Object.values(b.metrics).map((m) => ({ metric: m.label, unit: m.unit, n: m.n, e: m.eligible, years: m.validYears.join(" "), ...Object.fromEntries(m.results.map((r) => [r.case, r.value == null ? "" : +r.value.toFixed(3)])), cmp: m.comparison.text, state: m.tier === "none" ? "비교 불가" : m.tier === "reference" ? `참고 · ${m.n}개 해` : m.limited ? "자료 제한" : "" }));
-    const yr = [];
-    for (const k of ["avg", "rain_mean", "wind"]) for (const py of b.metrics[k].perYear) yr.push(`${b.metrics[k].label} ${py.referenceYear}: ${py.values.map((v) => `${v.case}=${v.value == null ? "" : +v.value.toFixed(2)}(${v.solarDate}${v.lunarDate && b.cases.find((c) => c.id === v.case).spec.calendar === "lunar" ? ` 음력 ${v.isLeapMonth ? "윤" : ""}${v.lunarDate.slice(5)}` : ""})`).join(" ")}`);
-    const meta = [`이날 · 날씨 배틀 (집계 결과) · ${b.window.label} · 서로 자료가 있는 같은 연도만 비교${b.mixedCalendars ? " · 각 달력의 같은 기준연도끼리" : ""}`,
-      ...b.cases.map((c, i) => `${c.id}: ${c.specLabel} · 지점 ${c.stationId}${labels[i] ? ` · 별칭 ${labels[i]}` : ""}`), `정책 ${POLICY_VERSION} · ${BATTLE_VERSION} · 달력 ${CALENDAR_VERSION} · 출처 ${SOURCE}`, ...yr];
-    return sendCsv(res, `inal-battle-${b.cases.map((c) => `${c.id}${c.stationId}${c.specKey}`).join("_")}-${b.window.fromYear}-${b.window.toYear}`, { columns, rows }, meta);
+    const num = (v, d = 3) => (v == null ? "" : +v.toFixed(d));
+    const F = [["max", "최고(℃)"], ["min", "최저(℃)"], ["avg", "평균(℃)"], ["rain", "강수(mm)"], ["nsnow", "신적설(cm)"], ["wind", "풍속(m/s)"]];
+    const columns = [{ key: "y", label: "기준연도" }];
+    for (const c of b.cases) { columns.push({ key: `${c.id}_date`, label: `${c.id} 실제 양력 날짜` }, { key: `${c.id}_st`, label: `${c.id} 상태` }); for (const [k, l] of F) columns.push({ key: `${c.id}_${k}`, label: `${c.id} ${l}` }); }
+    const cellCols = (c, x) => { const o = { [`${c}_date`]: x.solarDate || "", [`${c}_st`]: x.dateStatus === "ok" && !x.rowPresent ? "자료 없음" : STATUS_TEXT[x.dateStatus] || x.dateStatus }; for (const [k] of F) o[`${c}_${k}`] = x.dateStatus === "ok" ? (x.values[k] != null ? num(x.values[k]) : STATUS_TEXT[x.fieldStatus?.[k]] || "") : ""; return o; };
+    const rows = b.yearly.slice().reverse().map((r) => ({ y: r.referenceYear, ...Object.assign({}, ...r.cells.map((x) => cellCols(x.case, x))) }));
+    rows.unshift({ y: "입력한 날짜", ...Object.assign({}, ...b.chosen.map((x) => cellCols(x.case, x))) });
+    const cm = b.counts.filter((c) => c.show).map((c) => `횟수 ${c.label}(${c.cond}) · 공통 ${c.n}개 해: ${c.results.map((r) => `${r.case} ${r.k}번${r.k ? `(${r.hitYears.join(" ")})` : ""}`).join(" / ")}`);
+    const tl = b.tallies.map((x) => `해마다 ${x.word}(${x.def}) · 공통 ${x.n}개 해: ${x.results.map((r) => `${r.case} ${r.k}번`).join(" / ")} / 같음 ${x.ties}번${x.none != null ? ` / 모두 강수 없음 ${x.none}번` : ""}`);
+    const ar = Object.values(b.around.metrics).map((m) => `앞뒤 15일 ${m.label} · 공통 ${m.n}/${m.eligible}개 해: ${m.results.map((r) => `${r.case} ${m.kind === "mean" ? `${num(r.mean, 2)}${m.unit}` : m.kind === "sum" ? `하루 평균 ${num(r.perDay, 2)}mm(합 ${num(r.total, 1)})` : `해마다 ${num(r.mean, 2)}일${m.label === "강수일" ? ` · 비율 ${num(r.share, 1)}%` : ""}`} 유효일 ${r.validDays}`).join(" / ")}`);
+    const meta = [`이날 · 날씨 배틀 v2 (집계 결과 — 원자료 아님) · ${b.window.label} · 해마다 그날 실제 값(같은 날 평균 없음) · 서로 자료가 있는 같은 연도만 셈${b.mixedCalendars ? " · 각 달력의 같은 기준연도끼리" : ""}`,
+      ...b.cases.map((c, i) => `${c.id}: ${c.specLabel} · 입력한 해 ${c.year} · 지점 ${c.stationId}${labels[i] ? ` · 별칭 ${labels[i]}` : ""}`), `정책 ${POLICY_VERSION} · ${BATTLE_V2} · 달력 ${CALENDAR_VERSION} · 출처 ${SOURCE}`, ...cm, ...tl, `앞뒤 15일 = 해마다 그 날짜 ±15일(31일), 자료 없는 날 ${AROUND.maxMissing}일 이하인 해만`, ...ar];
+    return sendCsv(res, `inal-battle-${b.cases.map((c) => `${c.id}${c.stationId}${c.specKey}${c.year}`).join("_")}-${b.window.fromYear}-${b.window.toYear}`, { columns, rows }, meta);
   }
 
   const ROUTES = { "/api/stats/date-weather": dateWeatherApi, "/api/stats/date-battle": battleApi, "/api/stats/calendar-map": calendarMap };

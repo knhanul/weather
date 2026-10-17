@@ -30,13 +30,15 @@ export function dayOg(D, alias = "") {
 export function battleOg(B, labels = []) {
   const name = (c, i) => labels[i] || c.specLabel;
   const title = `날씨 배틀: ${B.cases.map(name).join(" vs ")} — ${B.window.label}`;
-  const m = B.metrics.avg;
-  const r = B.metrics.rain_days;
   const parts = [];
-  if (m && m.n) parts.push(`평균기온 ${m.results.map((x) => `${x.case} ${fmt(x.value)}℃`).join(" · ")} (공통 ${m.n}개 해)`);
-  if (r && r.n) parts.push(`강수일수 ${r.results.map((x) => `${x.case} ${x.value}`).join(" · ")} / ${r.n}개 해`);
+  const r = (B.counts || []).find((c) => c.id === "rain");
+  if (r && r.n) parts.push(`비·눈 온 해 ${r.results.map((x) => `${x.case} ${x.k}번`).join(" · ")} (공통 ${r.n}개 해)`);
+  const t = (B.tallies || []).find((x) => x.id === "avg");
+  if (t && t.n) parts.push(`더 따뜻했던 해 ${t.results.map((x) => `${x.case} ${x.k}번`).join(" · ")} · 같음 ${t.ties}번`);
+  const a = B.around?.metrics?.avg;
+  if (a && a.n) parts.push(`앞뒤 15일 평균기온 ${a.results.map((x) => `${x.case} ${fmt(x.mean)}℃`).join(" · ")}`);
   if (!parts.length) parts.push("공통으로 비교할 연도가 없습니다");
-  return { title, desc: `${parts.join(" · ")} — 기상청 ASOS 공식 일자료, 같은 기준연도끼리만 비교` };
+  return { title, desc: `${parts.join(" · ")} — 기상청 ASOS 공식 일자료, 해마다 그날 실제 관측` };
 }
 export function shareHtml({ title, desc, url, target, svg }) {
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">

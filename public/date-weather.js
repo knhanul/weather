@@ -217,7 +217,7 @@
   // 목록·그래프에서 해를 누르면: 자세히 볼 해(=날짜의 연도)를 바꾸고 주소의 date 도 바꾼다
   function pickYear(y) { if (y === st.y) return; st.y = y; st.cmp = st.cmp.filter((x) => x !== y); go(); }
   function battleHref() {
-    const a = `A.${st.station}.${st.cal === "lunar" ? "L" : "S"}.${st.m}.${st.d}.${st.leap ? 1 : 0}`;
+    const a = `A.${st.station}.${st.cal === "lunar" ? "L" : "S"}.${st.m}.${st.d}.${st.leap ? 1 : 0}.${st.y}`;
     const q = new URLSearchParams({ cases: a, period: st.period, to: String(st.to) });
     if (st.period === "custom") q.set("from", String(st.from));
     if (st.alias) q.set("labels", encodeURIComponent(st.alias));

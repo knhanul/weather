@@ -2,7 +2,7 @@
 // 그리기는 /share-card.mjs(서버 /s/*.svg 와 같은 배치). 카드 숫자는 호출한 화면이 받은 API 응답 그대로.
 (() => {
   let modP = null;
-  const mod = () => (modP ||= import("/share-card.mjs?v=2"));
+  const mod = () => (modP ||= import("/share-card.mjs?v=3"));
   const E = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   let box = null;
   let blob = null;

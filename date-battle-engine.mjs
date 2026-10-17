@@ -168,3 +168,132 @@ export function battleYear({ cases, year, ctxOf }) {
     return { case: c.id, referenceYear: year, solarDate: res.solarDate, lunarDate: res.lunarDate, isLeapMonth: res.isLeapMonth, dateStatus: d.dateStatus, daily: d.values, hourlyStatus: h.dateStatus, series: h.series, cellStatus: h.cellStatus };
   });
 }
+
+// ================================================================ v2(2026-10-18): 같은 날 평균 없음
+// (a) 해마다 결과: 기준연도마다 카드별 그날 실제 값 + 횟수(비·눈 온 해, 30℃↑·영하·눈 — 날짜 화면 COUNT_RULES 그대로) + 해마다 '누가 더 ~했나' 집계(동률 따로, 종합 승자 없음)
+// (b) 앞뒤 15일 비교: 카드마다 해마다 그 날짜 ±15일(31일) 창 — 날짜 화면 aroundYear() 그대로(결측 1일 이하만), 지표마다 모든 카드가 유효한 공통 연도만
+// 카드마다 입력한 연도(year) = 강조할 해·시간별 맞대결의 해. 기간(공통 기준연도)은 그대로.
+import { COUNT_RULES, aroundYear, AROUND, AROUND_METRICS } from "./date-weather-engine.mjs";
+export const BATTLE_V2 = "date-battle.2026-10-18.v2";
+const r10 = (v, d) => Math.round(v * 10 ** d + (v >= 0 ? 1e-9 : -1e-9));
+const DAY_FIELDS = ["avg", "max", "min", "range", "rain", "nsnow", "wind", "gust", "sun", "hum"];
+const cellOf = (r) => ({ referenceYear: r.referenceYear, solarDate: r.solarDate, lunarDate: r.lunarDate, isLeapMonth: r.isLeapMonth, lunarText: r.lunarText, dateStatus: r.dateStatus, rowPresent: r.rowPresent, rainNorm: r.rainNorm, values: Object.fromEntries(DAY_FIELDS.map((k) => [k, r.values[k] ?? null])), fieldStatus: r.fieldStatus });
+const okVal = (r, f) => r.dateStatus === "ok" && r.values[f] != null;
+const dateOk = (r) => !DATE_EXCLUDE.has(r.dateStatus);
+export function duplicatesV2(cases) {
+  const seen = new Map();
+  const dup = [];
+  for (const c of cases) { const k = `${c.stationId}|${specKey(c.spec)}|${c.year ?? ""}`; if (seen.has(k)) dup.push([seen.get(k), c.id]); else seen.set(k, c.id); }
+  return dup;
+}
+// 횟수: 규칙마다 모든 카드에 그 항목 값이 있는 공통 연도에서 센다
+export function battleCounts(cases, rowsByCase) {
+  const years = rowsByCase[0].map((r) => r.referenceYear);
+  return COUNT_RULES.map((rule) => {
+    const valid = [];
+    let eligible = 0;
+    years.forEach((y, i) => { const rs = rowsByCase.map((x) => x[i]); if (!rs.every(dateOk)) return; eligible++; if (rs.every((r) => okVal(r, rule.field))) valid.push(i); });
+    const t = tierOf(valid.length, eligible);
+    const results = cases.map((c, ci) => {
+      const months = new Set(rowsByCase[ci].filter((r) => r.solarDate).map((r) => +r.solarDate.slice(5, 7)));
+      const hitYears = valid.filter((i) => rule.test(rowsByCase[ci][i].values[rule.field])).map((i) => years[i]);
+      return { case: c.id, k: hitYears.length, hitYears, seasonal: !rule.months || rule.months.some((m) => months.has(m)) };
+    });
+    return { id: rule.id, label: rule.label, phrase: rule.phrase || rule.label, cond: rule.cond, field: rule.field, n: valid.length, eligible, requested: years.length, validYears: valid.map((i) => years[i]), ...t, results, show: results.some((r) => r.seasonal || r.k > 0) };
+  });
+}
+// 해마다 '누가 더': 표시 정밀도(소수 1자리)로 가장 큰 카드가 하나면 그 카드, 여럿이면 '같음(공동)'. 강수는 모두 0.1mm 미만이면 '모두 강수 없음'으로 따로
+export const TALLY_RULES = [
+  { id: "avg", field: "avg", digits: 1, label: "평균기온", word: "더 따뜻했던 해", def: "그날 공식 일평균기온이 더 높았던 해" },
+  { id: "max", field: "max", digits: 1, label: "최고기온", word: "낮 최고기온이 더 높았던 해", def: "그날 일최고기온이 더 높았던 해" },
+  { id: "min", field: "min", digits: 1, label: "최저기온", word: "아침 최저기온이 더 높았던 해", def: "그날 일최저기온이 더 높았던 해" },
+  { id: "rain", field: "rain", digits: 1, label: "강수량", word: "강수가 더 많았던 해", def: "그날 일강수량이 더 많았던 해(모두 0.1mm 미만이면 '모두 강수 없음')" },
+  { id: "wind", field: "wind", digits: 1, label: "평균 풍속", word: "바람이 더 강했던 해", def: "그날 공식 일평균 풍속이 더 강했던 해" },
+];
+export function battleTallies(cases, rowsByCase) {
+  const years = rowsByCase[0].map((r) => r.referenceYear);
+  return TALLY_RULES.map((rule) => {
+    const wins = Object.fromEntries(cases.map((c) => [c.id, []]));
+    const ties = [];
+    const none = [];
+    let eligible = 0;
+    let n = 0;
+    years.forEach((y, i) => {
+      const rs = rowsByCase.map((x) => x[i]);
+      if (!rs.every(dateOk)) return;
+      eligible++;
+      if (!rs.every((r) => okVal(r, rule.field))) return;
+      n++;
+      const vs = rs.map((r) => r.values[rule.field]);
+      if (rule.field === "rain" && vs.every((v) => !RAIN_DAY(v))) { none.push(y); return; }
+      const top = Math.max(...vs.map((v) => r10(v, rule.digits)));
+      const at = cases.filter((c, ci) => r10(vs[ci], rule.digits) === top);
+      if (at.length === 1) wins[at[0].id].push(y);
+      else ties.push({ year: y, cases: at.map((c) => c.id) });
+    });
+    const t = tierOf(n, eligible);
+    return { id: rule.id, label: rule.label, word: rule.word, def: rule.def, n, eligible, ...t, results: cases.map((c) => ({ case: c.id, k: wins[c.id].length, years: wins[c.id] })), ties: ties.length, tieYears: ties, none: rule.field === "rain" ? none.length : undefined, noneYears: rule.field === "rain" ? none : undefined };
+  });
+}
+// 앞뒤 15일: 카드·해마다 31일 창 → 지표마다 공통 연도
+export function battleAround(cases, years, ctxOf) {
+  const ys = [];
+  for (let y = years.fromYear; y <= years.toYear; y++) ys.push(y);
+  const win = cases.map((c) => ys.map((y) => aroundYear(c.store, resolveYear(c.spec, y), ctxOf(c))));
+  const metrics = {};
+  for (const [k, m] of Object.entries(AROUND_METRICS)) {
+    const valid = [];
+    const excluded = {};
+    let eligible = 0;
+    ys.forEach((y, i) => {
+      const ws = win.map((w) => w[i]);
+      if (!ws.every((w) => w.status === "ok")) { excluded[y] = ws.map((w, ci) => (w.status === "ok" ? null : { case: cases[ci].id, reason: w.status })).filter(Boolean); return; }
+      eligible++;
+      const bad = ws.map((w, ci) => (w.metrics[k].status === "ok" ? null : { case: cases[ci].id, reason: w.metrics[k].status === "partial" ? "partial" : "missing" })).filter(Boolean);
+      if (bad.length) excluded[y] = bad; else valid.push(i);
+    });
+    const t = tierOf(valid.length, eligible);
+    const results = cases.map((c, ci) => {
+      const vals = valid.map((i) => win[ci][i].metrics[k].raw);
+      const obs = valid.reduce((a, i) => a + win[ci][i].metrics[k].obs, 0);
+      const sum = vals.reduce((a, b) => a + b, 0);
+      const o = { case: c.id, n: vals.length, validDays: obs, mean: vals.length ? sum / vals.length : null };
+      if (m.kind === "count") { o.total = vals.length ? sum : null; o.share = obs ? (sum / obs) * 100 : null; }
+      if (m.kind === "sum") { o.total = vals.length ? sum : null; o.perDay = obs ? sum / obs : null; }
+      return o;
+    });
+    // 차이: A 기준(B−A …). 기온 ℃(평균), 강수일 %p(비율), 강수량 mm/일, 그 밖 횟수는 해마다 평균 일수 차이
+    const key = k === "rainDays" ? "share" : k === "rainSum" ? "perDay" : "mean";
+    const a = results[0][key];
+    const diffs = results.slice(1).map((r) => ({ case: r.case, vs: results[0].case, value: r[key] != null && a != null ? r[key] - a : null }));
+    metrics[k] = { label: m.label, unit: m.unit, kind: m.kind, def: m.def, n: valid.length, eligible, requested: ys.length, validYears: valid.map((i) => ys[i]), excludedYears: excluded, ...t, results, diffKey: key, diffUnit: k === "rainDays" ? "%p" : k === "rainSum" ? "mm/일" : m.kind === "count" ? "일" : m.unit, diffs };
+  }
+  return { window: AROUND, metrics };
+}
+// 카드마다 입력한 날짜 하나(그해 그날 일자료 + 그해 앞뒤 15일 창)
+export function battleChosen({ cases, ctxOf, withHourly = false, withAround = true }) {
+  return cases.map((c) => {
+    const res = resolveYear(c.spec, c.year);
+    const d = dailyYear(c.store, res, ctxOf(c));
+    const o = { case: c.id, year: c.year, ...cellOf(d) };
+    if (withAround) { const a = aroundYear(c.store, res, ctxOf(c)); o.around = { status: a.status, start: a.start, end: a.end, sofarEnd: a.sofarEnd || null, metrics: a.metrics }; }
+    if (withHourly) { const h = hourlyYear(c.hs, res, ctxOf(c)); o.hourlyStatus = h.dateStatus; o.series = h.series; o.cellStatus = h.cellStatus; }
+    return o;
+  });
+}
+export function battleV2({ cases, years, ctxOf }) {
+  const rowsByCase = cases.map((c) => caseYears(c, years, ctxOf));
+  const yrs = rowsByCase[0].map((r) => r.referenceYear);
+  return {
+    version: BATTLE_V2, policyVersion: POLICY_VERSION, calendarVersion: CALENDAR_VERSION, sample: SAMPLE_POLICY, years,
+    mixedCalendars: new Set(cases.map((c) => c.spec.calendar)).size > 1,
+    differentStations: new Set(cases.map((c) => c.stationId)).size > 1,
+    duplicates: duplicatesV2(cases),
+    cases: cases.map((c) => ({ id: c.id, stationId: c.stationId, spec: c.spec, specKey: specKey(c.spec), specLabel: specLabel(c.spec), year: c.year, label: c.label || null })),
+    yearly: yrs.map((y, i) => ({ referenceYear: y, cells: cases.map((c, ci) => ({ case: c.id, ...cellOf(rowsByCase[ci][i]) })) })),
+    counts: battleCounts(cases, rowsByCase),
+    tallies: battleTallies(cases, rowsByCase),
+    around: battleAround(cases, years, ctxOf),
+    chosen: battleChosen({ cases, ctxOf }),
+  };
+}

@@ -224,30 +224,33 @@ export function daySpec(D, { alias = "" } = {}) {
     foot: [`출처 기상청 ASOS 공식 일자료 · 관측지점 한 곳 · 횟수 = 자료가 있는 해 중 조건을 만족한 해`, `앞뒤 15일 = 해마다 그 날짜 ±15일(31일) · ${D.today} 기준`, `이날 · ${SITE}`],
   };
 }
-// ---------------------------------------------------------------- 배틀 카드(/api/stats/date-battle part=summary 응답)
+// ---------------------------------------------------------------- 배틀 카드(/api/stats/date-battle part=summary 응답, v2: 같은 날 평균 없음)
+// 입력한 날짜의 실제 값 · 해마다 횟수(공통 연도) · 해마다 누가 더 · 앞뒤 15일 평균 — 색 강조·종합 승자 없음
 export function battleSpec(B, { labels = [] } = {}) {
   const ids = B.cases.map((c) => c.id);
   const cols = ids.map((id) => ({ id, label: id, color: CASE_COLORS[id] }));
-  const keys = ["avg", "max", "min", "rain_days", "rain_mean", "wind", ...(B.metrics.sun ? ["sun"] : [])];
-  const rows = keys.filter((k) => B.metrics[k]).map((k) => {
-    const m = B.metrics[k];
-    const cmp = m.comparison || {};
-    let best = null;
-    if (cmp.badges && cmp.more) best = ids.indexOf(cmp.more);
-    else if (cmp.badges && cmp.ranks) { const r1 = cmp.ranks.filter((r) => r.rank === 1); if (r1.length === 1) best = ids.indexOf(r1[0].case); }
-    const unit = m.unit === "개 해" ? "" : m.unit;
-    return { label: m.label, note: m.tier === "none" ? "공통 연도 없음" : `공통 ${m.n}개 해${m.tier === "reference" ? " · 참고" : m.limited ? " · 자료 제한" : ""}`, values: m.results.map((r) => (m.tier === "none" || !fin(r.value) ? "–" : `${fmt(r.value, m.digits)}${unit}`)), best };
-  });
+  const ch = Object.fromEntries((B.chosen || []).map((x) => [x.case, x]));
+  const v = (x, k, d = 1, u = "℃") => (x && x.dateStatus === "ok" && fin(x.values[k]) ? `${fmt(x.values[k], d)}${u}` : "–");
+  const rows = [];
+  rows.push({ label: "입력한 날짜", note: "", values: ids.map((id) => (ch[id]?.solarDate ? dot(ch[id].solarDate) : "–")), best: null });
+  rows.push({ label: "그날 최고 / 최저", note: "", values: ids.map((id) => `${v(ch[id], "max", 1, "°")} / ${v(ch[id], "min", 1, "°")}`), best: null });
+  rows.push({ label: "그날 강수", note: "", values: ids.map((id) => { const x = ch[id]; if (!x || x.dateStatus !== "ok" || !fin(x.values.rain)) return "–"; return x.values.rain >= 0.1 ? `${fmt(x.values.rain)}mm` : "없음"; }), best: null });
+  for (const c of (B.counts || []).filter((c) => c.show && c.n).slice(0, 3)) rows.push({ label: c.label, note: `공통 ${c.n}개 해 중`, values: c.results.map((r) => `${r.k}번`), best: null });
+  const t = (B.tallies || []).find((x) => x.id === "avg");
+  if (t && t.n) rows.push({ label: "더 따뜻했던 해", note: `공통 ${t.n}개 해 · 같음 ${t.ties}번`, values: t.results.map((r) => `${r.k}번`), best: null });
+  const A = B.around?.metrics;
+  if (A?.avg?.n) rows.push({ label: "앞뒤 15일 평균기온", note: `공통 ${A.avg.n}개 해`, values: A.avg.results.map((r) => (fin(r.mean) ? `${fmt(r.mean)}℃` : "–")), best: null });
+  if (A?.rainDays?.n) rows.push({ label: "앞뒤 15일 강수일", note: `공통 ${A.rainDays.n}개 해`, values: A.rainDays.results.map((r) => (fin(r.share) ? `${fmt(r.share, 0)}%` : "–")), best: null });
   const stName = (id) => B.stations.find((s) => s.id === id)?.station_name || "";
-  const legend = B.cases.map((c, i) => `${c.id}  ${labels[i] ? `${labels[i]} · ` : ""}${c.specLabel}${B.differentStations ? ` · ${stName(c.id)}` : ""}`);
+  const legend = B.cases.map((c, i) => `${c.id}  ${labels[i] ? `${labels[i]} · ` : ""}${c.specLabel}${c.year ? ` · ${c.year}년` : ""}${B.differentStations ? ` · ${stName(c.id)}` : ""}`);
   const st0 = B.stations[0];
   return {
     kind: "battle", accent: "#0d1b3d", eyebrow: "날씨 배틀",
     title: B.cases.map((c, i) => labels[i] || c.specLabel.replace(/^양력 /, "")).join(" vs "),
-    subtitle: "서로 자료가 있는 같은 기준연도끼리만 비교 · 종합 승자 없음",
+    subtitle: "해마다 그날 실제 날씨를 셈 · 같은 날 평균·종합 승자 없음",
     chips: [B.differentStations ? "카드마다 다른 관측지점" : `${st0.station_name} (${st0.station_id})`, B.window.label, ...(B.mixedCalendars ? ["양력·음력 혼합"] : [])],
     table: { cols, rows, legend },
-    foot: [`출처 기상청 ASOS 공식 일자료 · 색 글자 = 공통 3개 해 이상에서 가장 큰 값(좋고 나쁨 아님)`, `강수일수 = 일강수량 0.1mm 이상인 해의 수 · ${B.today} 기준`, `이날 · ${SITE}`],
+    foot: [`출처 기상청 ASOS 공식 일자료 · 횟수 = 서로 자료가 있는 같은 해 중 조건을 만족한 해`, `앞뒤 15일 = 해마다 그 날짜 ±15일(31일) · ${B.today} 기준`, `이날 · ${SITE}`],
   };
 }
 // ---------------------------------------------------------------- 오늘 날씨 이야기 카드(rt 이야기 객체)

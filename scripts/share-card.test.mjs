@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { buildDailyStore, qcGust, qcSun, DAILY_QC } from "../stats-engine.mjs";
 import { parseDateSpec } from "../calendar-resolver.mjs";
 import { dateWeather, windowYears } from "../date-weather-engine.mjs";
-import { battle } from "../date-battle-engine.mjs";
+import { battle, battleV2 } from "../date-battle-engine.mjs";
 import { layout, toSvg, clip, wrap, textUnits, daySpec, battleSpec, storySpec, fmt } from "../public/share-card.mjs";
 import { createShareApi, dayOg, battleOg, shareHtml } from "../share-api.mjs";
 
@@ -109,23 +109,30 @@ test("날짜 카드 v2: 날짜·횟수·앞뒤 15일 표본, 자료 없는 지�
   assert.match(og.desc, /이날 비·눈 온 해 3번\(10개 해 중\) · 최저 영하 1번 · 앞뒤 15일 평균기온 14\.4℃·강수일 25%\(10개 해\)/);
 });
 
-const Bm = (label, vals, n, cmp, unit = "℃", digits = 1) => ({ label, unit, digits, n, tier: n === 0 ? "none" : n < 3 ? "reference" : "stats", limited: false, results: vals.map((v, i) => ({ case: "AB"[i], value: v })), comparison: cmp });
+const ok = (d, v) => ({ dateStatus: "ok", solarDate: d, values: v });
 const B = {
-  cases: [{ id: "A", specLabel: "양력 5월 5일" }, { id: "B", specLabel: "양력 10월 9일" }], stations: [{ id: "A", station_id: "108", station_name: "서울" }, { id: "B", station_id: "108", station_name: "서울" }],
+  cases: [{ id: "A", specLabel: "양력 5월 5일", year: 2025 }, { id: "B", specLabel: "양력 10월 9일", year: 2025 }], stations: [{ id: "A", station_id: "108", station_name: "서울" }, { id: "B", station_id: "108", station_name: "서울" }],
   window: { label: "최근 10년(2016~2025)" }, today: "2026-10-18", differentStations: false, mixedCalendars: false,
-  metrics: { avg: Bm("평균기온", [18.2, 16.0], 10, { badges: true, more: "A" }), max: Bm("평균 최고기온", [24, 22], 10, { badges: false }), min: Bm("평균 최저기온", [12, 11], 2, { badges: false }), rain_days: Bm("강수일수", [3, 2], 10, { badges: true, more: "A" }, "개 해", 0), rain_mean: Bm("평균 일강수량", [null, null], 0, {}, "mm"), wind: Bm("평균 풍속", [2.2, 2.0], 10, { badges: false }, "m/s") },
+  chosen: [{ case: "A", ...ok("2025-05-05", { max: 24.04, min: 12, rain: 3.2 }) }, { case: "B", ...ok("2025-10-09", { max: 21, min: 9.96, rain: 0 }) }],
+  counts: [{ id: "rain", label: "비·눈 온 해", show: true, n: 10, results: [{ case: "A", k: 4 }, { case: "B", k: 2 }] }, { id: "hot30", label: "최고 30℃ 이상", show: false, n: 10, results: [] }],
+  tallies: [{ id: "avg", n: 10, ties: 1, results: [{ case: "A", k: 7 }, { case: "B", k: 2 }] }],
+  around: { metrics: { avg: { n: 9, results: [{ case: "A", mean: 17.25 }, { case: "B", mean: 16.0 }] }, rainDays: { n: 0, results: [] } } },
 };
-test("배틀 카드: 공통 표본, 굵은 색은 배지 조건일 때만, 공통 없음은 –", () => {
+test("배틀 카드 v2: 입력한 날짜 값·횟수·누가 더·앞뒤 15일, 색 강조 없음", () => {
   const sp = battleSpec(B, { labels: ["어린이날", ""] });
   assert.equal(sp.title, "어린이날 vs 10월 9일");
   const rows = Object.fromEntries(sp.table.rows.map((r) => [r.label, r]));
-  assert.equal(rows["평균기온"].best, 0);
-  assert.equal(rows["평균 최고기온"].best, null);
-  assert.deepEqual(rows["평균 일강수량"].values, ["–", "–"]);
-  assert.equal(rows["평균 일강수량"].note, "공통 연도 없음");
-  assert.deepEqual(rows["강수일수"].values, ["3", "2"]);
-  assert.match(rows["평균 최저기온"].note, /참고/);
+  assert.deepEqual(rows["입력한 날짜"].values, ["2025.5.5", "2025.10.9"]);
+  assert.deepEqual(rows["그날 최고 / 최저"].values, ["24.0° / 12.0°", "21.0° / 10.0°"]);
+  assert.deepEqual(rows["그날 강수"].values, ["3.2mm", "없음"]);
+  assert.deepEqual(rows["비·눈 온 해"].values, ["4번", "2번"]);
+  assert.equal(rows["최고 30℃ 이상"], undefined);
+  assert.equal(rows["더 따뜻했던 해"].note, "공통 10개 해 · 같음 1번");
+  assert.deepEqual(rows["앞뒤 15일 평균기온"].values, ["17.3℃", "16.0℃"]);
+  assert.equal(rows["앞뒤 15일 강수일"], undefined);
+  assert.ok(sp.table.rows.every((r) => r.best === null));
   assert.match(battleOg(B, ["어린이날"]).title, /날씨 배틀: 어린이날 vs 양력 10월 9일/);
+  assert.match(battleOg(B).desc, /비·눈 온 해 A 4번 · B 2번 \(공통 10개 해\)/);
   const st = storySpec({ title: "t", text: "본문", numbers: [{ label: "기온", value: "3℃" }] }, { stationName: "서울", stationId: "108" });
   assert.equal(st.rows[0].value, "3℃");
 });
