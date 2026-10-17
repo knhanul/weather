@@ -13,7 +13,10 @@ export function createRtSnapshotDb(h, { ns = "main", log = () => {} } = {}) {
   const read = (sql, p) => h.read(sql, p);
   const run = (sql, p) => h.query(sql, p);
   let ok = null;
+  const MAX_BYTES = Number(process.env.RT_SNAPSHOT_MAX_BYTES) || 900000, BATCH_BYTES = Math.min(600000, MAX_BYTES);
+  const stats = { oversize: 0, trimmed: 0 };
   const db = {
+    stats,
     enabled: true,
     ns: NS,
     // 표가 있는지(마이그레이션은 db-mysql init 이 이미 적용). 없으면 사전 계산을 끔(기존 경로 그대로)
@@ -36,8 +39,16 @@ export function createRtSnapshotDb(h, { ns = "main", log = () => {} } = {}) {
     },
     async putBaselines(sid, kind, list, algo) {
       // list: [{ ymd, metric, dataRev, cutoff, payload(문자열) }] — 같은 키는 새 값으로(분포는 입력이 같으면 같은 값)
-      for (let i = 0; i < list.length; i += 20) {
-        const part = list.slice(i, i + 20);
+      // NAS max_allowed_packet = 1MB → 한 문장 바이트 합을 BATCH_BYTES 아래로(20행 이하), 혼자 넘는 행은 저장 안 함(요청 때 계산)
+      const groups = []; let g = [], gb = 0;
+      for (const x of list) {
+        const nb = Buffer.byteLength(x.payload, "utf8") + 400;
+        if (nb > MAX_BYTES) { stats.oversize++; log(`rt baseline too big ${sid} ${kind} ${x.ymd} ${x.metric} ${nb}`); continue; }
+        if (g.length && (g.length >= 20 || gb + nb > BATCH_BYTES)) { groups.push(g); g = []; gb = 0; }
+        g.push(x); gb += nb;
+      }
+      if (g.length) groups.push(g);
+      for (const part of groups) {
         const vals = [];
         for (const x of part) vals.push(db.baselineId(sid, kind, x.ymd, x.metric, algo), NS, String(sid), kind, x.ymd, x.metric, algo, String(x.dataRev), x.cutoff, x.payload, x.payload.length, Date.now());
         await run(`INSERT INTO wx_baseline_snapshot (id, ns, station_id, kind, ref_date, metric, algo, data_rev, source_cutoff, payload, bytes, built_ms) VALUES ${part.map(() => "(?,?,?,?,?,?,?,?,?,?,?,?)").join(",")}
@@ -54,6 +65,10 @@ export function createRtSnapshotDb(h, { ns = "main", log = () => {} } = {}) {
     // pub(선택): 같은 트랜잭션에서 게시 이력 기록 — 최신 스냅샷 전환과 이력이 함께 반영되거나 함께 빠짐
     async putSnapshot(s, pub = null) {
       const id = db.snapshotId(s.kind, s.stationId, s.basisId);
+      // 1MB 패킷 한도: 후보 목록이 커서 넘으면 후보는 빼고, 본문만으로도 넘으면 저장 안 함(요청 계산으로 응답)
+      const bl = (v) => (v == null ? 0 : Buffer.byteLength(v, "utf8"));
+      if (bl(s.payload) + bl(s.candidates) + bl(s.sources) + 2000 > MAX_BYTES) { stats.trimmed++; s = { ...s, candidates: null }; }
+      if (bl(s.payload) + bl(s.sources) + 2000 > MAX_BYTES) { stats.oversize++; const e = new Error(`snapshot too big ${s.kind} ${s.stationId} ${s.basisId} ${bl(s.payload)}B`); e.code = "RT_TOO_BIG"; throw e; }
       const cols = [s.version, s.rulesVersion, SNAPSHOT_SCHEMA, s.inputFp, s.sourceRev, s.slot, s.publishedMs, s.expiresMs, s.payload, s.candidates ?? null, s.sources ?? null, s.payload.length, s.buildMs | 0];
       const body = async (q) => {
         const u = await q(`UPDATE wx_story_snapshot SET version = ?, rules_version = ?, schema_version = ?, input_fp = ?, source_rev = ?, slot = ?, published_ms = ?, expires_ms = ?, payload = ?, candidates = ?, sources = ?, bytes = ?, build_ms = ? WHERE id = ? AND source_rev <= ?`, [...cols, id, s.sourceRev]);

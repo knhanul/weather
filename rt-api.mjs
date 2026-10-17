@@ -898,7 +898,7 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
   async function precomputeStatus() {
     let jobs = [];
     if (snapOn()) { try { jobs = await snap.listJobs(); } catch { jobs = []; } }
-    return { ok: true, now: kst(now()).text, enabled: snapOn(), ns: snap?.ns ?? null, rulesVersion: RV, queue: queue ? { ...queue.stats, pending: queue.pendingIds(), running: queue.isRunning() } : null, snapshots: SNAP_STATS, memory: { refs: refMem.size, snapshots: snapMem.size, requestCache: todayCache.size }, db: dbStats(), dataRevs, jobs: jobs.map((j) => ({ ...j, started: j.started_ms ? kst(Number(j.started_ms)).text : null, completed: j.completed_ms ? kst(Number(j.completed_ms)).text : null })) };
+    return { ok: true, now: kst(now()).text, enabled: snapOn(), ns: snap?.ns ?? null, rulesVersion: RV, queue: queue ? { ...queue.stats, pending: queue.pendingIds(), running: queue.isRunning() } : null, snapshots: SNAP_STATS, storeStats: snap?.stats ?? null, memory: { refs: refMem.size, snapshots: snapMem.size, requestCache: todayCache.size }, db: dbStats(), dataRevs, jobs: jobs.map((j) => ({ ...j, started: j.started_ms ? kst(Number(j.started_ms)).text : null, completed: j.completed_ms ? kst(Number(j.completed_ms)).text : null })) };
   }
 
   // 응답: 짧은 캐시 + 약한 ETag(본문 해시) → 같은 내용이면 304. 오류는 저장하지 않음

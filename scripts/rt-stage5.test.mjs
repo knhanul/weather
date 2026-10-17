@@ -168,3 +168,17 @@ test("5단계: 늦게 끝난 옛 계산은 새 스냅샷을 덮지 않음, 지�
   const c = mkApi({ snap, clock: { t: T0 }, appRev: "r2" }); await c.initSnapshots();
   assert.equal((await call(c, "/api/rt/stories?station=108")).snapshot, undefined);
 });
+test("5단계: 1MB 패킷 한도 — 기준 분포는 바이트로 나눠 넣고, 큰 스냅샷은 후보를 빼거나 저장 거부", async () => {
+  const { createRtSnapshotDb } = await import("../rt-snapshot-db.mjs");
+  const sent = [];
+  const h = { query: async (sql, p) => { sent.push({ sql, bytes: p.reduce((a, v) => a + (typeof v === "string" ? Buffer.byteLength(v) : 8), 0) }); return { affectedRows: 1 }; }, read: async () => [] };
+  const db = createRtSnapshotDb(h, { ns: "t" });
+  const big = "가".repeat(60000); // 180KB
+  await db.putBaselines("1", "H", Array.from({ length: 12 }, (_, i) => ({ ymd: "2026-10-13", metric: `m${i}`, dataRev: "1", cutoff: "2025-12-31", payload: big })), "ref1");
+  assert.ok(sent.length >= 4 && sent.every((x) => x.bytes < 1048576 - 4096), JSON.stringify(sent.map((x) => x.bytes)));
+  sent.length = 0;
+  const r = await db.putSnapshot({ kind: "today", stationId: "1", basisId: "-", version: 1, sourceRev: "a", payload: "x".repeat(500000), candidates: "y".repeat(500000), sources: "{}" });
+  assert.equal(r.written, true); assert.equal(db.stats.trimmed, 1);
+  assert.ok(sent.every((x) => x.bytes < 1048576 - 4096));
+  await assert.rejects(db.putSnapshot({ kind: "today", stationId: "1", basisId: "-", version: 2, sourceRev: "b", payload: "x".repeat(1000000), sources: "{}" }), /too big/);
+});
