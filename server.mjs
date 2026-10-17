@@ -19,6 +19,7 @@ import { withCoords } from "./station-coords.mjs";
 import { handlePrefs, createPgPrefsStore, createMysqlPrefsStore, createJsonPrefsStore } from "./view-prefs.mjs";
 import { createStatsData } from "./stats-data.mjs";
 import { createStatsApi } from "./stats-api.mjs";
+import { createDateApi } from "./date-api.mjs";
 import { createRtApi } from "./rt-api.mjs";
 import { createRtSnapshotDb } from "./rt-snapshot-db.mjs";
 import { createStatsHourly } from "./stats-hourly.mjs";
@@ -1277,6 +1278,17 @@ const handleStats = createStatsApi({
   json,
 });
 
+// 날씨 이야기(/api/stats/date-weather·date-battle·calendar-map): 새 경로만. 같은 statsData·statsHourly 메모리와 공식 일자료 한 행 조회를 씀.
+const handleDate = createDateApi({
+  statsData,
+  statsHourly,
+  dayRow: async (id, date) =>
+    db.usingPg() ? db.statsDayRow(id, date) : loadJson(DAILY_FILE, []).find((r) => String(r.station_id) === String(id) && String(r.observation_date).slice(0, 10) === date && r.source_kind !== "DERIVED") || null,
+  stations,
+  json,
+  log: (line) => console.log(line),
+});
+
 // 실시간·예보 분석(/api/rt/*): 새 엔드포인트. 과거 3개 기준 평균은 위 statsHourly·statsData 메모리를 그대로 쓴다(새 DB 표 없음).
 // 5단계: 사전 계산 스냅샷(MySQL 새 표). RT_SNAPSHOT_NS = 이름공간(시험 컨테이너는 test — 운영 스냅샷·게시 이력과 섞이지 않게), RT_PRECOMPUTE=0 이면 끔
 const APP_REV = (() => { try { return fs.readFileSync(path.join(__dirname, "REVISION"), "utf8").trim() || "dev"; } catch { return "dev"; } })();
@@ -1318,7 +1330,7 @@ const server = http.createServer(async (req, res) => {
         throw e;
       }
     }
-    if (url.pathname.startsWith("/api/stats/") && (await handleStats(req, res, url))) return;
+    if (url.pathname.startsWith("/api/stats/") && ((await handleDate(req, res, url)) || (await handleStats(req, res, url)))) return;
     if (url.pathname.startsWith("/api/rt/") && (await handleRt(req, res, url))) return;
     if (req.method === "GET" && url.pathname === "/api/hourly") {
       return json(res, await queryHourly(Object.fromEntries(url.searchParams)));
