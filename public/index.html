@@ -525,7 +525,7 @@
   <link rel="stylesheet" href="/views.css?v=3" />
   <link rel="stylesheet" href="/drawer.css?v=2" />
   <link rel="stylesheet" href="/fold.css?v=1" />
-  <link rel="stylesheet" href="/rt.css?v=31" />
+  <link rel="stylesheet" href="/rt.css?v=32" />
   <link rel="stylesheet" href="/date-stories.css?v=2" />
 </head>
 <body>
@@ -549,6 +549,7 @@
           <p class="nav-label" id="navLookup">조회</p>
           <a href="#/today" data-page="today">오늘 날씨</a>
           <a href="#/forecast" data-page="forecast">내일 날씨</a>
+          <a href="#/my" data-page="mysettings">내 설정</a>
           <div class="nav-row"><a href="#/stats/overview" data-page="dash" data-grp="past" class="nav-parent">지난 날씨</a><button type="button" class="nav-exp" id="navExp" data-name="지난 날씨" aria-controls="navStats" aria-expanded="false" aria-label="지난 날씨 하위 메뉴 펼치기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
           <div class="nav-sub" id="navStats" role="group" aria-label="지난 날씨 하위 메뉴">
             <a href="#/stats/overview" data-sub="overview">한눈에 보기</a>
@@ -644,6 +645,7 @@
         </section>
         <section class="page" id="sday" aria-label="날짜로 보는 날씨"></section>
         <section class="page" id="sbattle" aria-label="날씨 배틀"></section>
+        <section class="page" id="mysettings" aria-label="내 설정"></section>
         <section class="page" id="hourly">
           <div class="card">
             <div class="row">
@@ -1954,6 +1956,7 @@
       forecast: ["조회", "내일 날씨", "앞으로의 날씨가 과거 같은 시기와 얼마나 다를지 — 단기·중기예보와 1990년 이후·최근 10년·최근 5년 평균"],
       dash: ["조회", "지난 날씨", "1990년부터 쌓인 관측 자료로 보는 우리 동네 날씨"],
       sday: ["날씨 이야기", "날짜로 보는 날씨", "양력·음력 아무 날짜나 — 해마다 그날의 날씨를 1970년부터의 관측으로"],
+      mysettings: ["조회", "내 설정", "로그인 없이 이 기기에만 — 하루 구간·산책·러닝 조건·관심 카드·기본 지점"],
       sbattle: ["날씨 이야기", "날씨 배틀", "두 날짜 이상을 같은 기간·같은 연도끼리 맞대어 보기"],
       questions: ["날씨 이야기", "질문으로 보는 날씨", "예전보다 더워졌을까? 비가 더 자주 올까? — 일상적인 질문을 과거 관측으로"],
       hourly: ["날씨 자료실", "시간별 날씨", "지점·기간별 한 시간 단위 관측값 — 레이아웃으로 컬럼을 고르고 그리드·카드로 보기"],
@@ -2187,10 +2190,11 @@
       if (name === "forecast" && window.RTF) RTF.show();
       if (name === "sday" && window.DateDay) DateDay.show();
       if (name === "sbattle" && window.DateBattle) DateBattle.show();
+      if (name === "mysettings" && window.MySettings) MySettings.show();
     }
     // 예전 주소(#/hourly, #/daily, #/download)는 새 주소로 바꿔 계속 쓸 수 있게(뒤에 붙은 ?조건은 그대로)
     const ROUTE_ALIAS = { "/hourly": "/hourly-weather", "/daily": "/daily-weather", "/download": "/view-settings" };
-    const ROUTE_KNOWN = new Set(["/stats/overview", "/questions", "/today", "/forecast", "/stats/yearly", "/stats/region", "/stats/life", "/stats/records", "/hourly-weather", "/daily-weather", "/view-settings", "/collect", "/gaps", "/jobs", "/stations", "/provider", "/users", "/stories/day", "/stories/battle", ...Object.keys(ROUTE_ALIAS)]);
+    const ROUTE_KNOWN = new Set(["/stats/overview", "/questions", "/today", "/forecast", "/stats/yearly", "/stats/region", "/stats/life", "/stats/records", "/hourly-weather", "/daily-weather", "/view-settings", "/collect", "/gaps", "/jobs", "/stations", "/provider", "/users", "/stories/day", "/stories/battle", "/my", ...Object.keys(ROUTE_ALIAS)]);
     function route() {
       {
         const [p0, q0] = location.hash.replace("#", "").split("?");
@@ -2231,7 +2235,7 @@
       }
       const h = location.hash.replace("#", "").split("?")[0] || "/";
       const statsTab = { "/": "overview", "/stats/overview": "overview", "/stats/yearly": "yearly", "/stats/region": "region", "/stats/life": "life", "/stats/records": "records", "/questions": "questions" }[h] || (h.startsWith("/stats/") ? "overview" : null);
-      const map = { "/": "dash", "/stats/overview": "dash", "/questions": "questions", "/today": "today", "/forecast": "forecast", "/stats/yearly": "dash", "/stats/region": "dash", "/stats/life": "dash", "/stats/records": "dash", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/users": "users", "/stories/day": "sday", "/stories/battle": "sbattle" };
+      const map = { "/": "dash", "/stats/overview": "dash", "/questions": "questions", "/today": "today", "/forecast": "forecast", "/stats/yearly": "dash", "/stats/region": "dash", "/stats/life": "dash", "/stats/records": "dash", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/users": "users", "/stories/day": "sday", "/stories/battle": "sbattle", "/my": "mysettings" };
       let name = map[h] || "dash";
       if (name === "users" && !me.authEnabled) name = "dash";
       show(name);
@@ -2865,7 +2869,7 @@
     // views.js(시간별·일별 날씨)가 읽기만 하는 연결점
     window.NW = { me: () => me, stations: () => (dashCache && dashCache.stations) || [], loginHref: () => loginHref(), fromPicker, toPicker };
     window.addEventListener("hashchange", route);
-    setPageHead(({ "/today": "today", "/forecast": "forecast", "/questions": "questions", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/stories/day": "sday", "/stories/battle": "sbattle" })[location.hash.replace("#", "").split("?")[0]] || "dash");
+    setPageHead(({ "/today": "today", "/forecast": "forecast", "/questions": "questions", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/stories/day": "sday", "/stories/battle": "sbattle", "/my": "mysettings" })[location.hash.replace("#", "").split("?")[0]] || "dash");
     showLoginNote();
     // 대시보드 자료가 늦거나 실패해도 다른 화면은 그대로 뜨게
     // 기본 지점(geo.js): 지금 화면의 지점, 나중에 정해진 기본 지점(위치·내 계정) 반영 — 주소에 지점을 넣었거나 직접 고른 뒤에는 바꾸지 않음
@@ -2886,16 +2890,16 @@
     }
     // 오늘의 날씨·날씨 예보(조회 화면, 로그인 불필요)로 시작하면 대시보드(/api/dashboard·/api/series)를 기다리지 않고 바로 그린다.
     // 상단 '공식 최신' 칩용 대시보드 자료는 첫 화면 자료가 온 뒤(또는 4초 뒤) 뒤에서 읽고, 한눈에 보기 그래프(/api/series)는 그 화면에 갈 때 읽는다.
-    const FAST_START = /^#\/(today|forecast|stories\/day|stories\/battle)?(\?|$)/.test(location.hash || "#/") || !location.hash || location.hash === "#" ;
+    const FAST_START = /^#\/(today|forecast|stories\/day|stories\/battle|my)?(\?|$)/.test(location.hash || "#/") || !location.hash || location.hash === "#" ;
     const after = () => { if (window.NWStation) { NWStation.start(); NWStation.syncServer(); } };
     if (FAST_START) {
       dashDeferred = true;
       // 화면 스크립트(rt.js 등)는 이 아래에서 읽히므로, 문서를 다 읽은 직후(DOMContentLoaded) 그린다
       const first = () => route();
       if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", first, { once: true }); else first();
-      loadMe().then(() => { if (!["today", "forecast", "sday", "sbattle"].includes(currentPage)) route(); });
+      loadMe().then(() => { if (!["today", "forecast", "sday", "sbattle", "mysettings"].includes(currentPage)) route(); });
       let started = false;
-      const go = () => { if (started) return; started = true; loadDash().then(() => { if (!["today", "forecast", "sday", "sbattle"].includes(currentPage)) route(); else renderHeadChips(); }).then(after); };
+      const go = () => { if (started) return; started = true; loadDash().then(() => { if (!["today", "forecast", "sday", "sbattle", "mysettings"].includes(currentPage)) route(); else renderHeadChips(); }).then(after); };
       document.addEventListener("rt:ready", go, { once: true });
       setTimeout(go, 4000);
     } else Promise.allSettled([loadMe(), loadDash()]).then(route).then(after);
@@ -2905,12 +2909,13 @@
   <script src="/drawer.js?v=2"></script>
   <script src="/fold.js?v=2"></script>
   <script src="/rt-weather-art.js?v=1"></script>
-  <script src="/rt-story-visuals.js?v=2"></script>
-  <script src="/rt-home.js?v=15"></script>
+  <script src="/rt-story-visuals.js?v=3"></script>
+  <script src="/rt-activity.js?v=1"></script>
+  <script src="/rt-home.js?v=16"></script>
   <script src="/rt.js?v=12"></script>
   <script src="/rt-forecast-visual.js?v=6"></script>
   <script src="/rt-forecast.js?v=10"></script>
-  <script src="/rt-stories.js?v=10"></script>
+  <script src="/rt-stories.js?v=11"></script>
   <script src="/rt-home-cards.js?v=2"></script>
   <script src="/rt-ext.js?v=7"></script>
   <script src="/rt-admin.js?v=2"></script>
@@ -2919,5 +2924,6 @@
   <script src="/story-share.js?v=1"></script>
   <script src="/date-weather.js?v=2"></script>
   <script src="/date-battle.js?v=2"></script>
+  <script src="/my-settings.js?v=1"></script>
 </body>
 </html>

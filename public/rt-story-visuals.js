@@ -499,7 +499,7 @@
     el.innerHTML = `${top}<p class="vz-axtip" aria-live="polite">칸이나 줄 제목을 누르면 설명이 나와요</p><div class="vz-segs" role="group" aria-label="하루 구간별 옷차림">${segs.map((x) => segCard(x, today, x === s0)).join("")}</div>${segPanel(s0, today)}`;
     const sy = el.querySelector(".vz-sync"); if (sy && sl) sy.scrollLeft = sl;
   }
-  function day(el, o) { DAY.o = o; DAY.segs = segments(o); DAY.sel = DAY.segs[0]?.id ?? null; dayPaint(el); el.dataset.vzDay = "1"; }
+  function day(el, o) { DAY.o = o; DAY.segs = o.noSegs ? [] : segments(o); DAY.sel = DAY.segs[0]?.id ?? null; dayPaint(el); el.dataset.vzDay = "1"; }
   if (typeof document !== "undefined") document.addEventListener("click", (e) => {
     const sb = e.target.closest?.("[data-vz-day] [data-seg]");
     if (sb) { DAY.sel = sb.dataset.seg; dayPaint(sb.closest("[data-vz-day]")); return; }

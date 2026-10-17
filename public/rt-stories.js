@@ -19,7 +19,26 @@
   // 평범한 날(emptyReason=normal)의 탐색 카드 하나: 오늘과 닮은 날 / 이맘때의 하루(서버가 고름 — 숫자는 서버 값 그대로)
   const exploreHtml = (x) => (x ? `<article class="rt-story rts-explore" data-explore="${esc(x.type)}"><h3><span class="rt-badge ok">${x.type === "similar" ? "과거" : "이맘때"}</span> ${esc(x.title)}</h3><p>${esc(x.text)}</p><p class="rt-note">${x.more ? `${esc(x.more)} · ` : ""}${esc(x.basis || "")}</p></article>` : "");
   // 이야기 카드: 제목(쉬운 말) → 본문(숫자) → 묶인 강수 항목 → 접힘(방법·근거)
-  const storyCard = (s, i, n) => `<article class="rt-story${i === 0 ? " is-lead" : ""}" data-rule="${esc(s.ruleId || "")}"><small class="rts-n">${i + 1}/${n}</small><h3><span class="rt-badge ${s.kind === "관측" ? "ok" : "fc"}">${esc(s.kind)}</span> ${esc(s.title)}</h3><p>${esc(s.text)}</p>${s.basisFixed ? `<p class="rts-basis"><span class="rt-badge">기준 고정</span> ${esc(s.basisFixed)}</p>` : ""}${window.RTViz && s.chart ? window.RTViz.slot(s.chart) : ""}${(s.related || []).length ? `<ul class="rts-rel">${s.related.map((r) => `<li>${esc(r.title)}<small> — ${esc(r.text)}</small></li>`).join("")}</ul>` : ""}<details class="rts-how"><summary>어떻게 계산했나요</summary>${s.method ? `<p class="rt-note">${esc(s.method)}</p>` : ""}<p class="rt-note">근거: ${esc(s.basis)}</p></details></article>`;
+  const storyCard = (s, i, n) => `<article class="rt-story${i === 0 ? " is-lead" : ""}" data-rule="${esc(s.ruleId || "")}"><small class="rts-n">${i + 1}/${n}</small><h3><span class="rt-badge ${s.kind === "관측" ? "ok" : "fc"}">${esc(s.kind)}</span> ${esc(s.title)}</h3><p>${esc(s.text)}</p>${s.basisFixed ? `<p class="rts-basis"><span class="rt-badge">기준 고정</span> ${esc(s.basisFixed)}</p>` : ""}${window.RTViz && s.chart ? window.RTViz.slot(s.chart) : ""}${(s.related || []).length ? `<ul class="rts-rel">${s.related.map((r) => `<li>${esc(r.title)}<small> — ${esc(r.text)}</small></li>`).join("")}</ul>` : ""}${shareOn() ? `<p class="rts-share"><button type="button" class="sec rts-card" data-story-card="${i}" aria-label="${esc(s.title)} — 카드 이미지 만들기">카드 이미지</button></p>` : ""}<details class="rts-how"><summary>어떻게 계산했나요</summary>${s.method ? `<p class="rt-note">${esc(s.method)}</p>` : ""}<p class="rt-note">근거: ${esc(s.basis)}</p></details></article>`;
+  const shareOn = () => !!window.StoryShare && (!window.RTAct || RTAct.loadInterests().share !== false);
+  // 이야기 카드 이미지(astra 6단계): 서버가 고른 이야기 제목·본문·근거를 그대로 카드에(새 숫자 없음)
+  function storyNumbers(s) {
+    const rows = [];
+    rows.push({ label: "자료", value: s.kind === "관측" ? "관측(실황)" : s.kind || "–" });
+    if (s.samples > 0) rows.push({ label: "비교 표본", value: `${s.samples}개`, note: s.facts?.range ? `${s.facts.range}년 같은 시기` : "" });
+    else if (s.facts?.range) rows.push({ label: "비교 기간", value: `${s.facts.range}년` });
+    if (s.basis) rows.push({ label: "근거", value: String(s.basis).slice(0, 40) });
+    return rows;
+  }
+  let LAST = null;
+  function openCard(i) {
+    const d = LAST, s = d?.stories?.[i];
+    if (!s || !window.StoryShare) return;
+    StoryShare.module().then((m) => {
+      const spec = m.storySpec({ title: s.title, text: s.text, numbers: storyNumbers(s) }, { stationName: d.station?.name, stationId: d.station?.id, asOf: d.now, basisLabel: d.basisName ? `비교 기준 ${d.basisName}` : "", note: s.kind === "예보" ? "예보값은 발표 후 바뀔 수 있어요 · 숫자는 화면과 같은 서버 계산 결과" : "" });
+      StoryShare.open({ spec, filename: `inal-story-${d.station?.id || ""}-${String(d.now || "").slice(0, 10)}-${s.key || i}`, shareUrl: `${location.origin}/#/today?station=${encodeURIComponent(d.station?.id || "")}`, title: "오늘 날씨 이야기 카드", note: "오늘의 이야기 제목·본문·근거를 서버 응답 그대로 담았어요. 이야기는 시간이 지나면 바뀌니 기준 시각을 함께 넣었습니다." });
+    });
+  }
   function storiesHtml(d) {
     // 예전 응답(emptyReason 없음)은 예전처럼 normal 로 봄
     if (!d.stories.length) {
@@ -51,7 +70,7 @@
     const G = window.RTGet || get;
     // 이야기: 히어로 한 줄에 쓰므로 바로. 과거 유사일(오늘·어제): 그 칸이 보일 때
     if (!box.innerHTML.trim()) box.innerHTML = emptyHtml("loading");
-    G(`/api/rt/stories?station=${st}&basis=${bp}`).then((v) => { if ($("rtsBox") !== box) return; box.innerHTML = storiesHtml(v); if (window.RTViz) window.RTViz.mount(box); document.dispatchEvent(new CustomEvent("rt:stories", { detail: v })); }).catch((e) => { if ($("rtsBox") === box) box.innerHTML = emptyHtml("error", { failedParts: [String(e?.message || "응답 없음").slice(0, 60)] }); });
+    G(`/api/rt/stories?station=${st}&basis=${bp}`).then((v) => { if ($("rtsBox") !== box) return; LAST = v; box.innerHTML = storiesHtml(v); if (window.RTViz) window.RTViz.mount(box); if (!box.dataset.cardWired) { box.dataset.cardWired = "1"; box.addEventListener("click", (e) => { const b = e.target.closest("[data-story-card]"); if (b) openCard(+b.dataset.storyCard); }); } document.dispatchEvent(new CustomEvent("rt:stories", { detail: v })); }).catch((e) => { if ($("rtsBox") === box) box.innerHTML = emptyHtml("error", { failedParts: [String(e?.message || "응답 없음").slice(0, 60)] }); });
     sim.innerHTML = `<section class="card"><p class="rt-load">기온 흐름이 닮은 날 찾는 중…</p></section>`;
     const run = async () => {
       const [t, y] = await Promise.allSettled([G(`/api/rt/similar?station=${st}&day=today`), G(`/api/rt/similar?station=${st}&day=yesterday`)]);

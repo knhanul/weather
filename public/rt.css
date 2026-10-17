@@ -329,3 +329,42 @@
 .vz-tip.on rect, .vz-tip:hover rect { stroke:#c98a00; stroke-width:1.5; stroke-dasharray:none; }
 .vz-axtip { margin:4px 0 0; padding:5px 8px; border-radius:8px; background:var(--soft,#f3f6fb); font-size:12.5px; color:var(--muted); min-height:1.45em; line-height:1.45; }
 .vz-axtip.on { color:var(--fg,#0d1b3d); font-weight:600; background:#fffaf0; border:1px solid #ecd393; }
+
+/* ---------- astra 6단계: 산책·러닝 시간 찾기 · 바람 체감 · 이야기 카드 · 내 설정 ---------- */
+.rh-chill { display: block; line-height: 1.35; }
+.rh-chill b { font-size: 1.05em; }
+.rh-chill-n { font-size: 11px; color: #64748b; }
+.rh-walk h2 { margin-bottom: 6px; }
+.aw-best { margin: 4px 0 2px; font-size: 17px; }
+.aw-best b { color: #0f766e; }
+.aw-best.none b { color: #8a4b00; font-size: 15px; }
+.aw-best small { color: #64748b; font-size: 12.5px; }
+.aw-why { margin: 2px 0 8px; padding-left: 18px; font-size: 13px; color: #334155; }
+.aw-more { font-size: 13px; color: #334155; margin: 0 0 8px; }
+.aw-strip { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; margin: 6px 0 4px; }
+.aw-h { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 40px; padding: 2px 0; border-radius: 6px; border: 1px solid #e2e8f0; background: #f8fafc; color: #475569; font-size: 11px; line-height: 1.2; cursor: pointer; }
+.aw-h i { font-style: normal; font-size: 12px; font-weight: 700; }
+.aw-h.pass { background: #e6f6f3; border-color: #9fd8cc; color: #0f5f57; }
+.aw-h.fail { background: #fff; color: #94a3b8; }
+.aw-h.unknown { background: repeating-linear-gradient(45deg, #f1f5f9 0 4px, #fff 4px 8px); color: #64748b; }
+.aw-h.on { outline: 2px solid #0f766e; outline-offset: 1px; }
+.aw-tip { font-size: 12.5px; color: #334155; min-height: 2.6em; margin: 4px 0; }
+.rts-share { margin: 6px 0 0; }
+.rts-card { font-size: 12.5px; padding: 4px 10px; }
+.ms-wrap { display: grid; gap: 12px; max-width: 760px; }
+.ms-card h2 small { font-weight: 400; color: #64748b; font-size: 12.5px; margin-left: 4px; }
+.ms-msg { color: #0f766e; font-weight: 600; min-height: 1.3em; margin: 4px 0 0; }
+.ms-seg { display: flex; align-items: center; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
+.ms-seglab { width: 7.5em; }
+.ms-seg select, .ms-grid select { min-width: 4.8em; }
+.ms-acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.ms-grid { display: grid; grid-template-columns: max-content 1fr; gap: 8px 12px; align-items: center; }
+.ms-num input { width: 5em; }
+.ms-ints { display: grid; gap: 8px; }
+.ms-int { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: start; }
+.ms-int small { grid-column: 2; color: #64748b; font-size: 12px; }
+@media (max-width: 480px) {
+  .aw-strip { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  .ms-grid { grid-template-columns: 1fr; gap: 2px; }
+  .ms-grid > span:nth-child(odd) { font-weight: 600; margin-top: 6px; }
+}

@@ -72,12 +72,14 @@
       <div class="rh-main"><div><p class="rh-temp">${v.ta}<span>℃</span></p><p class="rh-sky" id="rhSky"></p></div>
         <div class="rh-side">${p && p.mean != null ? `<b class="rh-diff ${p.diff > 0 ? "up" : p.diff < 0 ? "down" : ""}">${sg(p.diff)}</b><small>${esc(nm(p))} 같은 시기 이 시각 평균 ${p.mean}℃</small>${others(c.compare?.ta).map((o) => `<small>${esc(nm(o))} ${o.mean == null ? "비교 데이터 부족" : `${o.mean}℃(<b class="${o.diff > 0 ? "up" : o.diff < 0 ? "down" : ""}">${sg(o.diff)}</b>)`}</small>`).join("")}` : `<small class="rt-ins">${esc(p ? nm(p) + " " : "")}${esc(p?.statusText || "비교 데이터 부족")}</small>`}
           <small>습도 ${v.hm ?? "–"}% · ${esc(v.windDir || "")} ${v.ws ?? "–"}m/s${v.rn1 ? ` · 1시간 ${v.rn1}mm` : ""}</small>
+          ${window.RTAct && RTAct.loadInterests().chill ? RTAct.chillHtml(v.ta, v.ws) : ""}
           ${d.day?.max?.value != null || d.day?.min?.value != null ? `<small title="실황(지금 기온)과 따로, 단기예보 발표 당시의 오늘 최저·최고 예보입니다">오늘 최저 ${d.day.min.value ?? "–"}℃ / 최고 ${d.day.max.value ?? "–"}℃ <span class="rt-badge fc">예보${(d.day.max.base || d.day.min.base) ? ` ${esc(String(d.day.max.base || d.day.min.base).slice(11, 16))} 발표` : ""}</span></small>` : ""}</div></div>
       <h2 class="rh-line">${line}</h2><p class="rh-story" id="rhStory"></p><div class="rh-storyviz" id="rhStoryViz" hidden></div>
       ${meter}
       <p class="rh-wear" id="rhTip" hidden></p>
     </section>
     <section class="card rh-hours lite" aria-label="앞으로 12시간"><h2>앞으로 12시간 <span class="rt-badge fc">예보</span></h2><div class="rh-chips" id="rhHours"><p class="rt-load">불러오는 중…</p></div><div class="rh-day" id="rhDay"></div></section>
+    <section class="card rh-walk" id="rhWalk" aria-label="산책·러닝 시간 찾기" hidden></section>
     ${chart}`;
   }
   function hoursHtml(f) {
@@ -224,11 +226,28 @@
     document.getElementById("rhHours").innerHTML = fv ? hoursHtml(fv) : `<p class="rt-ins">예보를 불러오지 못했습니다</p>`;
     paintSky(t, fv);
     // 앞으로 12시간 공용 시간축 + 하루 구간 옷차림: 이미 받은 예보·실황만으로, 보일 때 그림
-    if (fv && window.RTViz) lazy("rhDay", (el) => { if (my !== seq) return; const v = t.current?.values || {}; window.RTViz.day(el, { nowW: t.now || `${t.date} ${String(t.current?.hour ?? 0).padStart(2, "0")}:00`, obsHours: (t.hours || []).filter((h) => h.obs != null).map((h) => ({ time: h.time, ta: h.obs })), current: t.current?.time && v.ta != null ? { time: t.current.time, ta: v.ta, hm: v.hm, ws: v.ws } : null, fc: fv.hours || [], days: fv.days || [], chip: chipCol, more: `<p class="rh-more12"><a href="#/forecast?station=${esc(st)}">72시간 예보 보기 ›</a></p>` }); const hh = document.getElementById("rhHours"); if (hh && el.querySelector(".vz-sync")) hh.hidden = true; });
+    if (fv && window.RTViz) lazy("rhDay", (el) => { if (my !== seq) return; const v = t.current?.values || {}; window.RTViz.day(el, { nowW: t.now || `${t.date} ${String(t.current?.hour ?? 0).padStart(2, "0")}:00`, obsHours: (t.hours || []).filter((h) => h.obs != null).map((h) => ({ time: h.time, ta: h.obs })), current: t.current?.time && v.ta != null ? { time: t.current.time, ta: v.ta, hm: v.hm, ws: v.ws } : null, fc: fv.hours || [], days: fv.days || [], chip: chipCol, noSegs: !!(window.RTAct && !RTAct.loadInterests().outfit), more: `<p class="rh-more12"><a href="#/forecast?station=${esc(st)}">72시간 예보 보기 ›</a> · <a href="#/my">구간 시간 바꾸기 ›</a></p>` }); const hh = document.getElementById("rhHours"); if (hh && el.querySelector(".vz-sync")) hh.hidden = true; });
+    paintWalk(t, fv);
     const tip = document.getElementById("rhTip"), th = fv ? tipHtml(t, fv) : "";
     if (tip && th) { tip.innerHTML = th; tip.hidden = false; }
     const wl = document.getElementById("rhWeekLink"), wt = fv ? weekPv(fv) : null; if (wl && wt) wl.innerHTML = `<a href="#/forecast?station=${esc(st)}">${esc(wt)} · 내일 날씨에서 보기 ›</a>`;
     paintStory();
+  }
+  // 산책·러닝 시간 찾기(astra 9-3): 이미 받은 예보로 앞으로 24시간, 규칙 판정(rt-activity.js)
+  function paintWalk(t, fv) {
+    const el = document.getElementById("rhWalk");
+    if (!el || !window.RTAct) return;
+    if (!fv || !RTAct.loadInterests().walk) { el.hidden = true; return; }
+    const nowW = t.now || `${t.date} ${String(t.current?.hour ?? 0).padStart(2, "0")}:00`;
+    const res = RTAct.findWindows(fv.hours || [], RTAct.loadCond(), { nowW });
+    el.innerHTML = RTAct.walkHtml(res, { today: nowW.slice(0, 10) });
+    el.hidden = false;
+    el.onclick = (ev) => {
+      const b = ev.target.closest("[data-awh]"); if (!b) return;
+      const x = res.hours[+b.dataset.awh]; if (!x) return;
+      el.querySelectorAll(".aw-h.on").forEach((q) => q.classList.remove("on")); b.classList.add("on");
+      const tp = el.querySelector(".aw-tip"); if (tp) tp.textContent = RTAct.hourDetail(x, nowW.slice(0, 10));
+    };
   }
   // 하늘 그림: 강수형태(실황) → 하늘상태(실황엔 없어 예보에서 빌림 — 그 예보 시각을 함께) → 낮/밤
   function paintSky(t, fv) {
