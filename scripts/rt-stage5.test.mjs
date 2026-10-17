@@ -190,3 +190,9 @@ test("5단계: 스냅샷 쓰기 교착(ER_LOCK_DEADLOCK)은 다시 시도", asyn
   const r = await db.putSnapshot({ kind: "seasons", stationId: "1", basisId: "all", version: 1, sourceRev: "a", payload: "{}", sources: "{}" });
   assert.equal(r.written, true); assert.equal(n, 2); assert.equal(db.stats.retried, 1);
 });
+test("5단계: 스냅샷 응답의 now 는 응답 시각, 계산 시각은 snapshot.publishedAt", async () => {
+  const { decorate } = await import("../rt-snapshot-serve.mjs");
+  const T = Date.UTC(2026, 9, 17, 10, 7);
+  const r = decorate("seasons", { now: "2026-10-17 19:07", x: 1 }, { version: 1, publishedMs: T, expiresMs: T + 53 * 60000, sourceRev: "a" }, T + 5 * 60000, () => ({}), 90);
+  assert.equal(r.now, "2026-10-17 19:12"); assert.equal(r.snapshot.publishedAt, "2026-10-17 19:07"); assert.equal(r.snapshot.expiresAt, "2026-10-17 20:00");
+});

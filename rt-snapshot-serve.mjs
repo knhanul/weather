@@ -56,6 +56,8 @@ export function decorate(kind, payload, meta, nowMs, freshness, STALE_MIN) {
   if (kind === "forecast" && p.outlook?.tmFc && p.outlook.freshness) p.outlook = { ...p.outlook, freshness: freshness(p.outlook.tmFc, nowMs, 13 * 60) };
   const iso = (ms) => new Date(ms + KST).toISOString().slice(0, 16).replace("T", " ");
   // 나이(초)는 넣지 않음 — 본문이 매초 바뀌면 ETag(지점·기준·스냅샷 판 + 신선도 분 단위)가 쓸모없어짐
+  // 'now'(응답 기준 시각)은 응답 때 시각으로 — 계산 시각은 snapshot.publishedAt
+  if (typeof p.now === "string" && p.now.length === 16) p.now = iso(nowMs);
   p.snapshot = { version: meta.version, publishedAt: iso(meta.publishedMs), expiresAt: iso(meta.expiresMs), sourceRev: meta.sourceRev, served: "snapshot" };
   return p;
 }
