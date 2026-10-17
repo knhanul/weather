@@ -101,7 +101,8 @@ export function toStory(c, { station, asOf }) {
     ruleId,
     rulesVersion: RULES_VERSION,
     kindId: KIND_ID[c.kind] || "observation",
-    basisId: c.basisId || "all",
+    basisId: c.basisId === null ? null : c.basisId || "all",
+    basisFixed: c.basisFixed || null, // 선택한 기준과 상관없이 정해진 기준으로 비교하는 카드의 짧은 이유(11장)
     asOf: c.asOf || asOf,
     facts: c.facts || {},
     evidence: {

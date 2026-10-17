@@ -9,6 +9,31 @@ import { createStatsHourly } from "../stats-hourly.mjs";
 import { hourlyForecast } from "../rt-forecast.mjs";
 import { runCatalog, CATALOG } from "../rt-story-catalog.mjs";
 import { selectV2 } from "../rt-story-select.mjs";
+import { hourlyCompare } from "../rt-baseline.mjs";
+import { seasonEvent, forecastCrossing, seasonCands, SEASON_IDS } from "../rt-season.mjs";
+import { regionFacts, regionCands } from "../rt-region.mjs";
+import { revisionFlow, popRevisions, revisionCands } from "../rt-revision.mjs";
+import { bigChanges } from "../rt-changes.mjs";
+import { LIFE_VALUE, SEASON_EVENTS } from "../rt-story-rules.mjs";
+
+// 4단계 규칙(계절·지역·발표 흐름·가장 큰 변화) 되돌려 보기 — 실서비스와 같은 모듈 함수
+const tv0 = () => 0.8;
+export function stage4Season({ sid, D, hs, store, days }) {
+  const until = dnToYmd(ymdToDn(D) - 1), night = dnToYmd(ymdToDn(D) - 2), m = +D.slice(5, 7);
+  const ev = SEASON_IDS.map((id) => { const e = seasonEvent(id, { store, hs, refYmd: D, untilYmd: SEASON_EVENTS[id].hourly ? night : until, retro: id === "last-hot-day" && SEASON_EVENTS[id].retroMonths.includes(m) }); e.forecast = forecastCrossing(id, e, days.filter((d) => d.date >= D)); return e; });
+  return seasonCands(ev, { sid, basis: "all", bi: 0, today: D, tv: tv0, LIFE_VALUE, basisName: "1990년 이후" });
+}
+export function stage4Region({ D, H, all }) {
+  const time = `${D} ${pad(H)}:00`;
+  const rows = all.map(({ sid, name, hs }) => {
+    const t = at(hs, "ta", D, H);
+    if (!Number.isFinite(t)) return { id: sid, name, temp: null };
+    const cmp = hourlyCompare(hs, D, H, "ta", t);
+    return { id: sid, name, time, temp: Math.round(t * 10) / 10, diffs: Object.fromEntries(cmp.map((p) => [p.id, p.diff])), pcts: Object.fromEntries(cmp.map((p) => [p.id, p.percentile ?? null])), samples: Object.fromEntries(cmp.map((p) => [p.id, p.samples])) };
+  });
+  const F = regionFacts({ rows, time, basis: "all", hsOf: (id) => all.find((x) => x.sid === id)?.hs || null });
+  return { F, cands: regionCands(F, { sid: all[0]?.sid, tv: tv0, LIFE_VALUE, basisId: "all" }) };
+}
 
 const pad = (n) => String(n).padStart(2, "0");
 const at = (hs, f, D, h) => { const i = (ymdToDn(D) - hs.base) * 24 + h; return i >= 0 && i < hs.n && hs.src[i] ? hval(hs[f], i) : NaN; };
@@ -58,11 +83,23 @@ async function main() {
   const per = [];
   let stDays = 0, storedFc = 0;
   const charts = {};
+  // 4단계: 지점 저장소를 미리(지역 이야기는 같은 시각 모든 지점이 필요)
+  const ALL = [];
+  for (const s of list) { const sid = String(s.station_id); ALL.push({ sid, name: s.station_name, store: buildDailyStore(sid, await statsDailyRows(sid)), hs: await hsMaker.get(sid), g: rt ? await rt.gridOf(sid) : null }); }
+  const S4 = { season: {}, region: {}, F01: 0, F01pop: 0, big: {}, bigDays: 0, revDays: 0, regionSnaps: 0, regionDays: 0 };
+  const bump = (o, k) => { o[k] = (o[k] || 0) + 1; };
+  const regionDaySet = {};
+  for (let k = days; k >= 1; k--) {
+    const D = dnToYmd(ymdToDn(today) - k);
+    const fired = new Set();
+    for (const H of [8, 13, 18]) { const r = stage4Region({ D, H, all: ALL }); if (r.F.N) S4.regionSnaps++; for (const c of r.cands) if (!c.exclude) { fired.add(c.ruleId); if (process.env.DUMP?.split(",").includes(c.ruleId)) console.error(`  ${D} ${H}시 ${c.ruleId} U=${c.U.toFixed(2)} ${c.title}`); if (process.env.CHARTS && c.chart && !charts[c.ruleId]) charts[c.ruleId] = { station: "8개 지점", at: `${D} ${pad(H)}:00`, title: c.title, text: c.text, kind: c.kind, chart: c.chart }; } }
+    for (const id of fired) bump(S4.region, id);
+    S4.regionDays++;
+  }
   for (const s of list) {
     const sid = String(s.station_id);
-    const store = buildDailyStore(sid, await statsDailyRows(sid));
-    const hs = await hsMaker.get(sid);
-    const g = rt ? await rt.gridOf(sid) : null;
+    const { store, hs, g } = ALL.find((x) => x.sid === sid);
+    const extAll = g?.nx != null ? await rt.extremesAll(g.nx, g.ny, dnToYmd(ymdToDn(today) - days), dnToYmd(ymdToDn(today) + 3)).catch(() => []) : [];
     const row = { sid, name: s.station_name, fired: Object.fromEntries(ids.map((id) => [id, 0])), selected: 0, days: 0 };
     for (let k = days; k >= 1; k--) {
       const D = dnToYmd(ymdToDn(today) - k);
@@ -71,6 +108,24 @@ async function main() {
       for (const [H, base] of [[8, "05"], [13, "11"], [18, "17"]]) {
         const vilRows = g?.nx != null ? await rt.fcst("KMA_VILAGE_FCST", g.nx, g.ny, `${D} ${base}:00:00`).catch(() => []) : [];
         const { ctx, fcKind } = backtestCtx({ sid, nm: s.station_name, D, H, hs, store, vilRows });
+        if (H === 13) {
+          // 계절 신호(그날 13시 기준, 끝난 일자료 = 전날)
+          for (const c of stage4Season({ sid, D, hs, store, days: ctx.days })) if (!c.exclude) { firedToday.add(`S:${c.ruleId}${c.kind === "예보" ? "(가능성)" : ""}`); if (process.env.CHARTS && !charts[`season:${c.ruleId}`]) charts[`season:${c.ruleId}`] = { station: s.station_name, at: ctx.nowW, title: c.title, text: c.text, kind: c.kind, chart: c.chart }; if (process.env.DUMP?.split(",").includes("season")) console.error(`  ${D} ${sid} ${c.ruleId} ${c.title}`); }
+          // 발표 흐름: 그 시각까지 받은 단기 TMX·TMN 발표만
+          const wall = `${D} 13:00:00`;
+          const dates = [0, 1, 2].map((j) => dnToYmd(ymdToDn(D) + j));
+          const changes = dates.map((d) => { const L = extAll.filter((r) => r.base <= wall && r.fcst.slice(0, 10) === d); const pick = (cat) => L.filter((r) => r.category === cat).map((r) => ({ base: r.base, value: Number(r.value), source: "단기예보" })); return { date: d, max: pick("TMX"), min: pick("TMN") }; }).filter((c) => c.max.length + c.min.length > 1);
+          const flow = revisionFlow(changes, { today: D });
+          const prev = g?.nx != null && vilRows.length ? await rt.fcst("KMA_VILAGE_FCST", g.nx, g.ny, `${D} 08:00:00`).catch(() => []) : [];
+          const pop = prev.length && prev[0].base !== vilRows[0]?.base ? popRevisions(vilRows, prev, { fromWall: wall }) : null;
+          if (flow.length || pop) S4.revDays++;
+          for (const c of revisionCands(flow, pop, { sid, tv: tv0, ymd: D, LIFE_VALUE })) { firedToday.add(c.key === "forecast-revision-pop" ? "F01(강수확률)" : `F01(${c.facts.kind})`); if (process.env.CHARTS && !charts[c.key]) charts[c.key] = { station: s.station_name, at: ctx.nowW, title: c.title, text: c.text, kind: c.kind, chart: c.chart }; if (process.env.DUMP?.split(",").includes("F01")) console.error(`  ${D} ${sid} F01 ${c.title}`); }
+          // 가장 큰 변화(앞 시간 = 저장된 단기예보 또는 ASOS 대체)
+          const B = bigChanges({ hours: ctx.series.filter((x) => x.kind === "fcst"), days: ctx.days, revisions: flow, pop, today: D, nowW: ctx.nowW });
+          S4.bigDays++;
+          for (const x of B.items) firedToday.add(`B:${x.kind}${fcKind === "stored" ? "" : "*"}`);
+          if (process.env.DUMP?.split(",").includes("big")) for (const x of B.items) console.error(`  ${D} ${sid} [${fcKind}] big ${x.kind} M=${x.M} ${x.title}`);
+        }
         if (fcKind === "stored") storedFc++;
         if (!ctx.current) continue;
         any = true;
@@ -84,15 +139,15 @@ async function main() {
       }
       if (!any) continue;
       row.days++; stDays++;
-      for (const id of firedToday) { row.fired[id]++; tot[id]++; }
+      for (const id of firedToday) { if (!(id in row.fired)) row.fired[id] = 0; if (!(id in tot)) tot[id] = 0; row.fired[id]++; tot[id]++; }
       for (const id of selToday) sel[id]++;
       row.selected += selToday.size;
     }
     per.push(row);
-    console.error(`${sid} ${s.station_name}: ${row.days}일 ` + ids.map((id) => `${id}=${row.fired[id]}`).join(" "));
+    console.error(`${sid} ${s.station_name}: ${row.days}일 ` + Object.keys(row.fired).map((id) => `${id}=${row.fired[id]}`).join(" "));
   }
   if (process.env.CHARTS) console.log(`CHARTS ${JSON.stringify(charts)}`);
-  console.log(JSON.stringify({ days, stations: per.length, stationDays: stDays, snapshotsWithStoredForecast: storedFc, firedDays: tot, selectedDays: sel, perStation: per }, null, 1));
+  console.log(JSON.stringify({ days, stations: per.length, stationDays: stDays, snapshotsWithStoredForecast: storedFc, firedDays: tot, selectedDays: sel, perStation: per, stage4: { regionFiredDays: S4.region, regionDays: S4.regionDays, regionSnapshots: S4.regionSnaps, revisionDaysWithData: S4.revDays, note: "S:* = 계절 신호 후보(노출 기간 안), F01(*) = 발표 흐름, B:* = 가장 큰 변화 항목(* = ASOS 대체 앞 시간 — 완전 예보 가정)" } }, null, 1));
   process.exit(0);
 }
 if (process.argv[1] && process.argv[1].endsWith("rt-story-backtest.mjs")) main().catch((e) => { console.error(e); process.exit(1); });

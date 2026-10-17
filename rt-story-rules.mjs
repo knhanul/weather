@@ -64,9 +64,17 @@ export const LIFE_RULES = { rainDryMax: 0.1 };
 export const SEASON_WINDOWS = {
   "first-hot-day": { label: "올해 처음 최고 30℃ 이상", threshold: 30, months: [3, 4, 5, 6, 7, 8, 9], daysAfter: 7 },
 };
+// 계절 신호 다섯 가지(4장 표, 4단계 rt-season.mjs). minOccur = 대표 날짜를 낼 최소 발생 시즌, minRank = 순위를 말할 최소 발생 시즌
+export const SEASON_EVENTS = {
+  "first-hot-day": { label: "올해 처음 최고 30℃ 이상", short: "첫 30℃", startMd: "01-01", field: "max", threshold: 30, unit: "℃", test: (v) => v >= 30, months: [3, 4, 5, 6, 7, 8, 9], daysAfter: 7, minOccur: 4, minRank: 10, fcField: "max" },
+  "first-frost": { label: "이번 추운 계절 처음 일최저 0℃ 미만", short: "첫 영하", startMd: "08-01", field: "min", threshold: 0, unit: "℃", test: (v) => v < 0, months: [9, 10, 11, 12, 1, 2, 3], daysAfter: 7, minOccur: 4, minRank: 10, fcField: "min", note: "서리 관측과 다름" },
+  "first-snow": { label: "이번 눈 계절 처음 새로 쌓인 눈", short: "첫 신적설", startMd: "10-01", field: "nsnow", threshold: 0, unit: "cm", test: (v) => v > 0, months: [10, 11, 12, 1, 2, 3, 4], daysAfter: 7, minOccur: 4, minRank: 10, note: "첫눈 관측과 다름" },
+  "first-warm-night": { label: "올해 첫 열대야 추정", short: "첫 열대야(추정)", startMd: "01-01", hourly: true, night: { fromHour: 19, hours: 15 }, threshold: 25, unit: "℃", test: (v) => v >= 25, months: [5, 6, 7, 8, 9, 10], daysAfter: 7, minOccur: 4, minRank: 10, note: "정시 15개로 판단한 추정 — 공식 열대야 확정과 다름" },
+  "last-hot-day": { label: "가장 최근 최고 30℃ 이상인 날", short: "마지막 30℃", kind: "last", startMd: "01-01", field: "max", threshold: 30, unit: "℃", test: (v) => v >= 30, months: [8, 9, 10, 11], retroMonths: [1, 2], daysAfter: 7, minOccur: 4, minRank: 10, note: "연말 전에는 '올해 마지막'이라 하지 않음" },
+};
 
 // 지역 비교(1-2·13장)
-export const REGION_RULES = { minStationsStory: 6, deviationDigits: 3 };
+export const REGION_RULES = { minStationsStory: 6, deviationDigits: 3, topMinU: 0.8, spreadP: 0.9, togetherDelta: 3, togetherShare: 0.5 };
 
 // 예보 문구(1-4·6장) — 화면(public/rt-forecast-visual.js·rt-home.js)도 같은 값을 쓴다(값을 바꾸면 그쪽 RULES 도 같이)
 export const FORECAST_RULES = { popHigh: 60, drop3h: 4, dayJump: 5, releaseJump: 3, fullHours: 72 };
@@ -80,4 +88,4 @@ export const EMPTY_REASONS = {
   error: "일부 자료를 불러오지 못해 이야기를 고르지 못했습니다",
 };
 
-export const RULES = { RULES_VERSION, STORY_SCHEMA_VERSION, TEMPLATE_VERSION, SAMPLE_RULES, SELECT_RULES, SELECT_V2, TIME_VALUE, LIFE_VALUE, TOPICS, STORY_RULES, DIFF_LEVELS, RAIN_PCT_LEVELS, LIFE_RULES, SEASON_WINDOWS, REGION_RULES, FORECAST_RULES };
+export const RULES = { RULES_VERSION, STORY_SCHEMA_VERSION, TEMPLATE_VERSION, SAMPLE_RULES, SELECT_RULES, SELECT_V2, TIME_VALUE, LIFE_VALUE, TOPICS, STORY_RULES, DIFF_LEVELS, RAIN_PCT_LEVELS, LIFE_RULES, SEASON_WINDOWS, SEASON_EVENTS, REGION_RULES, FORECAST_RULES };

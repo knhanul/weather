@@ -178,6 +178,16 @@ export function rainCalendar(store, today, days = 30) {
   }
   return out;
 }
+// 최근 n일 신적설 달력(S01 그림): 눈 쌓인 날(신적설 > 0) / 없음 / 자료 없음 / 오늘(집계 전)
+export function snowCalendar(store, today, days = 30) {
+  const out = [];
+  const t = ymdToDn(today);
+  for (let dn = t - days + 1; dn <= t; dn++) {
+    const v = dAt(store, "nsnow", dn);
+    out.push({ date: dnToYmd(dn), state: dn >= t ? "pending" : !Number.isFinite(v) ? "missing" : v > 0 ? "wet" : "dry", mm: Number.isFinite(v) ? r1(v) : null });
+  }
+  return out;
+}
 const pt = (h) => ({ time: h.time, ta: fin(h.ta) ? h.ta : null, kind: h.kind });
 
 // ---------------------------------------------------------------- 규칙
@@ -185,7 +195,7 @@ const tk = (ctx, ruleId, eventId) => ({ station: ctx.sid, date: ctx.ymd, ruleId,
 function make(ctx, ruleId, eventId, facts, base) {
   const t = render(tk(ctx, ruleId, eventId), TPL[ruleId], facts);
   if (!t) return null;
-  return { key: ruleId, ruleId, eventId, templateId: t.templateId, title: t.title, text: t.text, method: METHOD[ruleId], facts, ...base };
+  return { key: ruleId, ruleId, eventId, templateId: t.templateId, title: t.title, text: t.text, method: METHOD[ruleId], facts, basisId: ctx.basisId || "all", ...base };
 }
 const res = (fired, reason, c = null) => ({ fired, reason, cand: c });
 
@@ -194,7 +204,7 @@ function H01(ctx) {
   if (!c || !c.fresh) return res(false, "실황 없음·지연");
   if (!fin(c.hm)) return res(false, "습도 자료 없음");
   const R = SR.H01;
-  const cmp = hourlyCompare(ctx.hs, ctx.ymd, c.hour, "hm", c.hm)[0];
+  const cmp = hourlyCompare(ctx.hs, ctx.ymd, c.hour, "hm", c.hm)[ctx.bi ?? 0];
   const f = distFacts(cmp);
   if (!f || f.N < MIN_SAMPLES_RANK) return res(false, "표본 부족");
   const state = c.hm <= R.dryMax && f.p <= R.dryP ? "dry" : c.hm >= R.humidMin && f.p >= R.humidP ? "humid" : null;
@@ -208,7 +218,7 @@ function W01(ctx) {
   if (!c || !c.fresh) return res(false, "실황 없음·지연");
   if (!fin(c.ws)) return res(false, "풍속 자료 없음");
   const R = SR.W01;
-  const cmp = hourlyCompare(ctx.hs, ctx.ymd, c.hour, "ws", c.ws)[0];
+  const cmp = hourlyCompare(ctx.hs, ctx.ymd, c.hour, "ws", c.ws)[ctx.bi ?? 0];
   const f = distFacts(cmp, { side: "hi" });
   if (!f || f.N < MIN_SAMPLES_RANK) return res(false, "표본 부족");
   if (!(c.ws >= R.min && f.p >= R.p)) return res(false, "조건 밖");
@@ -223,7 +233,7 @@ function T01(ctx) {
     if (d.date < ctx.ymd || ymdToDn(d.date) - ymdToDn(ctx.ymd) > 1) continue;
     if (!fin(d.max) || !fin(d.min)) continue;
     const D = r1(d.max - d.min);
-    const cmp = derivedCompare((dn) => [dAt(ctx.store, "max", dn) - dAt(ctx.store, "min", dn)], d.date, D, { digits: 1 })[0];
+    const cmp = derivedCompare((dn) => [dAt(ctx.store, "max", dn) - dAt(ctx.store, "min", dn)], d.date, D, { digits: 1 })[ctx.bi ?? 0];
     const f = distFacts(cmp, { observed: false });
     if (!f || f.N < MIN_SAMPLES_RANK) continue;
     const state = D >= R.bigMin && f.p >= R.bigP ? "big" : D <= R.smallMax && f.p <= R.smallP ? "small" : null;
@@ -234,7 +244,7 @@ function T01(ctx) {
   out.sort((a, b) => (b.state === "big" ? Uhi(b.f.p) : Ulo(b.f.p)) - (a.state === "big" ? Uhi(a.f.p) : Ulo(a.f.p)));
   const { d, D, f, state } = out[0];
   const facts = { ...f, state, d: D, max: d.max, min: d.min, dayWord: dayWord(d.date, ctx.ymd), date: d.date };
-  return res(true, state, make(ctx, "T01", `${ctx.sid}|T01|${d.date}|${state}`, facts, { topic: "temperature", lifeDecision: "layering", path: "stat", kind: "예보", U: state === "big" ? Uhi(f.p) : Ulo(f.p), A: state === "big" ? LV.decision : LV.info, T: timeValue({ startW: `${d.date} 00:00`, endW: `${d.date} 23:59`, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { date: d.date, state, d: roundTo(D, 1) }, basis: `단기예보 최고(${String(d.maxBase || "").slice(0, 16)})·최저(${String(d.minBase || "").slice(0, 16)}) 발표 vs ASOS 공식 일자료`, lifeSlot: state === "big", chart: { type: "range", focus: "both", date: d.date, unit: "℃", valueKind: "fcst", max: d.max, min: d.min, meanMax: dailyCompare(ctx.store, d.date, "max")[0].mean, meanMin: dailyCompare(ctx.store, d.date, "min")[0].mean, d: D, meanD: f.mean, N: f.N, range: f.range } }));
+  return res(true, state, make(ctx, "T01", `${ctx.sid}|T01|${d.date}|${state}`, facts, { topic: "temperature", lifeDecision: "layering", path: "stat", kind: "예보", U: state === "big" ? Uhi(f.p) : Ulo(f.p), A: state === "big" ? LV.decision : LV.info, T: timeValue({ startW: `${d.date} 00:00`, endW: `${d.date} 23:59`, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { date: d.date, state, d: roundTo(D, 1) }, basis: `단기예보 최고(${String(d.maxBase || "").slice(0, 16)})·최저(${String(d.minBase || "").slice(0, 16)}) 발표 vs ASOS 공식 일자료`, lifeSlot: state === "big", chart: { type: "range", focus: "both", date: d.date, unit: "℃", valueKind: "fcst", max: d.max, min: d.min, meanMax: dailyCompare(ctx.store, d.date, "max")[ctx.bi ?? 0].mean, meanMin: dailyCompare(ctx.store, d.date, "min")[ctx.bi ?? 0].mean, d: D, meanD: f.mean, N: f.N, range: f.range } }));
 }
 function T02(ctx) {
   const R = SR.T02;
@@ -243,14 +253,14 @@ function T02(ctx) {
   const date = nowH < 9 ? ctx.ymd : dnToYmd(ymdToDn(ctx.ymd) + 1);
   const d = (ctx.days || []).find((x) => x.date === date);
   if (!d || !fin(d.min)) return res(false, "최저 예보 없음");
-  const cmp = dailyCompare(ctx.store, date, "min", d.min)[0];
+  const cmp = dailyCompare(ctx.store, date, "min", d.min)[ctx.bi ?? 0];
   const f = distFacts(cmp, { side: "lo", observed: false });
   if (!f || f.N < MIN_SAMPLES_RANK) return res(false, "표본 부족");
   const near = cmp.min && d.min <= cmp.min.value + R.nearMin;
   if (!(f.p <= R.p || near)) return res(false, "조건 밖");
   const dd = describeDifference("ta", cmp.diff);
   const facts = { ...f, min: d.min, abs: Math.abs(cmp.diff), dayWord: dayWord(date, ctx.ymd), levelWord: dd && dd.direction === "down" && dd.level !== "similar" ? dd.levelWord : null, nearText: near ? ` 같은 시기 보유 표본 가장 낮은 값(${cmp.min.value}℃, ${cmp.min.date})에 1℃ 이내인 예보예요(예보값이라 기록으로 말하지 않음).` : "" };
-  return res(true, near ? "near-low" : "low", make(ctx, "T02", `${ctx.sid}|T02|${date}`, facts, { topic: "temperature", lifeDecision: "morning", path: "stat", kind: "예보", U: Math.max(Ulo(f.p), near ? 0.9 : 0), A: LV.decision, T: timeValue({ startW: `${date} 06:00`, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { date, min: roundTo(d.min, 1), near: !!near }, basis: `단기예보 최저 ${String(d.minBase || "").slice(0, 16)} 발표 vs ASOS 공식 일자료`, lifeSlot: true, chart: { type: "range", focus: "min", date, unit: "℃", valueKind: "fcst", max: fin(d.max) ? d.max : null, min: d.min, meanMax: dailyCompare(ctx.store, date, "max")[0].mean, meanMin: cmp.mean, lowest: cmp.min?.value ?? null, lowestDate: cmp.min?.date ?? null, p10: f.p10, N: f.N, range: f.range } }));
+  return res(true, near ? "near-low" : "low", make(ctx, "T02", `${ctx.sid}|T02|${date}`, facts, { topic: "temperature", lifeDecision: "morning", path: "stat", kind: "예보", U: Math.max(Ulo(f.p), near ? 0.9 : 0), A: LV.decision, T: timeValue({ startW: `${date} 06:00`, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { date, min: roundTo(d.min, 1), near: !!near }, basis: `단기예보 최저 ${String(d.minBase || "").slice(0, 16)} 발표 vs ASOS 공식 일자료`, lifeSlot: true, chart: { type: "range", focus: "min", date, unit: "℃", valueKind: "fcst", max: fin(d.max) ? d.max : null, min: d.min, meanMax: dailyCompare(ctx.store, date, "max")[ctx.bi ?? 0].mean, meanMin: cmp.mean, lowest: cmp.min?.value ?? null, lowestDate: cmp.min?.date ?? null, p10: f.p10, N: f.N, range: f.range } }));
 }
 function streak(ctx, ruleId, wetSide) {
   const R = SR[ruleId];
@@ -264,7 +274,7 @@ function streak(ctx, ruleId, wetSide) {
   // 오늘 비가 와(또는 그쳐) 이미 끊겼을 수 있으면 뺌
   const raining = ctx.current?.fresh && (ctx.current.rn1 >= 0.1 || (ctx.current.pty && ctx.current.pty !== "없음"));
   const arr = rainRuns(ctx.store)[wetSide ? "wet" : "dry"];
-  const cmp = derivedCompare((dn) => { const i = dn - ctx.store.base; return [i >= 0 && i < ctx.store.n ? arr[i] : NaN]; }, L, run.n, { digits: 1 })[0];
+  const cmp = derivedCompare((dn) => { const i = dn - ctx.store.base; return [i >= 0 && i < ctx.store.n ? arr[i] : NaN]; }, L, run.n, { digits: 1 })[ctx.bi ?? 0];
   const f = distFacts(cmp, { side: "hi", observed: false });
   if (!f || f.N < MIN_SAMPLES_RANK) return res(false, "표본 부족");
   if (!(f.p >= R.p)) return res(false, "조건 밖");
@@ -284,7 +294,7 @@ function R03(ctx) {
   const sum = i >= 0 && i < ctx.store.n ? runs.sum7[i] : NaN;
   if (!Number.isFinite(sum)) return res(false, "7일 중 결측");
   if (!(sum > 0)) return res(false, "7일 무강수");
-  const cmp = derivedCompare((dn) => { const j = dn - ctx.store.base; return [j >= 0 && j < ctx.store.n ? runs.sum7[j] : NaN]; }, L, sum, { digits: 1 })[0];
+  const cmp = derivedCompare((dn) => { const j = dn - ctx.store.base; return [j >= 0 && j < ctx.store.n ? runs.sum7[j] : NaN]; }, L, sum, { digits: 1 })[ctx.bi ?? 0];
   const f = distFacts(cmp, { side: "hi" });
   if (!f || f.N < MIN_SAMPLES_RANK) return res(false, "표본 부족");
   if (!(f.p >= R.p)) return res(false, "조건 밖");
@@ -300,17 +310,17 @@ function R04(ctx) {
   const ptyNow = c.pty && c.pty !== "없음";
   if (!rainNow && !ptyNow) return res(false, fin(c.rn1) ? "비 없음" : "강수 자료 없음");
   const get = (dn) => [hAt(ctx.hs, "rn", dn, c.hour)];
-  const all = derivedCompare(get, ctx.ymd, NaN, { digits: 1 })[0];
+  const all = derivedCompare(get, ctx.ymd, NaN, { digits: 1 })[ctx.bi ?? 0];
   let share = null;
   if (all.status !== "insufficient" && all.samples) {
-    const wetN = derivedCompare(get, ctx.ymd, NaN, { digits: 1, filter: (v) => v >= R.wetMin })[0].samples;
+    const wetN = derivedCompare(get, ctx.ymd, NaN, { digits: 1, filter: (v) => v >= R.wetMin })[ctx.bi ?? 0].samples;
     share = Math.round((wetN / all.samples) * 1000) / 10;
   }
   const shareText = share != null ? ` 이맘때 이 시각에 비가 온 비율은 ${share}%(관측 ${all.samples}개).` : "";
   let state = "plain", f = null, U = null;
   if (rainNow) {
     // 조건부 분포는 표본 60개 기준 대신 30개·4개 해(3-2 R04)
-    const wet = derivedCompare(get, ctx.ymd, c.rn1, { digits: 1, filter: (v) => v >= R.wetMin, minRank: R.minWetSamples })[0];
+    const wet = derivedCompare(get, ctx.ymd, c.rn1, { digits: 1, filter: (v) => v >= R.wetMin, minRank: R.minWetSamples })[ctx.bi ?? 0];
     if (wet.status !== "insufficient" && wet.samples >= R.minWetSamples && wet.occurrenceYears >= R.minWetYears && wet.p != null) {
       f = distFacts(wet, { side: "hi" });
       U = f.U;
@@ -330,12 +340,12 @@ function S01(ctx) {
   const v = dAt(ctx.store, "nsnow", ymdToDn(L));
   if (!Number.isFinite(v)) return res(false, "신적설 자료 없음");
   if (!(v > 0)) return res(false, "신적설 없음");
-  const pos = derivedCompare((dn) => [dAt(ctx.store, "nsnow", dn)], L, v, { digits: 1, filter: (x) => x > 0, minRank: R.minPosSamples })[0];
+  const pos = derivedCompare((dn) => [dAt(ctx.store, "nsnow", dn)], L, v, { digits: 1, filter: (x) => x > 0, minRank: R.minPosSamples })[ctx.bi ?? 0];
   const okRare = pos.status !== "insufficient" && pos.samples >= R.minPosSamples && pos.occurrenceYears >= R.minPosYears && pos.p != null;
   const f = okRare ? distFacts(pos, { side: "hi" }) : null;
   const rareText = f ? ` 같은 시기 눈이 쌓인 날 ${f.N}개 중 이보다 많았던 날은 ${f.hiPct}%예요.` : " 같은 시기 눈 쌓인 날 표본이 적어 많고 적음은 말하지 않아요.";
   const facts = { cm: v, lastWord: dayWord(L, ctx.ymd), lastDate: L, rareText };
-  return res(true, "snow", make(ctx, "S01", `${ctx.sid}|S01|${L}`, facts, { topic: "precipitation", lifeDecision: "snow", path: f && f.U >= 0.3 ? "stat" : "life", kind: "관측", U: f?.U ?? null, A: LV.day, T: timeValue({ endW: `${L} 23:59`, nowW: ctx.nowW }), samples: f?.N ?? 0, minSamples: R.minPosSamples, material: { cm: roundTo(v, 1) }, basis: "ASOS 공식 일자료 최심신적설", scene: { kind: "snow", source: "obs", time: `${L} 23:59` } }));
+  return res(true, "snow", make(ctx, "S01", `${ctx.sid}|S01|${L}`, facts, { topic: "precipitation", lifeDecision: "snow", path: f && f.U >= 0.3 ? "stat" : "life", kind: "관측", U: f?.U ?? null, A: LV.day, T: timeValue({ endW: `${L} 23:59`, nowW: ctx.nowW }), samples: f?.N ?? 0, minSamples: R.minPosSamples, material: { cm: roundTo(v, 1) }, basis: "ASOS 공식 일자료 최심신적설", scene: { kind: "snow", source: "obs", time: `${L} 23:59` }, chart: f ? distChart(f, { metric: "nsnow", unit: "cm", value: v, label: "신적설", word: dayWord(L, ctx.ymd) }) : { type: "calendar", metric: "snow", days: snowCalendar(ctx.store, ctx.ymd, 30), from: L, to: L, side: "wet" } }));
 }
 const SKY_CLASS = (s) => (s === "맑음" ? "clear" : s === "흐림" ? "cloudy" : null);
 function C01(ctx) {
@@ -368,7 +378,7 @@ function N01(ctx) {
   for (let i = 0; i < R.hours; i++) { const h = by.get(t); if (!h || !fin(h.ta)) return res(false, "밤 시간 자료 부족"); vals.push(h.ta); kinds.add(h.kind); nightPts.push(pt(h)); t = wallAdd(t, 1); }
   const low = Math.min(...vals);
   if (!(low >= R.min)) return res(false, "조건 밖");
-  const cmp = derivedCompare((dn) => { let m = Infinity; for (let k = 0; k < R.hours; k++) { const hh = R.fromHour + k; const v = hAt(ctx.hs, "ta", dn + Math.floor(hh / 24), hh % 24); if (!Number.isFinite(v)) return [NaN]; m = Math.min(m, v); } return [m]; }, ctx.ymd, low, { digits: 1 })[0];
+  const cmp = derivedCompare((dn) => { let m = Infinity; for (let k = 0; k < R.hours; k++) { const hh = R.fromHour + k; const v = hAt(ctx.hs, "ta", dn + Math.floor(hh / 24), hh % 24); if (!Number.isFinite(v)) return [NaN]; m = Math.min(m, v); } return [m]; }, ctx.ymd, low, { digits: 1 })[ctx.bi ?? 0];
   const f = cmp.p != null && cmp.samples >= MIN_SAMPLES_RANK ? distFacts(cmp, { side: "hi", observed: false }) : null;
   const facts = { th: R.min, low: r1(low), count: R.hours, fromWord: "오늘", toWord: "내일", rareText: f ? ` 같은 시기 밤 최저기온 ${f.N}개 중 이보다 높았던 밤은 ${f.hiPct}%예요.` : "" };
   return res(true, "warm", make(ctx, "N01", `${ctx.sid}|N01|${ctx.ymd}`, facts, { topic: "temperature", lifeDecision: "sleep", path: "life", kind: kinds.has("obs") ? "혼합" : "예보", U: f?.U ?? null, A: LV.decision, T: timeValue({ startW: start, nowW: ctx.nowW }), samples: f?.N ?? 0, minSamples: 0, material: { low: roundTo(low, 1) }, basis: "실황·초단기·단기예보 정시 기온(추정)", lifeSlot: true, chart: { type: "night", threshold: R.min, unit: "℃", points: nightPts } }));
@@ -390,7 +400,7 @@ function T03(ctx) {
     if (Math.abs(dlt) < R.delta) continue;
     seen++;
     const sh = +h.time.slice(11, 13), sDate = h.time.slice(0, 10);
-    const cmp = derivedCompare((dn) => [hAt(ctx.hs, "ta", dn + Math.floor((sh + R.hours) / 24), (sh + R.hours) % 24) - hAt(ctx.hs, "ta", dn, sh)], sDate, dlt, { digits: 1 })[0];
+    const cmp = derivedCompare((dn) => [hAt(ctx.hs, "ta", dn + Math.floor((sh + R.hours) / 24), (sh + R.hours) % 24) - hAt(ctx.hs, "ta", dn, sh)], sDate, dlt, { digits: 1 })[ctx.bi ?? 0];
     const f = distFacts(cmp, { side: "both", observed: false });
     if (!f || f.N < MIN_SAMPLES_RANK || f.U < R.minU || f.mean == null) continue;
     if (dlt * f.mean > 0 && Math.abs(f.mean) >= R.usualFlat) continue; // 그 시각의 평소 흐름(아침 오름·저녁 내림)과 같은 방향이면 하루 변화로 봄

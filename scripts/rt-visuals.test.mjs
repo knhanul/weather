@@ -106,3 +106,31 @@ test("과거 유사일 겹쳐 보기: 오늘(hoursUsed 만)과 고른 날, 1~3�
   assert.equal((h.match(/data-simpick=/g) || []).length, 3);
   assert.equal(V.simOverlay({ ok: true, top: [] }, 0), "");
 });
+
+test("4단계 그림: 계절 점그래프·발표 흐름(전환에서 끊김)·지역 8행·이번 주·해마다 점·신적설 달력", () => {
+  const { RTViz: V } = load();
+  const rows = [...Array(36)].map((_, i) => ({ season: String(1990 + i), pos: i % 5 === 0 ? null : 150 + (i % 9), date: i % 5 === 0 ? null : `${1990 + i}-06-0${1 + (i % 9) % 9}`, state: i % 5 === 0 ? "none" : "hit" }));
+  const se = V.season({ type: "season", label: "첫 30℃", startMd: "01-01", rows, current: { pos: 156, date: "2026-06-06", kind: "obs" }, meanPos: 154, meanDate: "06-04", completeSeasons: 36, hitSeasons: 28, basisId: "all", basisLabel: "1990년 이후 평균", range: "1990~2025" });
+  assert.match(se, /class="vz vz-season"/); assert.match(se, /이번 6\/6/); assert.match(se, /사건 없던 시즌 8개/);
+  const none = V.season({ type: "season", label: "첫 영하", startMd: "08-01", rows, current: null, meanPos: 120, meanDate: "11-29", completeSeasons: 36, hitSeasons: 28, basisId: "all", range: "1990~2025" });
+  assert.match(none, /현재까지 확인되지 않음/);
+  const rv = V.revision({ type: "revision", label: "최고기온", date: "2026-10-18", unit: "℃", points: [{ base: "2026-10-15 06:00:00", value: 18, source: "중기예보" }, { base: "2026-10-15 18:00:00", value: 19, source: "중기예보" }, { base: "2026-10-16 05:00:00", value: 16, source: "단기예보" }, { base: "2026-10-16 08:00:00", value: 17, source: "단기예보" }] });
+  assert.match(rv, /단기예보로 바뀜/); assert.equal((rv.match(/<path /g) || []).length, 2); // 전환에서 선 두 개
+  const rg = V.regions({ type: "regions", time: "2026-10-17 15:00", highlight: "108", rows: [{ id: "108", name: "서울", temp: 20, diff: 3.2 }, { id: "143", name: "대구", temp: 22, diff: -1 }, { id: "184", name: "제주", temp: 23, diff: null }] });
+  assert.match(rg, /평소\(0\)/); assert.match(rg, /제주 비교 데이터 부족/);
+  const wk = V.week({ type: "week", from: "2026-10-12", to: "2026-10-18", today: "2026-10-17", range: "1990~2025", days: [{ date: "2026-10-16", max: 20, min: 10, source: "관측", meanMax: 21, meanMin: 11 }, { date: "2026-10-17", max: 19, min: 9, source: "단기예보", meanMax: 21, meanMin: 11 }, { date: "2026-10-18", max: null, min: null, source: null }] });
+  assert.match(wk, /stroke-dasharray="4 3"/); assert.match(wk, /오늘/);
+  const yr = V.years({ type: "years", metric: "avg", unit: "℃", label: "누적 평균기온", value: 14.2, year: 2026, mean: 13.5, range: "1990~2025", upTo: "10-16", rows: [{ year: 1990, value: 13 }, { year: 1991, value: null }, { year: 2025, value: 14 }] });
+  assert.match(yr, /올해 14.2℃/); assert.match(yr, /자료 부족한 해 1개/);
+  const sc = V.calendar({ type: "calendar", metric: "snow", days: [{ date: "2026-01-10", state: "wet", mm: 3 }, { date: "2026-01-11", state: "dry", mm: 0 }, { date: "2026-01-12", state: "pending", mm: null }], from: "2026-01-10", to: "2026-01-10", side: "wet" });
+  assert.match(sc, /눈 쌓인 날 1/); assert.doesNotMatch(sc, /연속 1일/);
+  assert.equal(V.chart({ type: "season", rows: [], label: "x", startMd: "01-01" }).includes("지난 시즌 자료 부족"), true);
+});
+
+test("4단계 시간축: 칩과 같은 열 폭(colW) — 너비 = 34 + 10 + 시간 수 × colW", () => {
+  const { RTViz: V } = load();
+  const fc = fcFrom("2026-10-17 16:00:00", 12);
+  const a = V.axis12({ nowW: "2026-10-17 15:20", fc, current: { time: "2026-10-17 15:00:00", ta: 15 } }, [], null, { colW: 62, parts: true });
+  assert.equal(a.width, 34 + 10 + 12 * 62);
+  assert.match(a.svg, /viewBox="0 0 788 /);
+});

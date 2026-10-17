@@ -58,11 +58,13 @@
     const n = ds.length, L = 4, cw = (width - L * 2) / n, sz = Math.min(cw - 1.5, 12);
     const cnt = (k) => ds.filter((d) => d.state === k).length;
     const runN = ds.filter((d) => d.date >= c.from && d.date <= c.to).length;
-    const label = `최근 ${n}일 강수: 비 온 날 ${cnt("wet")}일, 안 온 날 ${cnt("dry")}일, 자료 없음 ${cnt("missing")}일, 오늘은 아직 끝나지 않음. ${md(c.from)}~${md(c.to)} ${runN}일 연속 ${c.side === "wet" ? "강수" : "무강수"}.`;
+    const snow = c.metric === "snow";
+    const WD = snow ? { wet: "눈 쌓인 날", dry: "신적설 없음", u: "cm" } : { wet: "강수일", dry: "무강수", u: "mm" };
+    const label = snow ? `최근 ${n}일 신적설: 새로 쌓인 날 ${cnt("wet")}일, 없음 ${cnt("dry")}일, 자료 없음 ${cnt("missing")}일, 오늘은 아직 끝나지 않음.` : `최근 ${n}일 강수: 비 온 날 ${cnt("wet")}일, 안 온 날 ${cnt("dry")}일, 자료 없음 ${cnt("missing")}일, 오늘은 아직 끝나지 않음.${c.from ? ` ${md(c.from)}~${md(c.to)} ${runN}일 연속 ${c.side === "wet" ? "강수" : "무강수"}.` : ""}`;
     const o = svgOpen(width, 56, label);
     let s = o.s;
     const i0 = ds.findIndex((d) => d.date === c.from), i1 = ds.findIndex((d) => d.date === c.to);
-    if (i0 >= 0 && i1 >= 0) { const xa = L + i0 * cw, xb = L + (i1 + 1) * cw; s += `<path d="M${xa + 1},14 v-5 H${xb - 1} v5" fill="none" stroke="${C.warn}" stroke-width="1.6"/><text x="${(xa + xb) / 2}" y="7" font-size="10" text-anchor="middle" fill="${C.warn}" font-weight="700">${runN}일 연속</text>`; }
+    if (i0 >= 0 && i1 >= 0 && runN > 1) { const xa = L + i0 * cw, xb = L + (i1 + 1) * cw; s += `<path d="M${xa + 1},14 v-5 H${xb - 1} v5" fill="none" stroke="${C.warn}" stroke-width="1.6"/><text x="${(xa + xb) / 2}" y="7" font-size="10" text-anchor="middle" fill="${C.warn}" font-weight="700">${runN}일 연속</text>`; }
     ds.forEach((d, i) => {
       const x = L + i * cw + (cw - sz) / 2, y = 18;
       const st = d.state;
@@ -70,12 +72,12 @@
         : st === "dry" ? `<rect x="${x + 0.5}" y="${y + 0.5}" width="${sz - 1}" height="${sz - 1}" rx="2" fill="#fff" stroke="#9aa8bd"/>`
         : st === "missing" ? `<rect x="${x + 0.5}" y="${y + 0.5}" width="${sz - 1}" height="${sz - 1}" rx="2" fill="url(#${o.id}h)" stroke="#9aa8bd"/>`
         : `<rect x="${x + 0.5}" y="${y + 0.5}" width="${sz - 1}" height="${sz - 1}" rx="2" fill="none" stroke="${C.fc}" stroke-dasharray="2 1.5"/>`;
-      s += `<title>${esc(d.date)} ${st === "wet" ? `비 ${d.mm}mm` : st === "dry" ? "강수 없음(0.1mm 미만)" : st === "missing" ? "자료 없음" : "오늘 — 아직 끝나지 않음"}</title>`;
+      s += `<title>${esc(d.date)} ${st === "wet" ? (snow ? `신적설 ${d.mm}cm` : `비 ${d.mm}mm`) : st === "dry" ? (snow ? "신적설 없음" : "강수 없음(0.1mm 미만)") : st === "missing" ? "자료 없음" : "오늘 — 아직 끝나지 않음"}</title>`;
     });
     const tick = (i) => `<text x="${L + i * cw + cw / 2}" y="46" font-size="10" text-anchor="${i === 0 ? "start" : i === n - 1 ? "end" : "middle"}" fill="${C.muted}">${i === n - 1 ? "오늘" : md(ds[i].date)}</text>`;
     s += tick(0) + tick(Math.floor(n / 2)) + tick(n - 1) + `</svg>`;
     const sw = (inner) => `<svg width="11" height="11" aria-hidden="true"><defs>${hatch(`cl${uid}`)}</defs>${inner}</svg>`;
-    const cap = `<span class="vz-key">${sw(`<rect x="1" y="1" width="9" height="9" rx="2" fill="${C.wet}"/>`)}강수일 ${cnt("wet")}</span><span class="vz-key">${sw(`<rect x="1.5" y="1.5" width="8" height="8" rx="2" fill="#fff" stroke="#9aa8bd"/>`)}무강수 ${cnt("dry")}</span><span class="vz-key">${sw(`<rect x="1.5" y="1.5" width="8" height="8" rx="2" fill="url(#cl${uid})" stroke="#9aa8bd"/>`)}결측 ${cnt("missing")}</span><span class="vz-key">${sw(`<rect x="1.5" y="1.5" width="8" height="8" rx="2" fill="none" stroke="${C.fc}" stroke-dasharray="2 1.5"/>`)}아직 안 온 날</span><span class="vz-key"><svg width="16" height="9" aria-hidden="true"><path d="M1,8 v-6 H15 v6" fill="none" stroke="#c0262d" stroke-width="1.6"/></svg>${md(c.from)}~${md(c.to)} 연속 ${runN}일</span>`;
+    const cap = `<span class="vz-key">${sw(`<rect x="1" y="1" width="9" height="9" rx="2" fill="${C.wet}"/>`)}${WD.wet} ${cnt("wet")}</span><span class="vz-key">${sw(`<rect x="1.5" y="1.5" width="8" height="8" rx="2" fill="#fff" stroke="#9aa8bd"/>`)}${WD.dry} ${cnt("dry")}</span><span class="vz-key">${sw(`<rect x="1.5" y="1.5" width="8" height="8" rx="2" fill="url(#cl${uid})" stroke="#9aa8bd"/>`)}결측 ${cnt("missing")}</span><span class="vz-key">${sw(`<rect x="1.5" y="1.5" width="8" height="8" rx="2" fill="none" stroke="${C.fc}" stroke-dasharray="2 1.5"/>`)}오늘(집계 전)</span>${c.from && runN > 1 ? `<span class="vz-key"><svg width="16" height="9" aria-hidden="true"><path d="M1,8 v-6 H15 v6" fill="none" stroke="#c0262d" stroke-width="1.6"/></svg>${md(c.from)}~${md(c.to)} 연속 ${runN}일</span>` : ""}`;
     return fig(s, cap, "vz-cal");
   }
 
@@ -155,6 +157,137 @@
     return `<figure class="vz vz-sky" role="img" aria-label="${esc(label)}"><div class="vz-skyrow">${hs.map((h) => { const t = h.pty && h.pty !== "없음" ? h.pty : h.sky; return `<div class="vz-skyc${h.time === c.at ? " at" : ""}${t ? "" : " miss"}"><span>${hh(h.time)}시</span>${t ? A.iconSvg(A.kind(h.sky, h.pty), A.night(hh(h.time)), 24, t) : `<i class="vz-hx" aria-hidden="true"></i>`}<small>${esc(t || "자료 없음")}</small></div>`; }).join("")}</div><figcaption class="vz-cap"><span class="vz-key">테두리 = 바뀌는 시각</span><span class="vz-key">모두 예보</span></figcaption></figure>`;
   }
 
+  // ---------------------------------------------------------------- 10) 계절 신호 점그래프(4장): 해마다 사건 날짜(가로 = 시즌 안 날짜, 세로 = 시즌), 올해 강조·평균선
+  function season(c, { width = 340 } = {}) {
+    const rows = (c.rows || []).slice().reverse(); // 최근 시즌 위
+    const hit = rows.filter((r) => r.state === "hit");
+    const cur = c.current;
+    const ps = hit.map((r) => r.pos).concat(cur ? [cur.pos] : []).concat(fin(c.meanPos) ? [c.meanPos] : []);
+    if (!ps.length) return fig("", `<span class="rt-ins">${esc(c.label)}: 지난 시즌 자료 부족</span>`);
+    const lo = Math.min(...ps) - 6, hi = Math.max(...ps) + 6;
+    const L = 40, R = 46, T = 16, rowH = rows.length > 24 ? 3.6 : 7, H = T + (rows.length + 1.6) * rowH + 30;
+    const x = (p) => L + ((p - lo) / (hi - lo)) * (width - L - R);
+    const dOf = (p) => { const base = Date.parse(`2001-${c.startMd}T00:00:00Z`); const d = new Date(base + Math.round(p) * 864e5); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`; };
+    const label = `${c.label}: ${c.range}년 완전한 ${c.completeSeasons}개 시즌 중 ${c.hitSeasons}개 발생${c.meanDate ? `, 평균 ${c.meanDate.replace("-", "/")}` : ""}${cur ? `. 이번 시즌 ${cur.kind === "fcst" ? "예보로 가능성" : ""} ${md(cur.date)}` : ". 이번 시즌 현재까지 확인되지 않음"}.`;
+    const o = svgOpen(width, H, label);
+    let s = o.s;
+    const yR = (i) => T + (i + 1.6) * rowH;
+    // 가로 눈금: 한 달마다(1일)
+    for (let p = Math.ceil(lo); p <= hi; p++) { const t = dOf(p); if (t.endsWith("/1")) s += `<line x1="${x(p)}" x2="${x(p)}" y1="${T}" y2="${H - 26}" stroke="${C.grid}"/><text x="${x(p)}" y="${H - 14}" font-size="10" text-anchor="middle" fill="${C.muted}">${t.split("/")[0]}월</text>`; }
+    if (fin(c.meanPos)) s += `<line x1="${x(c.meanPos)}" x2="${x(c.meanPos)}" y1="${T - 2}" y2="${H - 26}" stroke="${C.mean}" stroke-width="2" stroke-dasharray="4 3"/><text x="${clamp(x(c.meanPos), 30, width - 30)}" y="${H - 2}" font-size="10.5" text-anchor="middle" fill="${C.mean}" font-weight="700">평균 ${c.meanDate.replace("-", "/")}</text>`;
+    if (c.r5 && fin(c.r5.meanPos) && c.basisId !== "r5") s += `<line x1="${x(c.r5.meanPos)}" x2="${x(c.r5.meanPos)}" y1="${T - 2}" y2="${H - 26}" stroke="#c0262d" stroke-width="1.2" stroke-dasharray="2 2" opacity=".8"/>`;
+    rows.forEach((r, i) => {
+      const yy = yR(i);
+      if (r.state === "hit") s += `<circle cx="${x(r.pos)}" cy="${yy}" r="${rowH > 4 ? 3 : 2.2}" fill="${C.obs}" opacity=".55"><title>${esc(r.season)} ${esc(r.date)}</title></circle>`;
+      else if (r.state === "none") s += `<text x="${width - R + 4}" y="${yy + 2}" font-size="7" fill="${C.muted}">·</text>`;
+      if (i % 10 === 0 || i === rows.length - 1) s += `<text x="${L - 5}" y="${yy + 3}" font-size="9.5" text-anchor="end" fill="${C.muted}">${esc(String(r.season).slice(0, 4))}</text>`;
+    });
+    if (cur) {
+      const cx = x(cur.pos), fc = cur.kind === "fcst";
+      s += `<line x1="${L}" x2="${width - R}" y1="${T - 4}" y2="${T - 4}" stroke="${C.grid}"/>` + (fc ? `<circle cx="${cx}" cy="${T - 4}" r="6" fill="#fff" stroke="${C.fc}" stroke-width="2.4" stroke-dasharray="3 2"/>` : `<circle cx="${cx}" cy="${T - 4}" r="6" fill="${C.warn}" stroke="#fff" stroke-width="2"/>`);
+      s += `<text x="${clamp(cx + 9, 2, width - 70)}" y="${T}" font-size="11" font-weight="700" fill="${fc ? C.fc : C.warn}">${fc ? "가능성 " : "이번 "}${md(cur.date)}</text>`;
+    } else s += `<text x="${L}" y="${T}" font-size="10.5" fill="${C.muted}">이번 시즌: 현재까지 확인되지 않음</text>`;
+    s += `<text x="${width - R + 4}" y="${T + rowH * 1.6 - 6}" font-size="9" fill="${C.muted}">없음</text></svg>`;
+    const none = rows.filter((r) => r.state === "none").length, inc = rows.filter((r) => r.state === "incomplete").length;
+    const cap = `<span class="vz-key"><svg width="10" height="10" aria-hidden="true"><circle cx="5" cy="5" r="4" fill="${C.obs}" opacity=".55"/></svg>지난 시즌 ${c.hitSeasons}개</span>${cur ? `<span class="vz-key"><svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="5" fill="${cur.kind === "fcst" ? "#fff" : C.warn}" stroke="${cur.kind === "fcst" ? C.fc : "#fff"}" stroke-width="1.6"/></svg>${cur.kind === "fcst" ? "예보 가능성" : "이번 시즌"}</span>` : ""}${fin(c.meanPos) ? `<span class="vz-key"><i class="k-mean"></i>${esc(c.basisLabel || "")} ${c.meanDate.replace("-", "/")}</span>` : `<span class="vz-key rt-ins">${esc(c.statusText || "")}</span>`}${c.r5 && c.basisId !== "r5" ? `<span class="vz-key"><svg width="12" height="10" aria-hidden="true"><line x1="6" x2="6" y1="0" y2="10" stroke="#c0262d" stroke-dasharray="2 2"/></svg>최근 5년 ${c.r5.meanDate.replace("-", "/")}</span>` : ""}<span class="vz-key">사건 없던 시즌 ${none}개${inc ? ` · 자료 부족 ${inc}개(뺌)` : ""}</span>`;
+    return fig(s, cap, "vz-season");
+  }
+  // ---------------------------------------------------------------- 11) 예보가 바뀐 흐름(14장): 가로 = 발표 시각, 세로 = 값. 단기↔중기 전환에서 선을 끊음
+  function revision(c, { width = 340 } = {}) {
+    const P = (c.points || []).filter((p) => fin(+p.value)).map((p) => ({ ...p, value: +p.value }));
+    if (P.length < 2) return "";
+    const u = c.unit || "℃";
+    const t = (b) => Date.parse(`${String(b).slice(0, 10)}T${String(b).slice(11, 19) || "00:00:00"}Z`);
+    const t0 = t(P[0].base), t1 = t(P.at(-1).base), span = Math.max(1, t1 - t0);
+    const vs = P.map((p) => p.value), lo = Math.floor(Math.min(...vs) - 1), hi = Math.ceil(Math.max(...vs) + 1);
+    const L = 30, R = 34, T = 14, B = 30, H = 130;
+    const x = (b) => L + ((t(b) - t0) / span) * (width - L - R), y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+    const label = `${c.date ? `${md(c.date)} ` : ""}${c.label} 예보의 발표별 값 ${P.length}회: ${P.map((p) => `${String(p.base).slice(5, 16)} ${p.value}${u}`).join(", ")}.`;
+    const o = svgOpen(width, H, label);
+    let s = o.s;
+    const step = hi - lo > 8 ? 2 : 1;
+    for (let v = Math.ceil(lo / step) * step; v <= hi; v += step * (hi - lo > 16 ? 2 : 1)) s += `<line x1="${L}" x2="${width - R}" y1="${y(v)}" y2="${y(v)}" stroke="${C.grid}"/><text x="${L - 4}" y="${y(v) + 3.5}" font-size="10" text-anchor="end" fill="${C.muted}">${v}</text>`;
+    // 출처별로 끊어 그림
+    let seg = [], d = "";
+    const flush = () => { if (seg.length > 1) d += `<path d="${seg.map((p, i) => `${i ? "L" : "M"}${x(p.base).toFixed(1)},${y(p.value).toFixed(1)}`).join("")}" fill="none" stroke="${seg[0].source === "중기예보" ? "#8a4b00" : C.fc}" stroke-width="2.2"/>`; seg = []; };
+    P.forEach((p, i) => { if (i && p.source !== P[i - 1].source) { flush(); const xm = (x(P[i - 1].base) + x(p.base)) / 2; d += `<line x1="${xm}" x2="${xm}" y1="${T}" y2="${H - B}" stroke="#9aa8bd" stroke-dasharray="3 3"/><text x="${xm + 3}" y="${T + 8}" font-size="9.5" fill="${C.muted}">${esc(p.source)}로 바뀜</text>`; } seg.push(p); });
+    flush();
+    s += d;
+    P.forEach((p, i) => { const last = i === P.length - 1; s += `<circle cx="${x(p.base)}" cy="${y(p.value)}" r="${last ? 4.5 : 3}" fill="${p.source === "중기예보" ? "#8a4b00" : C.fc}"${last ? ` stroke="#fff" stroke-width="1.5"` : ""}><title>${esc(p.source)} ${esc(String(p.base).slice(0, 16))} 발표 ${p.value}${esc(u)}</title></circle>`; if (last || P.length <= 6 || i === 0) s += `<text x="${clamp(x(p.base), 10, width - 10)}" y="${y(p.value) - 7}" font-size="10.5" text-anchor="middle" font-weight="${last ? 700 : 400}" fill="${C.obs}">${p.value}</text>`; });
+    const tl = (b, anchor) => `<text x="${x(b)}" y="${H - 14}" font-size="10" text-anchor="${anchor}" fill="${C.muted}">${md(String(b).slice(0, 10))} ${+String(b).slice(11, 13)}시</text>`;
+    s += tl(P[0].base, "start") + tl(P.at(-1).base, "end") + `<text x="${(L + width - R) / 2}" y="${H - 2}" font-size="10" text-anchor="middle" fill="${C.muted}">발표 시각 →</text></svg>`;
+    const srcs = [...new Set(P.map((p) => p.source))];
+    const cap = srcs.map((sr) => `<span class="vz-key"><svg width="18" height="8" aria-hidden="true"><line x1="1" y1="4" x2="17" y2="4" stroke="${sr === "중기예보" ? "#8a4b00" : C.fc}" stroke-width="2.2"/></svg>${esc(sr)} ${P.filter((p) => p.source === sr).length}회</span>`).join("") + `<span class="vz-key">세로 = ${esc(c.label)}(${esc(u)}) · 신뢰도가 아니라 발표 사이 변화</span>`;
+    return fig(s, cap, "vz-rev");
+  }
+  // ---------------------------------------------------------------- 12) 지역 점그래프(13장): 지점마다 한 줄, 0 = 같은 시기·시각 평균, 점 = 지금 차이
+  function regions(c, { width = 340 } = {}) {
+    const rows = (c.rows || []).slice(0, 8); if (!rows.length) return "";
+    const ds = rows.map((r) => r.diff).filter(fin), m = Math.max(3, ...ds.map((v) => Math.abs(v))) + 0.6;
+    const L = 46, R = 70, T = 16, rh = 20, H = T + rows.length * rh + 18;
+    const x = (v) => L + ((v + m) / (2 * m)) * (width - L - R);
+    const label = `같은 시각 ${String(c.time || "").slice(11, 16)} 지점별 같은 시기 평균과의 차이: ${rows.map((r) => `${r.name} ${fin(r.diff) ? `${r.diff > 0 ? "+" : ""}${r.diff}℃` : "비교 데이터 부족"}`).join(", ")}.`;
+    const o = svgOpen(width, H, label);
+    let s = o.s;
+    for (const v of [-3, 3]) if (Math.abs(v) < m) s += `<line x1="${x(v)}" x2="${x(v)}" y1="${T - 4}" y2="${H - 16}" stroke="${C.grid}" stroke-dasharray="3 3"/><text x="${x(v)}" y="${H - 4}" font-size="9.5" text-anchor="middle" fill="${C.muted}">${v > 0 ? "+" : "−"}3</text>`;
+    s += `<line x1="${x(0)}" x2="${x(0)}" y1="${T - 6}" y2="${H - 16}" stroke="${C.mean}" stroke-width="1.6"/><text x="${x(0)}" y="${T - 8}" font-size="9.5" text-anchor="middle" fill="${C.mean}">평소(0)</text>`;
+    rows.forEach((r, i) => {
+      const yy = T + i * rh + rh / 2, me = String(r.id) === String(c.highlight);
+      if (me) s += `<rect x="0" y="${yy - rh / 2 + 1}" width="${width}" height="${rh - 2}" rx="4" fill="#fff4d6"/>`;
+      s += `<line x1="${L}" x2="${width - R}" y1="${yy}" y2="${yy}" stroke="${C.grid}"/><text x="${L - 6}" y="${yy + 4}" font-size="11" text-anchor="end" font-weight="${me ? 700 : 400}" fill="${C.obs}">${esc(r.name)}</text>`;
+      if (fin(r.diff)) { const col = r.diff >= 3 ? C.warn : r.diff <= -3 ? "#2f5bd3" : C.obs; s += `<line x1="${x(0)}" x2="${x(r.diff)}" y1="${yy}" y2="${yy}" stroke="${col}" stroke-width="2" opacity=".5"/><circle cx="${x(r.diff)}" cy="${yy}" r="${me ? 6 : 5}" fill="${col}"/>`; }
+      else s += `<rect x="${x(0) - 14}" y="${yy - 5}" width="28" height="10" rx="2" fill="url(#${o.id}h)"/>`;
+      s += `<text x="${width - R + 6}" y="${yy + 4}" font-size="10.5" fill="${C.obs}" font-weight="${me ? 700 : 400}">${fin(r.diff) ? `${r.diff > 0 ? "+" : r.diff < 0 ? "−" : "±"}${Math.abs(r.diff)}` : "–"}</text><text x="${width - 4}" y="${yy + 4}" font-size="9.5" text-anchor="end" fill="${C.muted}">${f1(r.temp)}℃</text>`;
+    });
+    s += `</svg>`;
+    return fig(s, `<span class="vz-key">점 = 지금 차이(℃), 0 = 같은 시기·시각 평균</span><span class="vz-key">오른쪽 = 차이 · 실황</span><span class="vz-key">${String(c.time || "").slice(11, 16)} 같은 시각 ${rows.length}개 지점 · 실황은 격자, 과거는 ASOS(참고 비교)</span>`, "vz-reg");
+  }
+  // ---------------------------------------------------------------- 13) 이번 주 막대(7일): 관측 = 채움, 예보 = 점선 테, 회색 = 같은 시기 평균 최저~최고
+  function week(c, { width = 340 } = {}) {
+    const ds = c.days || []; if (!ds.length) return "";
+    const vals = ds.flatMap((d) => [d.max, d.min, d.meanMax, d.meanMin]).filter(fin); if (!vals.length) return "";
+    const lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1);
+    const L = 26, R = 6, T = 14, B = 30, H = 150, cw = (width - L - R) / ds.length;
+    const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+    const DOW = "일월화수목금토";
+    const label = `이번 주 ${md(c.from)}~${md(c.to)} 최고·최저: ${ds.map((d) => `${md(d.date)} ${d.source === "관측" ? "관측" : d.source ? "예보" : "자료 없음"} ${f1(d.min)}~${f1(d.max)}℃(평균 ${f1(d.meanMin)}~${f1(d.meanMax)})`).join(", ")}.`;
+    const o = svgOpen(width, H, label);
+    let s = o.s;
+    const step = hi - lo > 14 ? 5 : 2;
+    for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) s += `<line x1="${L}" x2="${width - R}" y1="${y(v)}" y2="${y(v)}" stroke="${C.grid}"/><text x="${L - 4}" y="${y(v) + 3.5}" font-size="10" text-anchor="end" fill="${C.muted}">${v}</text>`;
+    ds.forEach((d, i) => {
+      const cx = L + i * cw + cw / 2, bw = Math.min(16, cw * 0.42), obs = d.source === "관측";
+      if (fin(d.meanMax) && fin(d.meanMin)) s += `<rect x="${cx - bw / 2 - 4}" y="${y(d.meanMax)}" width="${bw + 8}" height="${Math.max(2, y(d.meanMin) - y(d.meanMax))}" rx="3" fill="#b9c6d8" opacity=".55"/>`;
+      if (fin(d.max) && fin(d.min)) s += obs ? `<rect x="${cx - bw / 2}" y="${y(d.max)}" width="${bw}" height="${Math.max(2, y(d.min) - y(d.max))}" rx="3" fill="${C.obs}"/>` : `<rect x="${cx - bw / 2}" y="${y(d.max)}" width="${bw}" height="${Math.max(2, y(d.min) - y(d.max))}" rx="3" fill="#fff" stroke="${C.fc}" stroke-width="2" stroke-dasharray="4 3"/>`;
+      else s += `<rect x="${cx - bw / 2}" y="${T}" width="${bw}" height="${H - T - B}" fill="url(#${o.id}h)" opacity=".5"/>`;
+      if (fin(d.max)) s += `<text x="${cx}" y="${y(d.max) - 3}" font-size="9.5" text-anchor="middle" fill="${C.obs}">${f1(d.max)}</text>`;
+      if (fin(d.min)) s += `<text x="${cx}" y="${y(d.min) + 11}" font-size="9.5" text-anchor="middle" fill="${C.muted}">${f1(d.min)}</text>`;
+      const today = d.date === c.today;
+      s += `<text x="${cx}" y="${H - 14}" font-size="10.5" text-anchor="middle" font-weight="${today ? 700 : 400}" fill="${today ? C.warn : C.muted}">${DOW[new Date(`${d.date}T12:00:00Z`).getUTCDay()]}</text><text x="${cx}" y="${H - 3}" font-size="9" text-anchor="middle" fill="${C.muted}">${today ? "오늘" : md(d.date)}</text>`;
+    });
+    s += `</svg>`;
+    return fig(s, `<span class="vz-key"><i style="background:${C.obs}"></i>관측</span><span class="vz-key"><i style="background:#fff;border:2px dashed ${C.fc}"></i>예보</span><span class="vz-key"><i class="k-mean2"></i>${esc(c.range || "")}년 같은 날 평균 최저~최고</span>`, "vz-week");
+  }
+  // ---------------------------------------------------------------- 14) 해마다 점(올해 누적 등): 가로 = 연도, 세로 = 값, 올해 강조·평균선
+  function years(c, { width = 340 } = {}) {
+    const rows = (c.rows || []).filter((r) => fin(r.value)); if (!rows.length || !fin(c.value)) return "";
+    const vs = rows.map((r) => r.value).concat([c.value]), lo = Math.min(...vs), hi = Math.max(...vs), pad0 = (hi - lo) * 0.08 || 1;
+    const L = 40, R = 40, T = 16, B = 22, H = 130, y0 = rows[0].year, y1 = c.year;
+    const x = (yr) => L + ((yr - y0) / Math.max(1, y1 - y0)) * (width - L - R), y = (v) => T + (1 - (v - lo + pad0) / (hi - lo + 2 * pad0)) * (H - T - B);
+    const u = c.unit || "";
+    const label = `${c.label}(1/1~${c.upTo.replace("-", "/")}) 해마다 값과 올해 ${c.value}${u}, ${c.range}년 평균 ${c.mean}${u}.`;
+    const o = svgOpen(width, H, label);
+    let s = o.s;
+    if (fin(c.mean)) s += `<line x1="${L}" x2="${width - R}" y1="${y(c.mean)}" y2="${y(c.mean)}" stroke="${C.mean}" stroke-width="1.6" stroke-dasharray="4 3"/><text x="${width - R + 4}" y="${y(c.mean) + 3.5}" font-size="10" fill="${C.mean}">평균</text>`;
+    for (const r of rows) s += `<circle cx="${x(r.year)}" cy="${y(r.value)}" r="3" fill="${C.obs}" opacity=".5"><title>${r.year} ${r.value}${esc(u)}</title></circle>`;
+    s += `<circle cx="${x(c.year)}" cy="${y(c.value)}" r="6" fill="${C.warn}" stroke="#fff" stroke-width="2"/><text x="${x(c.year) - 8}" y="${y(c.value) - 8}" font-size="11" text-anchor="end" font-weight="700" fill="${C.warn}">올해 ${c.value}${esc(u)}</text>`;
+    s += `<text x="${L}" y="${H - 5}" font-size="10" fill="${C.muted}">${y0}</text><text x="${x(c.year)}" y="${H - 5}" font-size="10" text-anchor="end" fill="${C.muted}">${c.year}</text>`;
+    const mx = rows.reduce((a, b) => (b.value > a.value ? b : a)), mn = rows.reduce((a, b) => (b.value < a.value ? b : a));
+    s += `<text x="${L - 4}" y="${y(mx.value) + 3.5}" font-size="9.5" text-anchor="end" fill="${C.muted}">${mx.value}</text><text x="${L - 4}" y="${y(mn.value) + 3.5}" font-size="9.5" text-anchor="end" fill="${C.muted}">${mn.value}</text></svg>`;
+    const miss = (c.rows || []).filter((r) => !fin(r.value)).length;
+    return fig(s, `<span class="vz-key"><svg width="10" height="10" aria-hidden="true"><circle cx="5" cy="5" r="4" fill="${C.obs}" opacity=".5"/></svg>지난 해 ${rows.length}개</span><span class="vz-key"><i class="k-mean"></i>${esc(c.range)}년 평균 ${c.mean}${esc(u)}</span>${miss ? `<span class="vz-key">자료 부족한 해 ${miss}개(뺌)</span>` : ""}<span class="vz-key">1/1~${esc(c.upTo.replace("-", "/"))} 같은 누적 기간</span>`, "vz-years");
+  }
+
   function chart(c) {
     if (!c) return "";
     try {
@@ -165,6 +298,11 @@
         case "line": case "night": return line(c);
         case "commute": return commute(c);
         case "sky": return sky(c);
+        case "season": return season(c);
+        case "revision": return revision(c);
+        case "regions": return regions(c);
+        case "week": return week(c);
+        case "years": return years(c);
         default: return "";
       }
     } catch (e) { return ""; }
@@ -279,7 +417,10 @@
   }
 
   // ---------------------------------------------------------------- 9) 앞으로 12시간 공용 시간축: 기온 선 · 강수 띠 · 바람 띠 + 구간 음영(탭하면 이유)
-  function axis12(o, segs, sel, { width = 340 } = {}) {
+  // colW 를 주면 시간 칸 폭을 고정(칸 머리 칩과 같은 열에 맞추려고) — width = 34 + 10 + 시간 수 × colW
+  const axisSpan = (o) => { const fc = (o.fc || []).slice(0, 12); if (!fc.length) return null; const cur = o.current && fin(o.current.ta) ? o.current : null; const first = cur ? cur.time : fc[0].time; const T = (t) => Date.parse(t.replace(" ", "T") + "Z"); return { span: Math.max(1, (T(fc.at(-1).time) - T(first)) / 36e5), off: (T(fc[0].time) - T(first)) / 36e5, fc }; };
+  function axis12(o, segs, sel, { width = 340, colW = null, parts = false } = {}) {
+    if (colW) { const sp = axisSpan(o); if (sp) width = Math.round(34 + 10 + sp.span * colW); }
     const fc = (o.fc || []).slice(0, 12); if (!fc.length) return `<p class="rt-ins">예보 자료가 없습니다</p>`;
     const cur = o.current && fin(o.current.ta) ? o.current : null;
     const pts = (cur ? [{ time: cur.time, ta: cur.ta, kind: "obs", ws: cur.ws }] : []).concat(fc.map((h) => ({ ...h, kind: "fcst" })));
@@ -324,14 +465,28 @@
     });
     pts.forEach((p, i) => { if (i % 2 === 0 || i === pts.length - 1) s += `<text x="${clamp(xt(p.time), 8, width - 8)}" y="${H - 4}" font-size="10" text-anchor="middle" fill="${C.muted}">${i === 0 && cur ? "지금" : `${hh(p.time)}시`}</text>`; });
     s += `</svg>`;
-    return fig(s, `${cur ? legend("obs") : ""}${legend("fc")}<span class="vz-key"><i class="k-wet"></i>강수형태 예보</span><span class="vz-key">숫자 = 강수확률%</span><span class="vz-key"><i class="k-wind"></i>바람 5m/s 이상</span>${legend("miss")}<span class="vz-key"><i class="k-seg"></i>구간(누르면 이유)</span>`, "vz-axis");
+    const cap = `${cur ? legend("obs") : ""}${legend("fc")}<span class="vz-key"><i class="k-wet"></i>강수형태 예보</span><span class="vz-key">숫자 = 강수확률%</span><span class="vz-key"><i class="k-wind"></i>바람 5m/s 이상</span>${legend("miss")}<span class="vz-key"><i class="k-seg"></i>구간(누르면 이유)</span>`;
+    if (parts) return { svg: s, cap, width };
+    return fig(s, cap, "vz-axis");
   }
   // 12시간 칸 전체(그래프 + 구간 카드 + 이유) 그리기·탭 처리
   const DAY = { o: null, segs: [], sel: null };
   function dayPaint(el) {
     const { o, segs, sel } = DAY, today = o.nowW.slice(0, 10);
     const s0 = segs.find((x) => x.id === sel) || segs[0];
-    el.innerHTML = `${axis12(o, segs, s0?.id)}<div class="vz-segs" role="group" aria-label="하루 구간별 옷차림">${segs.map((x) => segCard(x, today, x === s0)).join("")}</div>${segPanel(s0, today)}`;
+    // 칸 머리 칩(o.chip 이 있으면)과 시간축을 한 가로 스크롤 안 같은 열 폭으로: 칩 i 의 가운데 = 그 시각 x
+    let top;
+    const sp = o.chip ? axisSpan(o) : null;
+    if (sp) {
+      const avail = Math.max(300, el.clientWidth || 340);
+      const colW = Math.max(56, Math.floor((avail - 44) / sp.span));
+      const a = axis12(o, segs, s0?.id, { colW, parts: true });
+      const pl = 34 + sp.off * colW - colW / 2;
+      top = `<div class="vz-sync" role="group" aria-label="앞으로 12시간 시간별 예보와 시간축"><div class="vz-sync-in" style="width:${a.width}px"><div class="vz-chiprow" style="margin-left:${pl}px">${sp.fc.map((h) => `<div class="vz-chipc" style="width:${colW}px">${o.chip(h)}</div>`).join("")}</div><figure class="vz vz-axis">${a.svg.replace('class="vz-svg"', `class="vz-svg" style="width:${a.width}px;max-width:none"`)}</figure></div></div><figcaption class="vz-cap">${a.cap}</figcaption>${o.more || ""}`;
+    } else top = axis12(o, segs, s0?.id);
+    const sl = el.querySelector(".vz-sync")?.scrollLeft || 0;
+    el.innerHTML = `${top}<div class="vz-segs" role="group" aria-label="하루 구간별 옷차림">${segs.map((x) => segCard(x, today, x === s0)).join("")}</div>${segPanel(s0, today)}`;
+    const sy = el.querySelector(".vz-sync"); if (sy && sl) sy.scrollLeft = sl;
   }
   function day(el, o) { DAY.o = o; DAY.segs = segments(o); DAY.sel = DAY.segs[0]?.id ?? null; dayPaint(el); el.dataset.vzDay = "1"; }
   if (typeof document !== "undefined") document.addEventListener("click", (e) => {
@@ -344,5 +499,5 @@
   let sid = 0;
   const simSlot = (r) => { if (!r?.ok || !r.top?.length || !r.target?.ta) return ""; const k = `s${++sid}`; SIM.set(k, r); return `<div class="vz-simhost" data-simov="${k}">${simOverlay(r, 0)}</div>`; };
 
-  W.RTViz = { chart, dist, calendar, range, line, commute, sky, slot, mount, simOverlay, simSlot, axis12, day, segments, segment, segOccurrence, loadSegs, SEG_DEFAULT, SEG_KEY, RULE, wearOf };
+  W.RTViz = { chart, dist, calendar, range, line, commute, sky, season, revision, regions, week, years, slot, mount, simOverlay, simSlot, axis12, day, segments, segment, segOccurrence, loadSegs, SEG_DEFAULT, SEG_KEY, RULE, wearOf };
 })();

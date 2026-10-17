@@ -174,3 +174,24 @@ test("life 더위 시작: 완전한 시즌 기준 필드(completeSeasons·status
   const h = r.items.find((x) => x.id === "heat-start");
   for (const p of h.periods) { assert.ok("completeSeasons" in p); assert.equal(p.method, "complete-seasons"); }
 });
+
+test("4단계: stories 기준(basis) 연동·계절 신호·30일 비 달력, forecast 가장 큰 변화·발표 흐름·중기전망", async () => {
+  const api = fakes();
+  const a = (await call(api, "/api/rt/stories?station=108")).body;
+  const b = (await call(api, "/api/rt/stories?station=108&basis=r5")).body;
+  const c = (await call(api, "/api/rt/stories?station=108&basis=cmp")).body;
+  assert.equal(a.basisId, "all"); assert.equal(b.basisId, "r5"); assert.equal(c.basisId, "all");
+  assert.match(b.basisNote, /최근 5년/);
+  for (const s of b.stories) if (!s.basisFixed && s.basisId) assert.equal(s.basisId, "r5", s.key);
+  assert.equal(a.seasons.length, 5);
+  assert.ok(a.seasons.every((e) => e.chart?.type === "season"));
+  assert.equal(a.rainCalendar.days.length, 30);
+  const se = (await call(api, "/api/rt/seasons?station=108&basis=r10")).body;
+  assert.equal(se.basisId, "r10");
+  assert.deepEqual(se.events.map((e) => e.id), ["first-hot-day", "first-frost", "first-snow", "first-warm-night", "last-hot-day"]);
+  const f = (await call(api, "/api/rt/forecast?station=108")).body;
+  assert.ok(Array.isArray(f.revisions));
+  assert.ok(f.bigChanges && Array.isArray(f.bigChanges.items) && f.bigChanges.items.length <= 3);
+  assert.ok(f.popRevision && Array.isArray(f.popRevision.list));
+  assert.equal(f.outlook.text, null); // 지점에 mid_stn_id 없음 → 원문 없음(만들지 않음)
+});

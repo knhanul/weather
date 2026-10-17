@@ -83,8 +83,11 @@
   function hoursHtml(f) {
     const hs = (f.hours || []).slice(0, 12);
     if (!hs.length) return `<p class="rt-ins">예보 자료가 없습니다</p>`;
-    return hs.map((h) => `<div class="rh-chip${h.pop >= 60 ? " wet" : ""}"><span>${Number(h.time.slice(11, 13))}시</span><i aria-label="${esc(wx(h) || "")}">${art(h)}</i><b>${h.ta ?? "–"}°</b><small>${h.pop == null ? "" : `☂${h.pop}%`}</small></div>`).join("") + `<a class="rh-chip rh-chip-more" href="#/forecast">72시간<br>예보 보기 ›</a>`;
+    return hs.map((h) => `<div class="rh-chip${h.pop >= 60 ? " wet" : ""}">${chipIn(h)}</div>`).join("") + `<a class="rh-chip rh-chip-more" href="#/forecast">72시간<br>예보 보기 ›</a>`;
   }
+  const chipIn = (h) => `<span>${Number(h.time.slice(11, 13))}시</span><i aria-label="${esc(wx(h) || "")}">${art(h)}</i><b>${h.ta ?? "–"}°</b><small>${h.pop == null ? "" : `☂${h.pop}%`}</small>`;
+  // 시간축과 같은 열에 맞춘 칩(rt-story-visuals day 의 o.chip)
+  const chipCol = (h) => `<div class="rh-chip${h.pop >= 60 ? " wet" : ""}">${chipIn(h)}</div>`;
   // 오늘 뭐 입지? — 같은 규칙(기온별 옷차림 일반 기준·일교차 10℃·강수확률 60%)을 히어로 안 한 줄로
   // 강수형태(PTY) 예보가 있는 시각과 강수확률만 60% 이상인 시각을 구별해서 말함(확률만으로 '비'라고 하지 않음)
   const POP_HIGH = 60; // rt-story-rules FORECAST_RULES.popHigh
@@ -119,7 +122,7 @@
     if (p?.min) rows.push(`<li><span class="down">가장 추웠던</span> ${ymdK(p.min.date)} 이 시각 <b>${p.min.value}℃</b></li>`);
     if (sim?.ok && sim.top?.[0]) { const b = sim.top[0]; rows.push(`<li><span>오늘과 가장 닮은 날</span> ${ymdK(b.date)}${b.max != null ? ` — 그날 최고 ${b.max}℃ · 최저 ${b.min}℃` : ""} <small>(지금까지 기온 흐름 RMSE ${b.rmse}℃)</small></li>`); }
     if (!rows.length) return "";
-    return `<section class="card rh-hist" aria-label="이맘때의 기록"><h2>이맘때의 기록 <span class="rt-badge ok">과거 관측</span></h2><ul class="rh-list">${rows.join("")}</ul><p class="rt-note">${esc(p ? nm(p) : "")}: 같은 월일 ±7일, 같은 정시(${t.current.hour}시) ASOS 관측 중. 자세한 유사일 목록은 아래 ‘과거 유사일’.</p></section>`;
+    return `<section class="card rh-hist" aria-label="이맘때의 기록"><h2>보유 자료의 같은 시기 기록 <span class="rt-badge ok">과거 관측</span></h2><ul class="rh-list">${rows.join("")}</ul><p class="rt-note">${esc(p ? nm(p) : "")}: 같은 월일 ±7일, 같은 정시(${t.current.hour}시) ASOS 관측 중. 자세한 목록은 아래 ‘기온 흐름이 닮은 날’.</p></section>`;
   }
   // 지금 전국은? — /api/rt/nation-hours(관측소별 오늘 0~23시, 오늘의 날씨 그래프와 같은 값). 실황 실선·예보 점선(잇지 않음), '지금' 세로선
   const NC = ["#0d1b3d", "#c0262d", "#0e7a3e", "#8a4b00", "#026ef8", "#7c3aed", "#0891b2", "#db2777"];
@@ -184,7 +187,7 @@
   const gState = () => { try { return JSON.parse(localStorage.getItem(GK)) || {}; } catch { return {}; } };
   // 예전 '이번 주 예보' 묶음(내일 날씨와 겹쳐 뺌)의 저장값은 지운다
   try { const s0 = JSON.parse(localStorage.getItem(GK) || "null"); if (s0 && "week" in s0) { delete s0.week; localStorage.setItem(GK, JSON.stringify(s0)); } } catch {}
-  const GROUPS = { nat: ["전국과 기록", "8개 관측소 기온 · 이맘때의 기록"], past: ["과거와 비교", "오늘과 닮은 과거의 날 · 궁금한 날씨"] };
+  const GROUPS = { nat: ["전국과 기록", "8개 관측소 기온 · 보유 자료의 같은 시기 기록"], past: ["과거와 비교", "기온 흐름이 닮은 날 · 계절 신호 · 30일 비 달력 · 내가 기억하는 이날"] };
   function group(id, inner) {
     const [t, pv] = GROUPS[id];
     return `<details class="card rh-grp" data-grp="${id}"${gState()[id] ? " open" : ""}><summary><span class="rh-gt">${t}</span><small class="rh-pv" id="rhPv-${id}">${pv}</small></summary>${inner}</details>`;
@@ -221,7 +224,7 @@
     document.getElementById("rhHours").innerHTML = fv ? hoursHtml(fv) : `<p class="rt-ins">예보를 불러오지 못했습니다</p>`;
     paintSky(t, fv);
     // 앞으로 12시간 공용 시간축 + 하루 구간 옷차림: 이미 받은 예보·실황만으로, 보일 때 그림
-    if (fv && window.RTViz) lazy("rhDay", (el) => { if (my !== seq) return; const v = t.current?.values || {}; window.RTViz.day(el, { nowW: t.now || `${t.date} ${String(t.current?.hour ?? 0).padStart(2, "0")}:00`, obsHours: (t.hours || []).filter((h) => h.obs != null).map((h) => ({ time: h.time, ta: h.obs })), current: t.current?.time && v.ta != null ? { time: t.current.time, ta: v.ta, hm: v.hm, ws: v.ws } : null, fc: fv.hours || [], days: fv.days || [] }); });
+    if (fv && window.RTViz) lazy("rhDay", (el) => { if (my !== seq) return; const v = t.current?.values || {}; window.RTViz.day(el, { nowW: t.now || `${t.date} ${String(t.current?.hour ?? 0).padStart(2, "0")}:00`, obsHours: (t.hours || []).filter((h) => h.obs != null).map((h) => ({ time: h.time, ta: h.obs })), current: t.current?.time && v.ta != null ? { time: t.current.time, ta: v.ta, hm: v.hm, ws: v.ws } : null, fc: fv.hours || [], days: fv.days || [], chip: chipCol, more: `<p class="rh-more12"><a href="#/forecast?station=${esc(st)}">72시간 예보 보기 ›</a></p>` }); const hh = document.getElementById("rhHours"); if (hh && el.querySelector(".vz-sync")) hh.hidden = true; });
     const tip = document.getElementById("rhTip"), th = fv ? tipHtml(t, fv) : "";
     if (tip && th) { tip.innerHTML = th; tip.hidden = false; }
     const wl = document.getElementById("rhWeekLink"), wt = fv ? weekPv(fv) : null; if (wl && wt) wl.innerHTML = `<a href="#/forecast?station=${esc(st)}">${esc(wt)} · 내일 날씨에서 보기 ›</a>`;
@@ -240,7 +243,9 @@
   async function storyLine(s, st) {
     const badge = `<span class="rt-badge ${s.kind === "관측" ? "ok" : "fc"}">${esc(s.kind)}</span> `;
     const m = /^ytd-(\w+)$/.exec(s.key || "");
-    if (!m) return badge + esc(s.title) + (mainId() !== "all" ? ` <small>(이야기는 1990년 이후 기준)</small>` : "");
+    // 이야기는 선택한 기준을 따름(4단계). 기준이 정해진 카드만 짧은 이유를 붙임
+    const fixed = s.basisFixed ? ` <small class="rh-bfix">(${esc(s.basisFixed)})</small>` : lastStories?.basisId && s.basisId && s.basisId !== lastStories.basisId ? ` <small class="rh-bfix">(${esc({ all: "1990년 이후", r10: "최근 10년", r5: "최근 5년" }[s.basisId] || s.basisId)} 기준)</small>` : "";
+    if (!m) return badge + esc(s.title) + fixed;
     const y = await get(`/api/rt/ytd?station=${st}`).catch(() => null);
     const it = y?.items?.find((x) => x.id === m[1]);
     const p = pickP(it?.periods);
