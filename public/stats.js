@@ -576,7 +576,7 @@
     const missHtml = missWarn(s.missing1);
     if (s.incomplete.length) warn.push(`자료 부족(2일 이상 결측)으로 그래프·순위·평균에서 뺀 연도: ${s.incomplete.slice(0, 8).map((x) => `${x.year}년(관측 ${x.obs}/${x.days}일)`).join(", ")}${s.incomplete.length > 8 ? ` 외 ${s.incomplete.length - 8}개` : ""}`);
     const nod = r.rows.filter((x) => x.status === "nodate");
-    if (nod.length) warn.push(`평년에는 이 날짜가 없어 ${nod.length}개 연도를 비교하지 않았습니다(2월 29일).`);
+    if (nod.length) warn.push(`윤년이 아닌 해에는 이 날짜(2월 29일)가 없어 ${nod.length}개 연도를 비교하지 않았습니다.`);
     const ong = r.ongoing;
     if (ong) {
       if (ong.complete && ong.rank) warn.push(`진행 중인 ${ong.year}년은 ${ymdDot(ong.start)}~${ymdDot(ong.end)}(${ong.days}일)만 집계해 ${fv(ong.value, m)}입니다. 같은 날짜까지의 다른 해 평균은 ${fv(ong.pastMean, m)}, ${ong.rank.of}개 연도 중 ${ord} ${ong.rank.high}위입니다. 이 값은 아래 그래프의 연도 값(구간 전체)과 다릅니다.`);

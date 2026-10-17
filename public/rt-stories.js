@@ -6,8 +6,19 @@
   const get0 = async (u) => { const r = await fetch(u); const d = await r.json(); if (!r.ok || d.ok === false) throw new Error(d.message || `HTTP ${r.status}`); return d; };
   const get = (u) => { const c = memo.get(u); if (c && Date.now() - c.at < 60000) return c.p; const p = get0(u); memo.set(u, { at: Date.now(), p }); p.catch(() => memo.delete(u)); return p; };
   const ymdK = (s) => `${s.slice(0, 4)}년 ${Number(s.slice(5, 7))}월 ${Number(s.slice(8, 10))}일`;
+  // 이야기가 없을 때: 서버 emptyReason(normal | insufficient | stale | error)에 따라 말을 다르게. 'normal' 일 때만 '평소와 비슷'
+  const EMPTY = {
+    normal: (d) => `오늘은 평소와 크게 다른 점이 없습니다(후보 ${d.candidates}개 모두 선별 기준 미달).`,
+    insufficient: (d) => `비교할 자료가 부족해 오늘의 이야기를 고르지 못했습니다(후보 ${d.candidates}개).`,
+    stale: (d) => `실황 자료가 늦어지고 있어 이야기를 고르지 않았습니다${d.staleNote ? ` — ${d.staleNote}` : ""}.`,
+    error: (d) => `일부 자료(${(d.failedParts || []).join(", ") || "알 수 없음"})를 불러오지 못해 이야기를 고르지 못했습니다.`,
+    loading: () => "이야기를 고르는 중…",
+  };
+  const shell = (inner) => `<section class="card rt-stories" aria-label="오늘의 날씨 이야기"><h2>오늘의 날씨 이야기</h2>${inner}</section>`;
+  const emptyHtml = (reason, d = {}) => shell(`<p class="${reason === "loading" ? "rt-load" : "rt-ins"}" data-empty="${esc(reason)}">${esc((EMPTY[reason] || EMPTY.insufficient)(d))}</p>${d.dropped?.length ? `<details class="rts-why"><summary>빠진 후보</summary><p class="rt-note">${d.dropped.map((x) => `${esc(x.key)}(${esc(x.reason)})`).join(", ")}</p></details>` : ""}`);
   function storiesHtml(d) {
-    if (!d.stories.length) return `<section class="card rt-stories" aria-label="오늘의 날씨 이야기"><h2>오늘의 날씨 이야기</h2><p class="rt-ins">오늘은 평소와 크게 다른 점이 없습니다(후보 ${d.candidates}개 모두 선별 기준 미달).</p></section>`;
+    // 예전 응답(emptyReason 없음)은 예전처럼 normal 로 봄
+    if (!d.stories.length) return emptyHtml(d.emptyReason || "normal", d);
     return `<section class="card rt-stories" aria-label="오늘의 날씨 이야기"><h2>오늘의 날씨 이야기 <small class="rts-sub">후보 ${d.candidates}개 중 ${d.stories.length}개 자동 선별</small></h2>${d.staleNote ? `<p class="rt-ins">${esc(d.staleNote)}</p>` : ""}<div class="rts-swipe">${d.stories.map((s, i) => `<article class="rt-story"><small class="rts-n">${i + 1}/${d.stories.length}</small><h3><span class="rt-badge ${s.kind === "관측" ? "ok" : "fc"}">${esc(s.kind)}</span> ${esc(s.title)}</h3><p>${esc(s.text)}</p><p class="rt-note">근거: ${esc(s.basis)}</p></article>`).join("")}</div><details class="rts-why"><summary>선별 방법</summary><p class="rt-note">${esc(d.rule.text)}</p>${d.dropped.length ? `<p class="rt-note">빠진 후보: ${d.dropped.map((x) => `${esc(x.key)}(${esc(x.reason)})`).join(", ")}</p>` : ""}</details></section>`;
   }
   function simList(r) {
@@ -27,7 +38,8 @@
     box.dataset.done = st; sim.dataset.done = st;
     const G = window.RTGet || get;
     // 이야기: 히어로 한 줄에 쓰므로 바로. 과거 유사일(오늘·어제): 그 칸이 보일 때
-    G(`/api/rt/stories?station=${st}`).then((v) => { if ($("rtsBox") !== box) return; box.innerHTML = storiesHtml(v); document.dispatchEvent(new CustomEvent("rt:stories", { detail: v })); }).catch(() => {});
+    if (!box.innerHTML.trim()) box.innerHTML = emptyHtml("loading");
+    G(`/api/rt/stories?station=${st}`).then((v) => { if ($("rtsBox") !== box) return; box.innerHTML = storiesHtml(v); document.dispatchEvent(new CustomEvent("rt:stories", { detail: v })); }).catch((e) => { if ($("rtsBox") === box) box.innerHTML = emptyHtml("error", { failedParts: [String(e?.message || "응답 없음").slice(0, 60)] }); });
     sim.innerHTML = `<section class="card"><p class="rt-load">과거 유사일 찾는 중…</p></section>`;
     const run = async () => {
       const [t, y] = await Promise.allSettled([G(`/api/rt/similar?station=${st}&day=today`), G(`/api/rt/similar?station=${st}&day=yesterday`)]);

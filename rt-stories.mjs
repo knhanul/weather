@@ -1,5 +1,6 @@
 // 6단계: 과거 유사일 자동 탐색 + 날씨 이야기 선별 엔진(순수 함수 — 수치는 입력에서만, 지어내지 않음).
 import { ymdToDn, dnToYmd, isLeap, hval } from "./stats-engine.mjs";
+import { SELECT_RULES } from "./rt-story-rules.mjs";
 
 // ---------------------------------------------------------------- 과거 유사일
 // 후보: 1990년부터 대상일 전날까지, 해마다 대상일과 같은 월일 ±SIM_WINDOW일(계절을 맞춤). 2/29 는 평년 2/28.
@@ -88,12 +89,14 @@ export function similarDays(hs, target, { mode = "partial", top = 5, window = SI
 // 후보: { key, phenomenon, kind: "관측"|"예보", unusual(0~1), samples, minSamples, info(0~1), title, text, basis }
 // 선별: 표본 부족(samples < minSamples) 제외 → unusual < MIN_UNUSUAL 제외 → 점수 = 0.6×unusual + 0.4×info,
 //       예보 ×0.9, 최근 게시(recent 에 같은 key) ×0.5 → 같은 현상(phenomenon)은 점수 높은 하나만 → 상위 max 개.
-export const STORY_RULE = { minUnusual: 0.3, wUnusual: 0.6, wInfo: 0.4, forecastFactor: 0.9, recentFactor: 0.5, max: 4 };
+// c.exclude(문자열)가 있으면 점수 전에 그 사유로 뺌(계절 노출 기간 밖·비교 지점 부족 등)
+export const STORY_RULE = SELECT_RULES;
 export function selectStories(cands, { recent = new Set(), rule = STORY_RULE } = {}) {
   const dropped = [];
   const kept = [];
   for (const c of cands) {
     if (!c || !c.text) continue;
+    if (c.exclude) { dropped.push({ key: c.key, reason: c.exclude }); continue; }
     if (!(c.samples >= c.minSamples)) { dropped.push({ key: c.key, reason: `표본 부족(${c.samples ?? 0}/${c.minSamples})` }); continue; }
     if (!(c.unusual >= rule.minUnusual)) { dropped.push({ key: c.key, reason: `이례성 낮음(${r2(c.unusual ?? 0)})` }); continue; }
     let score = rule.wUnusual * Math.min(1, c.unusual) + rule.wInfo * Math.min(1, c.info ?? 0.5);

@@ -4,7 +4,7 @@ import { createRtApi, freshness, rainText, windDir } from "../rt-api.mjs";
 import { createHourlyStore, addHourlyRows, buildDailyStore } from "../stats-engine.mjs";
 
 const NOW = Date.UTC(2026, 9, 13, 10, 20); // 2026-10-13 19:20 KST
-function fakes({ ncstLast = "2026-10-13 19:00:00" } = {}) {
+function fakes({ ncstLast = "2026-10-13 19:00:00", noRain = false } = {}) {
   const hrows = [], drows = [];
   for (let y = 1990; y <= 2026; y++) for (let d = 1; d <= 31; d++) {
     const day = `${y}-10-${String(d).padStart(2, "0")}`;
@@ -16,7 +16,7 @@ function fakes({ ncstLast = "2026-10-13 19:00:00" } = {}) {
   addHourlyRows(hs, hrows);
   const ds = buildDailyStore("108", drows);
   const ncst = [];
-  for (let h = 0; h <= +ncstLast.slice(11, 13); h++) for (const [c, v] of [["T1H", 16 + h / 10], ["REH", 70], ["RN1", "0"], ["WSD", 3], ["VEC", 250], ["PTY", 0]]) ncst.push({ base: `${ncstLast.slice(0, 10)} ${String(h).padStart(2, "0")}:00:00`, category: c, value: String(v) });
+  for (let h = 0; h <= +ncstLast.slice(11, 13); h++) for (const [c, v] of [["T1H", 16 + h / 10], ["REH", 70], ...(noRain ? [] : [["RN1", "0"]]), ["WSD", 3], ["VEC", 250], ["PTY", 0]]) ncst.push({ base: `${ncstLast.slice(0, 10)} ${String(h).padStart(2, "0")}:00:00`, category: c, value: String(v) });
   const rt = {
     gridOf: async () => ({ nx: 60, ny: 127 }),
     ncst: async (nx, ny, a, b) => ncst.filter((r) => r.base >= a && r.base <= b),
@@ -28,6 +28,8 @@ function fakes({ ncstLast = "2026-10-13 19:00:00" } = {}) {
       return out;
     },
     dayExtremes: async () => ({ TMX: { value: "21.0", base: "2026-10-13 05:00:00" } }),
+    extremesAll: async () => [],
+    midItems: async () => [],
   };
   const api = createRtApi({ rt, statsHourly: { get: async () => hs, version: () => 1 }, statsData: { get: async () => ds, version: () => 1 }, stations: async () => [{ station_id: "108", station_name: "서울" }], json: (res, b, s = 200) => { res.body = b; res.status = s; }, now: () => NOW });
   return api;
@@ -109,4 +111,44 @@ test("ETag: 같은 본문이면 304, 캐시 머리글", async () => {
   await api({ method: "GET", headers: { "if-none-match": r1.h.etag } }, r2, new URL("http://x/api/rt/today?station=108"));
   assert.equal(r2.code, 304);
   assert.equal(r2.body, "");
+});
+
+test("life: 강수 자료가 없으면 러닝 '판단 보류'(좋음 아님), 있으면 조건 판정", async () => {
+  const r = (await call(fakes({ noRain: true }), "/api/rt/life?station=108")).body;
+  const run = r.items.find((x) => x.id === "running");
+  assert.equal(run.judgement, "unknown");
+  assert.equal(run.answer, "강수 자료가 없어 판단 보류");
+  assert.equal(run.checks.find((c) => c.id === "rain").status, "unknown");
+  const ok = (await call(fakes(), "/api/rt/life?station=108")).body.items.find((x) => x.id === "running");
+  assert.equal(ok.judgement, "pass"); // 17.9℃, RN1 0(값), 3m/s
+  assert.equal(ok.answer, "선택한 날씨 조건에 맞음");
+  const hs = (await call(fakes(), "/api/rt/life?station=108")).body.items.find((x) => x.id === "heat-start");
+  assert.equal(hs.homeEligible, false); // 30℃ 넘은 날 없음 → 홈 후보 아님
+});
+
+test("regions: 비교 가능한 지점 수·두 순위·동률·예전 이름 유지", async () => {
+  const r = (await call(fakes(), "/api/rt/regions")).body;
+  assert.equal(r.comparable, 1);
+  assert.equal(r.time, "2026-10-13 19:00:00");
+  assert.equal(r.rankAboveAvg[0].of, 1);
+  assert.deepEqual(r.rankAnomaly, r.rankAboveAvg);
+  assert.ok(Array.isArray(r.rankDeviation));
+  assert.ok(r.rankings.r5);
+  assert.match(r.note, /비교 가능한 1개 지점/);
+});
+
+test("stories: 이야기 객체 계약 필드 + 빈 이야기 사유, 지역 이야기는 6개 지점 미만이면 뺌", async () => {
+  const r = (await call(fakes(), "/api/rt/stories?station=108")).body;
+  assert.ok(r.rulesVersion);
+  assert.ok("emptyReason" in r);
+  for (const s of r.stories) {
+    assert.equal(s.schemaVersion, 1);
+    assert.ok(s.ruleId && s.eventId && s.templateId && s.evidence && s.facts);
+    assert.ok(!/NaN|undefined|null/.test(`${s.title} ${s.text}`));
+  }
+  if (!r.stories.length) assert.ok(["normal", "insufficient", "stale", "error"].includes(r.emptyReason));
+  const reg = r.dropped.find((x) => x.key === "region-anomaly");
+  if (reg) assert.match(reg.reason, /비교 가능한 지점|표본|이례성/);
+  const st = (await call(fakes({ ncstLast: "2026-10-13 15:00:00" }), "/api/rt/stories?station=108")).body;
+  if (!st.stories.length) assert.equal(st.emptyReason, "stale");
 });

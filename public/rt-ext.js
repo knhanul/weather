@@ -46,15 +46,22 @@
   }
   async function region() {
     const d = await get(`/api/rt/regions`);
-    const id0 = ids()[0];
+    // 기준 선택(NWBasis)의 대표 기준으로 순위를 고름(서버가 3개 기준 순위를 모두 줌). 예전 응답이면 1990년 이후
+    const id0 = ids()[0] || "all";
+    const R = d.rankings?.[id0] || { aboveAvg: d.rankAboveAvg || d.rankAnomaly || [], deviation: d.rankDeviation || [] };
+    const per = (d.periods || []).find((p) => p.id === id0);
+    const perTxt = per ? `${short(per.label)}(${per.range})` : "1990년 이후";
     const rows = d.rows.map((r) => `<tr><th scope="row">${esc(r.name)}</th><td>${r.temp == null ? `<span class="rt-ins">${esc(r.note)}</span>` : `${r.temp}℃`}</td>${pick(d.periods.map((p) => ({ ...p }))).map((p) => `<td>${r.diffs ? `<span class="${cls(r.diffs[p.id])}">${sg(r.diffs[p.id])}</span>` : "–"}</td>`).join("")}<td>${r.percentile ?? "–"}</td></tr>`).join("");
-    const rk = (list, f) => `<ol class="rtx-rank">${list.map((x) => `<li>${esc(x.name)} <b>${f(x)}</b></li>`).join("")}</ol>`;
-    return wrap(head("지금 지역별 기온", `${d.now} 실황`) + `<div class="rtx-2"><div><h3>절대기온 순위</h3>${rk(d.rankTemp, (x) => `${x.temp}℃`)}</div><div><h3>평소 대비(이례성) 순위</h3>${rk(d.rankAnomaly, (x) => `${sg(x.diff)}`)}<small>1990년 이후 같은 시기·시각 평균 대비</small></div></div><div class="tbl-wrap"><table class="rt-tbl"><thead><tr><th>지역</th><th>지금</th>${pick(d.periods).map((p) => `<th>${esc(short(p.label))} 대비</th>`).join("")}<th>백분위</th></tr></thead><tbody>${rows}</tbody></table></div><p class="rt-note">${esc(d.note)}</p>`);
-    void id0;
+    const rk = (list, f) => list.length ? `<ol class="rtx-rank">${list.map((x) => `<li value="${x.rank}">${esc(x.name)} <b>${f(x)}</b></li>`).join("")}</ol>` : `<p class="rt-ins">비교 가능한 지점이 없습니다</p>`;
+    const of = (list) => `비교 가능한 ${list.length}개 지점 중`;
+    const dev = (x) => `${x.direction === "high" ? "더운 쪽" : x.direction === "low" ? "추운 쪽" : "가운데"} · 백분위 ${x.percentile}`;
+    const tm = d.time ? `${d.time.slice(11, 16)} 실황` : `${d.now} 실황`;
+    const exc = (d.excluded || []).length ? `<p class="rt-ins">${d.excluded.map((x) => `${esc(x.name)}: ${esc(x.reason)}`).join(" · ")}</p>` : "";
+    return wrap(head("지금 지역별 기온", tm) + `<div class="rtx-3"><div><h3>지금 기온 높은 순</h3><small>${of(d.rankTemp || [])}</small>${rk(d.rankTemp || [], (x) => `${x.temp}℃`)}</div><div><h3>평균보다 높은 순</h3><small>${of(R.aboveAvg)} · ${esc(perTxt)} 같은 시기·시각 평균과의 차이</small>${rk(R.aboveAvg, (x) => `${sg(x.diff)}`)}</div><div><h3>평소에서 크게 벗어난 순</h3><small>${of(R.deviation)} · 백분위가 50에서 먼 순서(더운 쪽·추운 쪽 모두)</small>${rk(R.deviation, dev)}</div></div>${exc}<div class="tbl-wrap"><table class="rt-tbl"><thead><tr><th>지역</th><th>지금</th>${pick(d.periods).map((p) => `<th>${esc(short(p.label))} 대비</th>`).join("")}<th>백분위</th></tr></thead><tbody>${rows}</tbody></table></div><p class="rt-note">${esc(d.note)}</p>`);
   }
   async function life(st) {
     const d = await get(`/api/rt/life?station=${st}`);
-    return wrap(head("지금·앞으로의 생활 날씨", `${d.station.name} · ${d.now}`) + `<div class="rtx-qs">${d.items.map((it) => `<article class="rtx-q"><h3>${esc(it.q)}</h3>${it.answer == null ? `<p class="rt-ins">${esc(it.note)}</p>` : `<p class="rtx-a"><b>${esc(it.answer)}</b>${it.value != null ? ` <span>${esc(it.value)}${esc(it.unit || "")}</span>` : ""} <span class="rt-badge ${it.kind === "관측" ? "ok" : "fc"}">${esc(it.kind || "")}</span></p>${it.id === "running" ? `<p class="rt-basis-row">${pick(it.periods).map((p) => `<span>${esc(short(p.label))}: 같은 시기 이 시각 ${p.share == null ? "표본 부족" : `${p.share}%가 조건 만족`}</span>`).join("")}</p>` : it.id === "heat-start" ? `<p class="rt-basis-row">${pick(it.periods).map((p) => `<span>${esc(short(p.label))} 평균 ${p.meanDate ?? "–"} <small>(${p.hitYears}/${p.years}년)</small> ${p.diffDays == null ? "" : `<b class="${cls(-p.diffDays)}">${p.diffDays < 0 ? `${-p.diffDays}일 이름` : p.diffDays > 0 ? `${p.diffDays}일 늦음` : "같음"}</b>`}</span>`).join("")}</p>` : cmpRow(it.periods)}<p class="rt-note">${esc(it.basis || "")}</p>`}</article>`).join("")}</div>`);
+    return wrap(head("지금·앞으로의 생활 날씨", `${d.station.name} · ${d.now}`) + `<div class="rtx-qs">${d.items.map((it) => `<article class="rtx-q"><h3>${esc(it.q)}</h3>${it.answer == null ? `<p class="rt-ins">${esc(it.note)}</p>` : `<p class="rtx-a"><b>${esc(it.answer)}</b>${it.value != null ? ` <span>${esc(it.value)}${esc(it.unit || "")}</span>` : ""} <span class="rt-badge ${it.kind === "관측" ? "ok" : "fc"}">${esc(it.kind || "")}</span></p>${it.id === "running" && it.checks ? `<p class="rt-basis-row rtx-checks">${it.checks.map((c) => `<span class="ck-${esc(c.status)}">${esc(c.label)} ${c.status === "pass" ? "✓ 맞음" : c.status === "fail" ? "✗ 맞지 않음" : "? 자료 없음"}${c.value != null ? ` <small>${esc(c.value)}</small>` : ""}</span>`).join("")}</p>` : ""}${it.id === "heat-start" && it.event ? `<p class="rt-note">${it.event.date ? `올해 첫날 ${esc(it.event.date)} · ${it.event.firstConfirmed ? "1/1부터 빠진 날 없이 확인" : `그 전 ${it.event.missingBeforeEvent}일 자료 없음 — 확인 가능한 자료에서 처음`}` : `아직 확인되지 않음(1/1부터 자료 ${Math.round((it.event.coverage ?? 0) * 100)}%)`}${it.exposure && !it.homeEligible ? ` · 오늘 날씨 첫 화면에는 ${esc(it.exposure.reason)}이라 보이지 않음` : ""}</p>` : ""}${it.id === "running" ? `<p class="rt-basis-row">${pick(it.periods).map((p) => `<span>${esc(short(p.label))}: 같은 시기 이 시각 ${p.share == null ? "표본 부족" : `${p.share}%가 조건 만족`}</span>`).join("")}</p>` : it.id === "heat-start" ? `<p class="rt-basis-row">${pick(it.periods).map((p) => `<span>${esc(short(p.label))} 평균 ${p.meanDate ?? "–"} <small>(${p.hitYears}/${p.years}년)</small> ${p.diffDays == null ? "" : `<b class="${cls(-p.diffDays)}">${p.diffDays < 0 ? `${-p.diffDays}일 이름` : p.diffDays > 0 ? `${p.diffDays}일 늦음` : "같음"}</b>`}</span>`).join("")}</p>` : cmpRow(it.periods)}<p class="rt-note">${esc(it.basis || "")}</p>`}</article>`).join("")}</div>`);
   }
   async function records(st) {
     const d = await get(`/api/rt/records?station=${st}`);
@@ -72,7 +79,7 @@
     return wrap(head("지금과 앞으로에 대한 질문") + `<div class="rtx-qs">
       <a class="rtx-q" href="#/stats/yearly?station=${st}"><span class="rt-badge ok">과거</span><h3>예전보다 더워졌을까?</h3><p>연도별 비교에서 1990년부터의 변화를 봅니다 ›</p></a>
       <a class="rtx-q" href="#/today?station=${st}"><span class="rt-badge fc">현재</span><h3>지금은 평소보다 얼마나 더울까?</h3><p class="rtx-a"><b>${esc(nowA)}</b></p>${c?.compare?.ta ? cmpRow(c.compare.ta) : ""}</a>
-      <a class="rtx-q" href="#/forecast?station=${st}"><span class="rt-badge fc">미래</span><h3>이번 주는 예년보다 더울까?</h3><p class="rtx-a"><b>${wk == null ? "비교 데이터 부족" : Math.abs(wk) < 1 ? "예년과 비슷할 전망" : wk > 0 ? `예년보다 ${sg(wk)} 더울 전망` : `예년보다 ${sg(wk)} 쌀쌀할 전망`}</b></p>${f.week ? cmpRow(f.week.anomaly) : ""}<p class="rt-note">관측 ${f.week?.obsDays ?? 0}일 + 예보 ${f.week?.fcDays ?? 0}일</p></a></div>`);
+      <a class="rtx-q" href="#/forecast?station=${st}"><span class="rt-badge fc">미래</span><h3>이번 주는 이맘때보다 더울까?</h3><p class="rtx-a"><b>${wk == null ? "비교 데이터 부족" : Math.abs(wk) < 1 ? "이맘때 평균과 비슷할 전망" : wk > 0 ? `이맘때 평균보다 ${sg(wk)} 더울 전망` : `이맘때 평균보다 ${sg(wk)} 쌀쌀할 전망`}</b></p>${f.week ? cmpRow(f.week.anomaly) : ""}<p class="rt-note">관측 ${f.week?.obsDays ?? 0}일 + 예보 ${f.week?.fcDays ?? 0}일</p></a></div>`);
   }
   const RENDER = { overview, yearly, region, life, records, questions };
   let seq = 0;

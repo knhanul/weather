@@ -69,7 +69,7 @@
       <div class="rh-main"><div><p class="rh-temp">${v.ta}<span>℃</span></p><p class="rh-sky" id="rhSky"></p></div>
         <div class="rh-side">${p && p.mean != null ? `<b class="rh-diff ${p.diff > 0 ? "up" : p.diff < 0 ? "down" : ""}">${sg(p.diff)}</b><small>${esc(nm(p))} 같은 시기 이 시각 평균 ${p.mean}℃</small>${others(c.compare?.ta).map((o) => `<small>${esc(nm(o))} ${o.mean == null ? "비교 데이터 부족" : `${o.mean}℃(<b class="${o.diff > 0 ? "up" : o.diff < 0 ? "down" : ""}">${sg(o.diff)}</b>)`}</small>`).join("")}` : `<small class="rt-ins">${esc(p ? nm(p) + " " : "")}${esc(p?.statusText || "비교 데이터 부족")}</small>`}
           <small>습도 ${v.hm ?? "–"}% · ${esc(v.windDir || "")} ${v.ws ?? "–"}m/s${v.rn1 ? ` · 1시간 ${v.rn1}mm` : ""}</small>
-          ${d.day?.max?.value != null || d.day?.min?.value != null ? `<small>오늘 최저 ${d.day.min.value ?? "–"}℃ / 최고 ${d.day.max.value ?? "–"}℃ <span class="rt-badge fc">예보</span></small>` : ""}</div></div>
+          ${d.day?.max?.value != null || d.day?.min?.value != null ? `<small title="실황(지금 기온)과 따로, 단기예보 발표 당시의 오늘 최저·최고 예보입니다">오늘 최저 ${d.day.min.value ?? "–"}℃ / 최고 ${d.day.max.value ?? "–"}℃ <span class="rt-badge fc">예보${(d.day.max.base || d.day.min.base) ? ` ${esc(String(d.day.max.base || d.day.min.base).slice(11, 16))} 발표` : ""}</span></small>` : ""}</div></div>
       <h2 class="rh-line">${line}</h2><p class="rh-story" id="rhStory"></p>
       ${meter}
       <p class="rh-wear" id="rhTip" hidden></p>
@@ -83,14 +83,18 @@
     return hs.map((h) => `<div class="rh-chip${h.pop >= 60 ? " wet" : ""}"><span>${Number(h.time.slice(11, 13))}시</span><i aria-label="${esc(wx(h) || "")}">${icon(h)}</i><b>${h.ta ?? "–"}°</b><small>${h.pop == null ? "" : `☂${h.pop}%`}</small></div>`).join("") + `<a class="rh-chip rh-chip-more" href="#/forecast">72시간<br>예보 보기 ›</a>`;
   }
   // 오늘 뭐 입지? — 같은 규칙(기온별 옷차림 일반 기준·일교차 10℃·강수확률 60%)을 히어로 안 한 줄로
+  // 강수형태(PTY) 예보가 있는 시각과 강수확률만 60% 이상인 시각을 구별해서 말함(확률만으로 '비'라고 하지 않음)
+  const POP_HIGH = 60; // rt-story-rules FORECAST_RULES.popHigh
   function tipHtml(t, f) {
     const hs = (f.hours || []).slice(0, 12);
     const max = t.day?.max?.value, min = t.day?.min?.value, now = t.current?.values?.ta;
     const items = [];
     if (now != null) items.push(esc(wearOf(now)));
     if (max != null && min != null && max - min >= 10) items.push(`일교차 ${Math.round((max - min) * 10) / 10}℃, 겉옷`);
-    const wet = hs.filter((h) => (h.pop ?? 0) >= 60 || (h.pty && h.pty !== "없음"));
-    if (wet.length) { const h = wet[0]; items.push(`☂ ${Number(h.time.slice(11, 13))}시쯤 ${esc(h.pty && h.pty !== "없음" ? h.pty : "비")}(${h.pop ?? "–"}%), 우산`); }
+    const ptyH = hs.find((h) => h.pty && h.pty !== "없음"), popH = hs.find((h) => h.pop != null && h.pop >= POP_HIGH);
+    const first = ptyH && (!popH || ptyH.time <= popH.time) ? ptyH : popH;
+    if (first === ptyH && ptyH) items.push(`☂ ${Number(ptyH.time.slice(11, 13))}시 ${esc(ptyH.pty)} 예보${ptyH.pop != null ? `(강수확률 ${ptyH.pop}%)` : ""}, 우산`);
+    else if (popH) items.push(`☂ ${Number(popH.time.slice(11, 13))}시 강수확률 ${popH.pop}%, 우산 챙기기`);
     if (!items.length) return "";
     return `<b>오늘 뭐 입지?</b> ${items.join(" · ")} <span class="rt-badge fc" title="기온별 옷차림 일반 기준을 실황·단기예보 기온에 규칙으로 맞춘 참고 안내입니다. 체감은 바람·습도·사람마다 다릅니다.">참고용</span>`;
   }
@@ -100,9 +104,10 @@
     return `<small class="rh-qb">${ps.map((p) => `${esc(nm(p))} ${p.diff == null ? "비교 데이터 부족" : sg(p.diff)}`).join(" · ")}</small>`;
   }
   function lifeHtml(l) {
-    const it = (l.items || []).filter((x) => x.answer != null);
+    // 계절 신호(더위 시작 등)는 노출 기간 안일 때만 첫 화면에(서버 homeEligible). 생활 질문 화면에는 그대로
+    const it = (l.items || []).filter((x) => x.answer != null && x.homeEligible !== false);
     if (!it.length) return "";
-    return `<h2>궁금한 날씨, 바로 답</h2><div class="rh-qa">${it.map((x) => `<a class="rh-q" href="#/stats/life?station=${esc(l.station?.id || "")}"><span>${esc(x.q)}</span><b>${esc(x.answer)}</b>${lifeRow(x)}<small class="rt-badge ${x.kind === "관측" || x.kind === "실황" ? "ok" : "fc"}">${esc(x.kind || "")}</small></a>`).join("")}</div>`;
+    return `<h2>궁금한 날씨, 바로 답</h2><div class="rh-qa">${it.map((x) => `<a class="rh-q" href="#/stats/life?station=${esc(l.station?.id || "")}"><span>${esc(x.q)}</span><b>${esc(x.answer)}</b>${lifeRow(x)}<small class="rt-badge ${x.judgement === "unknown" ? "bad" : x.kind === "관측" || x.kind === "실황" ? "ok" : "fc"}">${esc(x.judgement === "unknown" ? "판단 보류" : x.kind || "")}</small></a>`).join("")}</div>`;
   }
   function histHtml(t, sim) {
     const p = pickP(t.current?.compare?.ta);
@@ -187,10 +192,10 @@
     const ds = (f?.days || []).filter((x) => x.max != null || x.min != null);
     if (!ds.length) return null;
     const hi = ds.reduce((a, b) => ((b.max ?? -99) > (a.max ?? -99) ? b : a));
-    const wet = ds.filter((x) => (x.pop ?? 0) >= 60);
+    const wet = ds.filter((x) => x.pop != null && x.pop >= POP_HIGH);
     const dn = (x) => (x.offset === 0 ? "오늘" : x.offset === 1 ? "내일" : `${Number(x.date.slice(8))}일(${dow(x.date)})`);
-    // 비 소식(강수확률 60% 이상인 첫날)이 있으면 그것, 없으면 가장 더운 날
-    return wet.length ? `비 소식 ${dn(wet[0])}${wet.length > 1 ? ` 외 ${wet.length - 1}일` : ""} · 강수확률 ${wet[0].pop}%` : hi.max != null ? `가장 더운 날 ${dn(hi)} ${hi.max}℃` : null;
+    // 강수확률 60% 이상인 첫날이 있으면 그것(확률만이라 '비 온다'고 하지 않음), 없으면 가장 더운 날
+    return wet.length ? `강수확률 높은 날 ${dn(wet[0])}${wet.length > 1 ? ` 외 ${wet.length - 1}일` : ""} · 최대 ${wet[0].pop}%` : hi.max != null ? `가장 더운 날 ${dn(hi)} ${hi.max}℃` : null;
   }
   function natPv(d) {
     const xs = (d?.rows || []).map((r) => { const h = [...r.hours].reverse().find((x) => x.obs != null); return h ? { n: r.name, v: h.obs, h: h.hour } : null; }).filter(Boolean);

@@ -56,6 +56,7 @@
     const tas = span.map((x) => x.ta).filter((v) => v != null);
     const pops = span.map((x) => x.pop).filter((v) => v != null);
     const mm = span.reduce((s, x) => s + (x.pcpMm > 0 ? x.pcpMm : 0), 0), lt1 = span.filter((x) => x.pcpMm == null && x.pcp && x.pcp !== "강수 없음").length;
+    const noPcp = span.filter((x) => x.pcp == null).length; // 강수량 칸이 아예 없는 시각(없음 ≠ 0)
     const k = kind(h0.sky, h0.pty), n = night(h0h);
     const bg = k === "rain" || k === "shower" || k === "sleet" ? ["#5b6f8c", "#9aaac0"] : k === "snow" ? ["#8ea4c4", "#dbe5f2"] : k === "cloud" ? (n ? ["#2b3954", "#56688a"] : ["#8fa3bf", "#cfdaea"]) : n ? ["#0d1b3d", "#2c4a86"] : ["#3d8cff", "#a9d2ff"];
     const dark = n || k === "rain" || k === "shower" || k === "sleet" || (k === "cloud" && n);
@@ -68,43 +69,58 @@
       <p class="fv-meta">${esc(d.station.name)} · 지금부터 ${h0h >= 18 ? "내일 아침" : "오늘 밤"}까지 <span class="rt-badge fc">예보</span></p>
       <p class="fv-big">${h0.ta ?? "–"}<span>℃</span></p>
       <p class="fv-sky">${esc(h0.pty && h0.pty !== "없음" ? h0.pty : h0.sky || "하늘 자료 없음")} · ${hh(h0.time)}시</p>
-      <p class="fv-sum">${tas.length ? `${Math.min(...tas)}~${Math.max(...tas)}℃` : "기온 자료 없음"} · 강수확률 최대 ${pops.length ? `${Math.max(...pops)}%` : "자료 없음"} · ${mm > 0 || lt1 ? `예상 강수량 ${mm > 0 ? `${Math.round(mm * 10) / 10}mm` : ""}${lt1 ? `${mm > 0 ? " + " : ""}1mm 미만 ${lt1}시간` : ""}` : "강수 없음"}</p></div>
+      <p class="fv-sum">${tas.length ? `${Math.min(...tas)}~${Math.max(...tas)}℃` : "기온 자료 없음"} · 강수확률 최대 ${pops.length ? `${Math.max(...pops)}%` : "자료 없음"} · ${mm > 0 || lt1 ? `예상 강수량 ${mm > 0 ? `${Math.round(mm * 10) / 10}mm` : ""}${lt1 ? `${mm > 0 ? " + " : ""}1mm 미만 ${lt1}시간` : ""}` : noPcp === span.length ? "강수량 예보 없음" : "강수 없음 예보"}${noPcp && noPcp < span.length ? ` (${noPcp}시간 강수량 자료 없음)` : ""}</p></div>
       <div class="fv-hstrip">${strip}</div>
       <p class="rt-note fv-rel">발표: 초단기 ${esc(hm(rel.ultra?.base) || "없음")} · 단기 ${esc(hm(rel.vilage?.base) || "없음")}${[rel.ultra, rel.vilage].some((x) => x?.freshness?.state === "stale") ? ` <span class="rt-badge bad">지연</span>` : ""}</p></section>`;
   }
   const nextYmd = (ymd) => new Date(Date.parse(`${ymd}T00:00:00Z`) + 864e5).toISOString().slice(0, 10);
 
-  // 2) 가장 큰 변화(규칙): ① 비·눈 시작(지금 건조 → 처음 강수형태가 있거나 강수확률 60% 이상인 시각) ② 이웃한 날 최고기온 5℃ 이상 변화(가장 큰 것) ③ 3시간 안 기온 4℃ 이상 하강
+  // 2) 가장 큰 변화(규칙): ① 강수 — 강수형태(PTY) 예보가 있는 시각과 강수확률 60% 이상인 시각을 구별(확률만으로 '비 시작'이라 하지 않음)
+  //    ② 이웃한 날 최고기온 5℃ 이상 변화(가장 큰 것) ③ 3시간 안 기온 4℃ 이상 하강. 값은 rt-story-rules FORECAST_RULES 와 같음
+  const R = { popHigh: 60, drop3h: 4, dayJump: 5, fullHours: 72 };
+  const hasPty = (x) => !!(x.pty && x.pty !== "없음");
+  const highPop = (x) => x.pop != null && x.pop >= R.popHigh;
+  // 정시 연속 확인: 앞뒤가 정확히 1시간 간격인 칸만 이어진 것으로 봄
+  const wallMs = (t) => Date.parse(`${t.replace(" ", "T")}+09:00`);
+  const continuousHours = (hs) => hs.every((x, i) => i === 0 || wallMs(x.time) - wallMs(hs[i - 1].time) === 36e5);
+  // 연속 구간 [i, j]: 조건 f 를 만족하며 1시간 간격으로 이어진 칸
+  const runEnd = (hs, i, f) => { let j = i; while (j + 1 < hs.length && f(hs[j + 1]) && wallMs(hs[j + 1].time) - wallMs(hs[j].time) === 36e5) j++; return j; };
   function changes(d) {
     const out = [], hs = d.hours || [];
-    const wet = (x) => (x.pty && x.pty !== "없음") || (x.pop ?? 0) >= 60;
     if (hs.length) {
-      if (!wet(hs[0])) {
-        const i = hs.findIndex(wet);
-        if (i > 0) {
-          const s = hs[i]; let j = i; while (j + 1 < hs.length && wet(hs[j + 1])) j++;
-          const mm = hs.slice(i, j + 1).reduce((a, x) => a + (x.pcpMm > 0 ? x.pcpMm : 0), 0);
-          out.push({ ico: kind(null, s.pty !== "없음" ? s.pty : "비") || "rain", t: `${dayWord(s.time.slice(0, 10), d.date)} ${hh(s.time)}시쯤 ${s.pty && s.pty !== "없음" ? s.pty : "비"} 시작`, sub: `강수확률 ${s.pop ?? "–"}% · ${hh(hs[j].time)}시까지 ${j - i + 1}시간${mm > 0 ? ` · 숫자로 나온 강수량 합 ${Math.round(mm * 10) / 10}mm` : ""}`, src: `${s.source} ${hm(s.base)} 발표` });
-        }
+      const allTxt = hs.length >= R.fullHours && continuousHours(hs.slice(0, R.fullHours)) ? `${R.fullHours}시간 내내` : `제공된 ${hs.length}시간 내내`;
+      const src = (x) => `${x.source} ${hm(x.base)} 발표`;
+      if (hasPty(hs[0])) {
+        // 지금 강수형태 예보가 있음 → 강수형태가 '없음'으로 바뀌는 첫 시각
+        const j = runEnd(hs, 0, hasPty);
+        out.push({ ico: kind(null, hs[0].pty) || "rain", t: j + 1 < hs.length ? `${dayWord(hs[j + 1].time.slice(0, 10), d.date)} ${hh(hs[j + 1].time)}시 예보부터 강수형태 없음` : `${allTxt} 강수형태(${hs[0].pty}) 예보`, sub: `지금 ${esc(hs[0].pty)} 예보${hs[0].pop != null ? ` · 강수확률 ${hs[0].pop}%` : ""}`, src: src(hs[0]) });
       } else {
-        const j = hs.findIndex((x) => !wet(x));
-        out.push({ ico: kind(null, hs[0].pty !== "없음" ? hs[0].pty : "비") || "rain", t: j > 0 ? `${dayWord(hs[j].time.slice(0, 10), d.date)} ${hh(hs[j].time)}시쯤 비·눈 그침` : "72시간 내내 비·눈 또는 강수확률 60% 이상", sub: `지금 ${esc(hs[0].pty !== "없음" ? hs[0].pty : `강수확률 ${hs[0].pop}%`)}`, src: `${hs[0].source} ${hm(hs[0].base)} 발표` });
+        const i = hs.findIndex(hasPty);
+        if (i > 0) {
+          const s0 = hs[i], j = runEnd(hs, i, hasPty);
+          const mm = hs.slice(i, j + 1).reduce((a, x) => a + (x.pcpMm > 0 ? x.pcpMm : 0), 0);
+          out.push({ ico: kind(null, s0.pty) || "rain", t: `${dayWord(s0.time.slice(0, 10), d.date)} ${hh(s0.time)}시 예보부터 ${s0.pty}`, sub: `강수형태 예보 ${j - i + 1}시간(${hh(hs[j].time)}시 예보까지)${s0.pop != null ? ` · 강수확률 ${s0.pop}%` : ""}${mm > 0 ? ` · 숫자로 나온 강수량 합 ${Math.round(mm * 10) / 10}mm` : ""}`, src: src(s0) });
+        } else {
+          // 강수형태 예보는 없고 강수확률만 높은 시간대
+          const p = hs.findIndex(highPop);
+          if (p >= 0) { const j = runEnd(hs, p, highPop); out.push({ ico: "rain", t: p === 0 && j === hs.length - 1 ? `${allTxt} 강수확률 ${R.popHigh}% 이상` : `${dayWord(hs[p].time.slice(0, 10), d.date)} ${hh(hs[p].time)}시~${hh(hs[j].time)}시 강수확률 ${R.popHigh}% 이상`, sub: `강수형태 예보는 없음 · 최대 ${Math.max(...hs.slice(p, j + 1).map((x) => x.pop))}%`, src: src(hs[p]) }); }
+        }
       }
-      let best = null;
+    let best = null;
       const byT = new Map(hs.map((x) => [x.time, x])), plus3 = (t) => { const d0 = new Date(`${t.replace(" ", "T")}+09:00`); d0.setTime(d0.getTime() + 3 * 36e5); const k = new Date(d0.getTime() + 9 * 36e5).toISOString(); return `${k.slice(0, 10)} ${k.slice(11, 13)}:00:00`; };
-      for (let i = 0; i < hs.length; i++) { const nx = byT.get(plus3(hs[i].time)); if (!nx) continue; const a = hs[i].ta, b = nx.ta; if (a != null && b != null && a - b >= 4 && (!best || a - b > best.dv)) best = { dv: Math.round((a - b) * 10) / 10, a: hs[i], b: nx }; }
+      for (let i = 0; i < hs.length; i++) { const nx = byT.get(plus3(hs[i].time)); if (!nx) continue; const a = hs[i].ta, b = nx.ta; if (a != null && b != null && a - b >= R.drop3h && (!best || a - b > best.dv)) best = { dv: Math.round((a - b) * 10) / 10, a: hs[i], b: nx }; }
       if (best) out.push({ ico: "drop", t: `${dayWord(best.a.time.slice(0, 10), d.date)} ${hh(best.a.time)}시→${hh(best.b.time)}시 기온 ${best.a.ta}℃ → ${best.b.ta}℃ (${sg(-best.dv)})`, sub: "3시간 사이 가장 큰 하강", src: `${best.b.source} ${hm(best.b.base)} 발표` });
     }
     const ds = (d.days || []).filter((x) => !x.none && x.max != null);
     let jump = null;
-    for (let i = 1; i < ds.length; i++) { if (Math.round((Date.parse(ds[i].date) - Date.parse(ds[i - 1].date)) / 864e5) !== 1) continue; const dv = Math.round((ds[i].max - ds[i - 1].max) * 10) / 10; if (Math.abs(dv) >= 5 && (!jump || Math.abs(dv) > Math.abs(jump.dv))) jump = { dv, a: ds[i - 1], b: ds[i] }; }
+    for (let i = 1; i < ds.length; i++) { if (Math.round((Date.parse(ds[i].date) - Date.parse(ds[i - 1].date)) / 864e5) !== 1) continue; const dv = Math.round((ds[i].max - ds[i - 1].max) * 10) / 10; if (Math.abs(dv) >= R.dayJump && (!jump || Math.abs(dv) > Math.abs(jump.dv))) jump = { dv, a: ds[i - 1], b: ds[i] }; }
     if (jump) out.push({ ico: jump.dv < 0 ? "drop" : "rise", t: `${dayWord(jump.b.date, d.date)} 최고기온 ${jump.b.max}℃ — 전날(${jump.a.max}℃)보다 ${sg(jump.dv)}`, sub: `이웃한 두 날 최고기온 차이가 가장 큰 날${jump.a.maxSource !== jump.b.maxSource ? ` (전날은 ${jump.a.maxSource}, 이날은 ${jump.b.maxSource} 값)` : ""}`, src: `${jump.b.maxSource} ${hm(jump.b.maxBase)} 발표` });
     return out;
   }
   function changeCard(d) {
     const cs = changes(d);
     const ic = (k) => (k === "drop" ? `<b class="fv-arrow down">↓</b>` : k === "rise" ? `<b class="fv-arrow up">↑</b>` : iconSvg(k, false, 34, k));
-    return `<section class="card fv-chg" aria-label="가장 큰 변화"><h2>가장 큰 변화 <span class="rt-badge fc">예보</span></h2>${cs.length ? `<ul>${cs.map((c) => `<li>${ic(c.ico)}<div><b>${esc(c.t)}</b><small>${esc(c.sub)} · ${esc(c.src)}</small></div></li>`).join("")}</ul>` : `<p class="rt-ins">앞으로 큰 변화 없음</p>`}<p class="rt-note">규칙: 비·눈 시작(강수형태가 있거나 강수확률 60% 이상인 첫 시각), 3시간 사이 기온 4℃ 이상 하강, 이웃한 날 최고기온 5℃ 이상 변화. 해당하는 것만 보입니다.</p></section>`;
+    return `<section class="card fv-chg" aria-label="가장 큰 변화"><h2>가장 큰 변화 <span class="rt-badge fc">예보</span></h2>${cs.length ? `<ul>${cs.map((c) => `<li>${ic(c.ico)}<div><b>${esc(c.t)}</b><small>${esc(c.sub)} · ${esc(c.src)}</small></div></li>`).join("")}</ul>` : `<p class="rt-ins">앞으로 큰 변화 없음</p>`}<p class="rt-note">규칙: 강수형태(비·눈 등) 예보가 시작·끝나는 시각, 강수형태 예보 없이 강수확률만 60% 이상인 시간대(따로 표시), 3시간 사이 기온 4℃ 이상 하강, 이웃한 날 최고기온 5℃ 이상 변화. 시각은 예보 정시 기준이라 정확한 시작 시각이 아닙니다. 해당하는 것만 보입니다.</p></section>`;
   }
   // 발표별 변화 한 줄: 이웃한 두 발표 사이 3℃ 이상 바뀐 경우만
   function releaseJumps(d) {

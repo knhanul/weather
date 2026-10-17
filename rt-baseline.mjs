@@ -8,16 +8,18 @@
 // 결측: 시간자료 NaN(행 없음·품질 9)은 빼고, 0 은 값(무강수 0)으로 쓴다. 강수확률은 이 엔진에 넣지 않는다.
 // 분포(백분위·순위·최고·최저): 유효한 해들의 창 안 값 전체(표본). 표본 60개 미만이면 백분위·순위를 내지 않는다.
 import { ymdToDn, dnToYmd, isLeap, hval, HOURLY_FROM, round } from "./stats-engine.mjs";
+import { SAMPLE_RULES } from "./rt-story-rules.mjs";
+import { describeDifference } from "./rt-story-templates.mjs";
 
 export const BASES = [
   { id: "all", kind: "all" },
   { id: "r10", short: "최근 10년", years: 10 },
   { id: "r5", short: "최근 5년", years: 5 },
 ];
-export const WINDOW_DAYS = 7;
-export const MIN_YEAR_SHARE = 0.8;
-export const MIN_IN_YEAR_SHARE = 0.5;
-export const MIN_SAMPLES_RANK = 60;
+export const WINDOW_DAYS = SAMPLE_RULES.windowDays; // 7
+export const MIN_YEAR_SHARE = SAMPLE_RULES.minYearShare; // 0.8
+export const MIN_IN_YEAR_SHARE = SAMPLE_RULES.minInYearShare; // 0.5
+export const MIN_SAMPLES_RANK = SAMPLE_RULES.minSamplesRank; // 60
 export const DATA_FROM_YEAR = +HOURLY_FROM.slice(0, 4);
 
 const KST_MS = 9 * 3600000;
@@ -147,13 +149,12 @@ export function createBaselineCache(max = 4000) {
   };
 }
 
-// 차이 → 말(과장하지 않음): |차| < 1 비슷, < 3 조금, < 5 꽤, 그 이상 상당히
+// 차이 → 말(과장하지 않음): |차| < 1 비슷, < 3 조금, < 5 꽤, 그 이상 상당히 — 단계는 describeDifference(ta)와 같음(rt-story-rules DIFF_LEVELS)
 export function diffWord(d, unitHot = "높", unitCold = "낮") {
   if (!Number.isFinite(d)) return null;
-  const a = Math.abs(d);
-  if (a < 1) return "비슷";
-  const deg = a < 3 ? "조금 " : a < 5 ? "꽤 " : "상당히 ";
-  return `${deg}${d > 0 ? unitHot : unitCold}음`;
+  const x = describeDifference("ta", d);
+  if (x.level === "similar") return "비슷";
+  return `${x.levelWord} ${d > 0 ? unitHot : unitCold}음`;
 }
 
 // ---------------------------------------------------------------- 5단계 확장(누적·계절 시작·조건 비율)
@@ -191,15 +192,18 @@ export function ytdCompare(store, asOfYmd, field) {
   return { year: Y, from: `${Y}-01-01`, to: asOfYmd, field, value: cur.value == null ? null : round(cur.value, 1), current: cur, periods };
 }
 // 그 해 처음으로 일최고기온 ≥ th 인 날(1/1 ~ 같은 월일까지만 봄 — 진행 중인 해와 공정하게)
+// 덧붙인 값(기존 date·doy 는 그대로): seasonStart, missingBeforeEvent(사건 전 결측 일수), firstConfirmed(사건 전 결측 0일 때만 '처음' 확정),
+//   coverage(살펴본 날 중 자료가 있는 비율, 0~1). 사건이 없으면 missing(기존)·coverage.
 export function firstHotDay(store, y, untilMd, th = 30) {
   const a = ymdToDn(`${y}-01-01`), b = centerDn(y, untilMd);
   let miss = 0;
   for (let dn = a; dn <= b; dn++) {
     const v = dayVal(store, "max", dn);
     if (!Number.isFinite(v)) { miss++; continue; }
-    if (v >= th) return { year: y, date: dnToYmd(dn), doy: dn - a + 1 };
+    if (v >= th) { const days = dn - a + 1; return { year: y, date: dnToYmd(dn), doy: days, seasonStart: `${y}-01-01`, missingBeforeEvent: miss, firstConfirmed: miss === 0, coverage: round((days - miss) / days, 3) }; }
   }
-  return { year: y, date: null, doy: null, missing: miss };
+  const days = b - a + 1;
+  return { year: y, date: null, doy: null, missing: miss, seasonStart: `${y}-01-01`, missingBeforeEvent: null, firstConfirmed: null, coverage: days > 0 ? round((days - miss) / days, 3) : null };
 }
 // 같은 시기 ±7일 같은 정시에 조건(산책·러닝)을 만족한 비율 — 기준별
 export function outdoorWindow(hs, ymd, hour, cond, { periods = basePeriods(ymd), w = WINDOW_DAYS } = {}) {
