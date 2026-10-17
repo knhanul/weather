@@ -214,3 +214,10 @@ test("계절 후보: 선택 기준(bi)의 평균, '올해 마지막' 금지, 예
   assert.equal(c[0].kind, "예보"); assert.match(c[0].title, /가능성/); assert.match(c[0].text, /현재까지 확인되지 않음/);
   assert.equal(c[0].chart.current.kind, "fcst");
 });
+
+test("'가장 최근 30℃'는 연말 전 '이르다'를 말하지 않음(제외)", () => {
+  const store = world();
+  const last = seasonEvent("last-hot-day", { store, hs: null, refYmd: "2026-08-20", untilYmd: "2026-08-19" });
+  const c = seasonCands([last], { sid: "108", today: "2026-08-20", tv: () => 0.8, LIFE_VALUE: { info: 0.5 }, basis: "all", bi: 0, basisName: "1990년 이후" });
+  for (const x of c) if (x.kind === "관측" && x.material?.d < 3) assert.ok(x.exclude);
+});

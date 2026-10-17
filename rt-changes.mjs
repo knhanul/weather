@@ -1,6 +1,6 @@
 // '가장 큰 변화'(astra 6장, 4단계) — 앞으로 72시간 예보에서 변화 후보를 모두 찾고, 크기 M = min(1, |Δ|/기준) 으로 최대 3개를 고른 뒤 시간순.
 //   M 은 통계적 희귀도가 아니다(같은 시기 분포와 비교하지 않음). 후보마다 72시간 그래프에서 강조할 구간(startW~endW)을 준다.
-//   규칙(초기값): 3시간 기온 변화 |Δ| ≥ 4℃(기준 8) / 이웃한 날 최저기온 |Δ| ≥ 5℃(기준 10) / 풍속 W(t+3)−W(t) ≥ 3 이고 W(t+3) ≥ 5 m/s(기준 6, '돌풍'이라 하지 않음)
+//   규칙(초기값): 3시간 기온 변화 |Δ| ≥ 4℃(기준 8; 하루 흐름 방향이면 6℃ — CHANGE_RULES.diurnal) / 이웃한 날 최저기온 |Δ| ≥ 5℃(기준 10) / 풍속 W(t+3)−W(t) ≥ 3 이고 W(t+3) ≥ 5 m/s(기준 6, '돌풍'이라 하지 않음)
 //   / 다음 날 일교차 D ≥ 10 이고 전날보다 5 이상 큼(기준 10) / 습도 3시간 |Δ| ≥ 20%p(기준 40, 건조·안개로 해석하지 않음)
 //   / 강수형태가 각각 2시간 이상 이어진 두 형태로 바뀜(빈 시각을 건너 잇지 않음) / 주말: 토·일 중 하루만 활동 조건 2시간 이상 연속
 //   / 큰 예보 수정: 직전 발표 대비 기온 ≥ 3℃ 또는 강수확률 ≥ 20%p — '발표 변경'으로 표시
@@ -8,7 +8,13 @@ export const CHANGE_RULES = {
   rise3h: { delta: 4, ref: 8 }, tmn: { delta: 5, ref: 10 }, wind: { delta: 3, min: 5, ref: 6 }, range: { min: 10, up: 5, ref: 10 }, rh: { delta: 20, ref: 40 },
   pty: { run: 2, mStart: 0.7, mSwitch: 1 }, weekend: { run: 2, from: 7, to: 20, tmin: 10, tmax: 25, wind: 5, popMax: 60, m: 0.5 }, revision: { ta: 3, taRef: 6, pop: 20, popRef: 40 },
   max: 3, hours: 72,
+  // 4단계 되돌려 보기 조정: 아침 오름(5~12시 시작 기온 상승·습도 하강)·저녁 내림(15~21시 시작 기온 하강·습도 상승)은
+  //   매일 있는 하루 흐름이라 초기 기준(4℃·20%p)으로는 거의 매일 걸림 → 그 방향·시간대에만 기준 × 1.5(6℃·30%p)
+  diurnal: { riseFrom: 5, riseTo: 12, fallFrom: 15, fallTo: 21, factor: 1.5 },
 };
+// 하루 흐름 방향(기온 기준): +1 = 아침 오름 시간대, −1 = 저녁 내림 시간대, 0 = 그 밖
+const diurnalDir = (t) => { const h = +t.slice(11, 13), D = CHANGE_RULES.diurnal; return h >= D.riseFrom && h <= D.riseTo ? 1 : h >= D.fallFrom && h <= D.fallTo ? -1 : 0; };
+const need = (base, d, t, sign = 1) => (Math.sign(d) * sign === diurnalDir(t) ? base * CHANGE_RULES.diurnal.factor : base);
 const CR = CHANGE_RULES;
 const fin = (v) => v != null && Number.isFinite(+v);
 const r1 = (v) => Math.round(v * 10) / 10;
@@ -37,11 +43,11 @@ export function bigChanges({ hours = [], days = [], revisions = [], pop = null, 
   const C = [];
   const src = (h) => h.items?.ta?.source || h.source;
   // 1) 3시간 기온
-  C.push(...threeHour(H, "ta", (d) => Math.abs(d) >= CR.rise3h.delta, ({ a, b, d }) => ({ kind: "ta3h", M: Math.min(1, Math.abs(d) / CR.rise3h.ref), delta: d, unit: "℃", startW: a.time.slice(0, 16), endW: b.time.slice(0, 16), title: `${dayWord(a.time.slice(0, 10), today)} ${hh(a.time)}→${hh(b.time)} 기온 ${d > 0 ? "상승" : "하강"} ${Math.abs(d)}℃`, sub: `${a.ta}℃ → ${b.ta}℃(3시간)`, source: src(b) })));
+  C.push(...threeHour(H, "ta", (d, a) => Math.abs(d) >= need(CR.rise3h.delta, d, a.time), ({ a, b, d }) => ({ kind: "ta3h", M: Math.min(1, Math.abs(d) / CR.rise3h.ref), delta: d, unit: "℃", startW: a.time.slice(0, 16), endW: b.time.slice(0, 16), title: `${dayWord(a.time.slice(0, 10), today)} ${hh(a.time)}→${hh(b.time)} 기온 ${d > 0 ? "상승" : "하강"} ${Math.abs(d)}℃`, sub: `${a.ta}℃ → ${b.ta}℃(3시간)`, source: src(b) })));
   // 2) 풍속
   C.push(...threeHour(H, "ws", (d, a, b) => d >= CR.wind.delta && b.ws >= CR.wind.min, ({ a, b, d }) => ({ kind: "wind", M: Math.min(1, d / CR.wind.ref), delta: d, unit: "m/s", startW: a.time.slice(0, 16), endW: b.time.slice(0, 16), title: `${dayWord(a.time.slice(0, 10), today)} ${hh(b.time)}쯤 바람 강해짐`, sub: `풍속 ${a.ws}→${b.ws}m/s(3시간, 평균 풍속 예보)`, source: b.items?.ws?.source || b.source })));
   // 3) 습도
-  C.push(...threeHour(H, "hm", (d) => Math.abs(d) >= CR.rh.delta, ({ a, b, d }) => ({ kind: "rh", M: Math.min(1, Math.abs(d) / CR.rh.ref), delta: d, unit: "%p", startW: a.time.slice(0, 16), endW: b.time.slice(0, 16), title: `${dayWord(a.time.slice(0, 10), today)} ${hh(a.time)}→${hh(b.time)} 습도 ${Math.abs(d)}%p ${d > 0 ? "상승" : "하강"}`, sub: `${a.hm}% → ${b.hm}%(3시간)`, source: b.items?.hm?.source || b.source })));
+  C.push(...threeHour(H, "hm", (d, a) => Math.abs(d) >= need(CR.rh.delta, d, a.time, -1), ({ a, b, d }) => ({ kind: "rh", M: Math.min(1, Math.abs(d) / CR.rh.ref), delta: d, unit: "%p", startW: a.time.slice(0, 16), endW: b.time.slice(0, 16), title: `${dayWord(a.time.slice(0, 10), today)} ${hh(a.time)}→${hh(b.time)} 습도 ${Math.abs(d)}%p ${d > 0 ? "상승" : "하강"}`, sub: `${a.hm}% → ${b.hm}%(3시간)`, source: b.items?.hm?.source || b.source })));
   // 4) 강수형태: 각 형태가 2시간 이상 이어진 두 묶음이 바로 붙어 있을 때(빈 시각에서 끊음)
   const runs = [];
   for (const h of H) {

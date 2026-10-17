@@ -164,9 +164,11 @@ export function seasonCands(seasons, { sid, basis, bi, today, tv, LIFE_VALUE, ba
     const base = { key, ruleId: e.id, topic: "season", path: "stat", phenomenon: "계절 신호", basisId: basis, A: LIFE_VALUE.info, minSamples: ev.minOccur, samples: p.hitSeasons, exclude: home.home ? null : home.reason, method: `${ev.label}(${ev.note || "공식 일자료"}). 시즌 ${e.seasonStart.slice(5)}~${e.seasonEnd.slice(5)}, 끝난 시즌 중 처음~사건 사이 결측 1일 이내인 완전한 시즌만 평균(발생 ${ev.minOccur}개 이상). 무발생 시즌은 날짜로 넣지 않아요.`, basis: "ASOS 공식 일자료", chart, facts: { event: e.id, season: e.season, seasonStart: e.seasonStart, missingBeforeEvent: cur?.missingBeforeEvent ?? null, firstConfirmed: cur?.firstConfirmed ?? null, coverage: cur?.coverage ?? null, meanDate: p.meanDate ?? null, hitSeasons: p.hitSeasons, completeSeasons: p.completeSeasons } };
     if (cur?.date && p.diffDays != null) {
       const d = p.diffDays, near = Math.abs(d) < 3;
+      // '가장 최근 30℃'는 시즌이 끝나기 전엔 더 늦어질 수 있음 → '평균보다 늦었다'(이미 확정)만 말하고, 이르다·비슷하다는 말하지 않음
+      const premature = e.kind === "last" && !e.retro && d < 3;
       const rel = near ? `${basisName} 평균(${p.meanDate.replace("-", "/")})과 비슷해요` : `${basisName} 평균보다 ${Math.abs(d)}일 ${d < 0 ? "일렀어요" : "늦었어요"}`;
       const what = e.kind === "last" ? (e.retro ? `지난해 마지막 ${ev.short.replace("마지막 ", "")}` : "가장 최근 30℃ 이상인 날") : ev.short;
-      C.push({ ...base, eventId: `${sid}|${e.id}|${e.season}|${cur.date}`, kind: "관측", U: Math.min(1, Math.abs(d) / 14), T: tv(`${cur.date} 00:00`, `${cur.date} 23:59`), material: { d, date: cur.date },
+      C.push({ ...base, ...(premature ? { exclude: base.exclude || "시즌이 끝나지 않아 '평균보다 이르다·비슷하다'고 말할 수 없음(더 늦은 30℃ 날이 올 수 있음)" } : {}), eventId: `${sid}|${e.id}|${e.season}|${cur.date}`, kind: "관측", U: Math.min(1, Math.abs(d) / 14), T: tv(`${cur.date} 00:00`, `${cur.date} 23:59`), material: { d, date: cur.date },
         title: `${what} ${dateW(cur.date)} — ${rel}`,
         text: `${e.kind === "last" ? (e.retro ? `${e.season}년 마지막 ${ev.label.replace(/^가장 최근 /, "")}` : `올해 ${e.scannedTo.slice(5).replace("-", "/")}까지 ${ev.label}`) : `이번 시즌(${e.season}) ${firstWord} ${ev.label.replace(/^(올해|이번 [^ ]+ 계절) (처음 )?/, "")}`}: ${dateW(cur.date)}(${cur.value}${ev.unit}). ${p.range}년 완전한 ${p.completeSeasons}개 시즌 중 ${p.hitSeasons}개 발생 시즌의 평균 ${p.meanDate.replace("-", "/")}${p.earlier != null ? ` — 발생 시즌 ${p.hitSeasons}개 중 이보다 ${e.kind === "last" ? "일찍 끝난" : "이른"} 시즌 ${p.earlier}개` : ""}.${e.kind === "last" && !e.retro ? " 연말 전이라 '올해 마지막'으로 말하지 않아요." : ""}` });
     } else if (!cur?.date && e.forecast && p.meanPos != null) {
