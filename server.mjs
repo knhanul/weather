@@ -22,6 +22,7 @@ import { createStatsApi } from "./stats-api.mjs";
 import { createRtApi } from "./rt-api.mjs";
 import { createRtSnapshotDb } from "./rt-snapshot-db.mjs";
 import { createStatsHourly } from "./stats-hourly.mjs";
+import { HOURLY_FROM } from "./stats-engine.mjs";
 import { collectForecast, FORECAST_KINDS, releaseTimes } from "./kma-forecast.mjs";
 import { collectMid, MID_KINDS, midReleaseTimes } from "./kma-mid.mjs";
 import { forecastStatus } from "./rt-admin.mjs";
@@ -127,8 +128,10 @@ function seedIfEmpty() {
 
 async function upsert(rows) {
   const out = await upsertHourlyStore(rows);
-  statsHourly.invalidateRows(rows); // 날씨 통계(시간자료 기반)가 오래된 값을 쓰지 않게 — 저장한 지점의 그 날짜부터 다시 읽음
-  notifyRt("asos-hourly", rows, (r) => r.observation_datetime, "H"); // 5단계: 저장 성공 뒤 영향 지점 사전 계산
+  // 시간자료 통계·실시간 분석은 HOURLY_FROM(1990-01-01)부터만 읽는다 → 그 전 자료(1970~1989 백필)는 메모리 통계를 비우거나 사전 계산을 부를 이유가 없다
+  const used = rows.filter((r) => String(r.observation_datetime || "").slice(0, 10) >= HOURLY_FROM);
+  statsHourly.invalidateRows(used); // 날씨 통계(시간자료 기반)가 오래된 값을 쓰지 않게 — 저장한 지점의 그 날짜부터 다시 읽음
+  notifyRt("asos-hourly", used, (r) => r.observation_datetime, "H"); // 5단계: 저장 성공 뒤 영향 지점 사전 계산
   return out;
 }
 // 5단계(12-3): 저장 성공 → 영향 지점 사전 계산. 끝난 해(올해 1월 1일 전) 자료가 있으면 그 지점의 기준 분포 판을 올린다
