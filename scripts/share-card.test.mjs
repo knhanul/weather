@@ -63,6 +63,11 @@ test("카드 배치: 글자 자르기·줄바꿈, SVG 이스케이프", () => {
   assert.ok(svg.startsWith("<svg") && svg.endsWith("</svg>"));
   assert.equal(fmt(2.25, 1), "2.3");
   assert.equal(fmt(null), "–");
+  // 줄이 많아도 바닥 출처 구분선 위에서 끝남
+  const many = layout({ title: "가".repeat(30), story: "이야기", chips: ["a"], rows: Array.from({ length: 8 }, (_, i) => ({ label: `r${i}`, value: "1", note: "n" })), foot: ["a", "b", "c"] });
+  const footLine = many.ops.filter((o) => o.t === "line").pop();
+  const box = many.ops.filter((o) => o.t === "rect" && o.stroke === "#dbe6f7").pop();
+  assert.ok(box.y + box.h <= footLine.y1, `${box.y + box.h} <= ${footLine.y1}`);
 });
 
 // API 응답과 같은 모양의 작은 객체(값은 합성)
@@ -84,7 +89,7 @@ test("날짜 카드: 숫자·표본·출처, 자료 없는 지표는 '자료 부
   assert.equal(byLabel["평균 일조시간"].value, "6.0시간");
   assert.ok(sp.chips.includes("서울 (108)") && sp.chips.includes("최근 10년(2016~2025)"));
   assert.match(sp.foot.join(" "), /기상청 ASOS/);
-  assert.match(sp.story, /2025년 2025\.10\.18\(토\): 평균 13\.2℃ · 강수 0\.0mm/);
+  assert.match(sp.story, /2025\.10\.18\(토\) 그날: 평균 13\.2℃ · 강수 0\.0mm/);
   const og = dayOg(D, "");
   assert.match(og.title, /양력 10월 18일의 날씨 — 서울 최근 10년/);
   assert.match(og.desc, /평균기온 14\.9℃\(10개 해\) · 강수 있었던 해 3\/10/);

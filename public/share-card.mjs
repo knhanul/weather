@@ -60,20 +60,21 @@ export function layout(spec) {
   const W = CARD_W, H = CARD_H, P = 72;
   const ops = [];
   const accent = spec.accent || "#026ef8";
+  const tl = wrap(spec.title, 56, W - P * 2, 2);
+  const bandH = 300 + (tl.length - 1) * 64;
   ops.push({ t: "rect", x: 0, y: 0, w: W, h: H, fill: "#f4f8ff" });
-  ops.push({ t: "rect", x: 0, y: 0, w: W, h: 300, fill: accent });
-  ops.push({ t: "rect", x: 0, y: 290, w: W, h: 10, fill: "#0d1b3d", o: 0.08 });
+  ops.push({ t: "rect", x: 0, y: 0, w: W, h: bandH, fill: accent });
+  ops.push({ t: "rect", x: 0, y: bandH - 10, w: W, h: 10, fill: "#0d1b3d", o: 0.08 });
   // 브랜드
   ops.push({ t: "circle", x: P + 22, y: 82, r: 22, fill: "#fff" });
   ops.push({ t: "text", x: P + 22, y: 91, s: 22, w: 800, fill: accent, a: "middle", v: "이" });
   ops.push({ t: "text", x: P + 58, y: 92, s: 28, w: 800, fill: "#fff", v: "이날" });
   ops.push({ t: "text", x: P + 126, y: 92, s: 22, w: 500, fill: "#fff", o: 0.85, v: clip(spec.eyebrow || "이야기가 있는 날씨", 22, W - P * 2 - 130) });
   // 제목
-  const tl = wrap(spec.title, 56, W - P * 2, 2);
   tl.forEach((line, i) => ops.push({ t: "text", x: P, y: 178 + i * 64, s: 56, w: 800, fill: "#fff", v: line }));
   let y = 178 + (tl.length - 1) * 64 + 54;
   if (spec.subtitle) { ops.push({ t: "text", x: P, y, s: 26, w: 500, fill: "#fff", o: 0.92, v: clip(spec.subtitle, 26, W - P * 2) }); }
-  y = 340;
+  y = bandH + 40;
   // 칩(지점·기간·표본)
   let cx = P;
   for (const c of spec.chips || []) {
@@ -94,10 +95,13 @@ export function layout(spec) {
     sl.forEach((line, i) => ops.push({ t: "text", x: P + 36, y: y + 64 + i * 48, s: 34, w: 700, fill: "#0d1b3d", v: line }));
     y += h + 24;
   }
-  // 숫자 줄
+  const foot = spec.foot || [];
+  const footTop = H - 64 - (foot.length - 1) * 32 - 44 - 24; // 바닥 구분선 위 여백
+  // 숫자 줄: 남은 높이에 맞춰 줄 높이를 줄인다(최소 72)
   const rows = spec.rows || [];
   if (rows.length) {
-    const rh = rows.length > 6 ? 96 : 112;
+    const rh = Math.max(52, Math.min(112, Math.floor((footTop - y - 20) / rows.length)));
+    const showNote = rh >= 84; // 좁으면 보조 글은 빼고 값만
     const boxH = rows.length * rh + 20;
     ops.push({ t: "rect", x: P, y, w: W - P * 2, h: boxH, r: 24, fill: "#fff", stroke: "#dbe6f7" });
     rows.forEach((r, i) => {
@@ -105,9 +109,10 @@ export function layout(spec) {
       if (i) ops.push({ t: "line", x1: P + 28, y1: ry, x2: W - P - 28, y2: ry, stroke: "#e6edf8" });
       if (r.color) ops.push({ t: "circle", x: P + 44, y: ry + rh / 2 - 4, r: 10, fill: r.color });
       const lx = P + (r.color ? 68 : 32);
-      ops.push({ t: "text", x: lx, y: ry + rh / 2 - (r.note ? 6 : -8), s: 28, w: 600, fill: "#28406e", v: clip(r.label, 28, 460) });
-      if (r.note) ops.push({ t: "text", x: lx, y: ry + rh / 2 + 30, s: 21, w: 500, fill: "#6b7a99", v: clip(r.note, 21, 520) });
-      ops.push({ t: "text", x: W - P - 32, y: ry + rh / 2 + 14, s: r.value && textUnits(r.value) > 9 ? 34 : 44, w: 800, fill: "#0d1b3d", a: "end", v: clip(r.value, 44, 420) });
+      const note = showNote ? r.note : "";
+      ops.push({ t: "text", x: lx, y: ry + rh / 2 - (note ? 6 : -10), s: 28, w: 600, fill: "#28406e", v: clip(r.label, 28, 460) });
+      if (note) ops.push({ t: "text", x: lx, y: ry + rh / 2 + 30, s: 21, w: 500, fill: "#6b7a99", v: clip(r.note, 21, 520) });
+      ops.push({ t: "text", x: W - P - 32, y: ry + rh / 2 + (rh < 84 ? 12 : 14), s: rh < 84 ? 34 : r.value && textUnits(r.value) > 9 ? 34 : 44, w: 800, fill: "#0d1b3d", a: "end", v: clip(r.value, 44, 420) });
     });
     y += boxH + 24;
   }
@@ -117,7 +122,7 @@ export function layout(spec) {
     const n = t.cols.length;
     const labelW = 300;
     const colW = (W - P * 2 - labelW - 32) / n;
-    const rh = t.rows.length > 6 ? 78 : 92;
+    const rh = Math.max(60, Math.min(92, Math.floor((footTop - y - 82 - (t.legend ? t.legend.length * 34 + 16 : 0)) / t.rows.length)));
     const boxH = 70 + t.rows.length * rh + 12;
     ops.push({ t: "rect", x: P, y, w: W - P * 2, h: boxH, r: 24, fill: "#fff", stroke: "#dbe6f7" });
     t.cols.forEach((c, i) => {
@@ -139,7 +144,6 @@ export function layout(spec) {
     if (t.legend) t.legend.forEach((l, i) => { ops.push({ t: "text", x: P, y: y + 8 + i * 34, s: 22, w: 600, fill: t.cols[i]?.color || "#28406e", v: clip(l, 22, W - P * 2) }); });
   }
   // 바닥: 출처·기준
-  const foot = spec.foot || [];
   const fy = H - 64 - (foot.length - 1) * 32;
   ops.push({ t: "line", x1: P, y1: fy - 44, x2: W - P, y2: fy - 44, stroke: "#cfdcf0" });
   foot.forEach((f, i) => ops.push({ t: "text", x: P, y: fy + i * 32, s: 21, w: i === foot.length - 1 ? 700 : 500, fill: i === foot.length - 1 ? accent : "#52617f", v: clip(f, 21, W - P * 2) }));
@@ -192,7 +196,7 @@ export function daySpec(D, { alias = "" } = {}) {
   let sel = "";
   if (s && s.dateStatus === "ok" && s.rowPresent) {
     const v = s.values;
-    sel = `${s.referenceYear}년 ${dot(s.solarDate)}(${dow(s.solarDate)}): 평균 ${fin(v.avg) ? `${fmt(v.avg)}℃` : "자료 없음"} · 강수 ${fin(v.rain) ? `${fmt(v.rain)}mm` : "자료 없음"}`;
+    sel = `${dot(s.solarDate)}(${dow(s.solarDate)}) 그날: 평균 ${fin(v.avg) ? `${fmt(v.avg)}℃` : "자료 없음"} · 강수 ${fin(v.rain) ? `${fmt(v.rain)}mm` : "자료 없음"}`;
   }
   const title = alias ? `${alias}` : `${D.specLabel}의 날씨`;
   return {
@@ -226,7 +230,7 @@ export function battleSpec(B, { labels = [] } = {}) {
     subtitle: "서로 자료가 있는 같은 기준연도끼리만 비교 · 종합 승자 없음",
     chips: [B.differentStations ? "카드마다 다른 관측지점" : `${st0.station_name} (${st0.station_id})`, B.window.label, ...(B.mixedCalendars ? ["양력·음력 혼합"] : [])],
     table: { cols, rows, legend },
-    foot: [`출처 기상청 ASOS 공식 일자료 · 굵은 색 = 공통 3개 해 이상에서 표시 정밀도로 앞선 값`, `강수일수 = 일강수량 0.1mm 이상인 해의 수 · ${B.today} 기준`, `이날 · ${SITE}`],
+    foot: [`출처 기상청 ASOS 공식 일자료 · 색 글자 = 공통 3개 해 이상에서 가장 큰 값(좋고 나쁨 아님)`, `강수일수 = 일강수량 0.1mm 이상인 해의 수 · ${B.today} 기준`, `이날 · ${SITE}`],
   };
 }
 // ---------------------------------------------------------------- 오늘 날씨 이야기 카드(rt 이야기 객체)
