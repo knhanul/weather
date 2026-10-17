@@ -124,7 +124,7 @@
   function chillHtml(ta, ws) {
     const r = windChill(ta, ws);
     if (r.status !== "ok") return "";
-    return `<small class="rh-chill" title="미국 기상청(NWS) 풍속냉각 공식(2001)으로 기온 ${ta}℃·풍속 ${ws}m/s를 넣어 계산한 추정값입니다. 기상청 공식 체감온도가 아니며 사람·옷·햇볕에 따라 다릅니다.">바람 고려 추정 체감 <b>${r.value}℃</b> <span class="rt-badge fc">참고용</span><br><span class="rh-chill-n">${esc(r.text)}</span></small>`;
+    return `<small class="rh-chill" title="미국 기상청(NWS) 풍속냉각 공식(2001)으로 기온 ${ta}℃·풍속 ${ws}m/s를 넣어 계산한 추정값입니다. 기상청 공식 체감온도가 아니며 사람·옷·햇볕에 따라 다릅니다."><span class="rh-chill-n">${esc(r.text)}</span><br>바람 고려 추정 체감 <b>${r.value}℃</b> <span class="rt-badge fc">참고용</span></small>`;
   }
 
   W.RTAct = { walkHtml, hourDetail, chillHtml, windChill, MPS_TO_MPH, COND_KEY, COND_DEFAULT, loadCond, saveCond, isDefaultCond, condText, INT_KEY, INTERESTS, INT_DEFAULT, loadInterests, saveInterests, hourCheck, findWindows, readJ, writeJ };

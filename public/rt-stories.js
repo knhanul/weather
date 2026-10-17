@@ -24,10 +24,9 @@
   // 이야기 카드 이미지(astra 6단계): 서버가 고른 이야기 제목·본문·근거를 그대로 카드에(새 숫자 없음)
   function storyNumbers(s) {
     const rows = [];
-    rows.push({ label: "자료", value: s.kind === "관측" ? "관측(실황)" : s.kind || "–" });
+    rows.push({ label: "자료", value: s.kind === "관측" ? "관측(실황)" : s.kind || "–", note: s.basis ? String(s.basis).slice(0, 44) : "" });
     if (s.samples > 0) rows.push({ label: "비교 표본", value: `${s.samples}개`, note: s.facts?.range ? `${s.facts.range}년 같은 시기` : "" });
     else if (s.facts?.range) rows.push({ label: "비교 기간", value: `${s.facts.range}년` });
-    if (s.basis) rows.push({ label: "근거", value: String(s.basis).slice(0, 40) });
     return rows;
   }
   let LAST = null;

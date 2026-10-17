@@ -245,7 +245,7 @@
     el.onclick = (ev) => {
       const b = ev.target.closest("[data-awh]"); if (!b) return;
       const x = res.hours[+b.dataset.awh]; if (!x) return;
-      el.querySelectorAll(".aw-h.on").forEach((q) => q.classList.remove("on")); b.classList.add("on");
+      el.querySelectorAll(".aw-h.sel").forEach((q) => q.classList.remove("sel")); b.classList.add("sel");
       const tp = el.querySelector(".aw-tip"); if (tp) tp.textContent = RTAct.hourDetail(x, nowW.slice(0, 10));
     };
   }
