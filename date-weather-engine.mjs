@@ -10,10 +10,12 @@
 //  - 시간 강수량은 기상청 정시값 = 앞 1시간 누적. 그날 h~h+1시 구간 = (h+1)시 값, 23~24시 = 다음날 00시 값. 하루 강수량으로 더하지 않는다(공식 일강수량을 따로 씀).
 //  - 시간 평균은 같은 시각끼리 '해마다 한 값'을 평균(관측이 많은 해에 가중치 없음). 보간하지 않는다.
 import { resolveYear, specLabel, specKey, CALENDAR_VERSION, solarToLunar } from "./calendar-resolver.mjs";
-import { ymdToDn, dnToYmd, hval, QC_BITS, HOURLY_FROM, DAILY_QC } from "./stats-engine.mjs";
+import { ymdToDn, dnToYmd, hval, QC_BITS, HOURLY_FROM, DAILY_QC, METRICS, aggregate, MAX_MISSING_DAYS } from "./stats-engine.mjs";
 
 export const POLICY_VERSION = "date-stats.2026-10-17.v1";
-export const STORY_VERSION = "date-story.2026-10-17.v1";
+export const STORY_VERSION = "date-story.2026-10-18.v2"; // v2: 같은 날 평균 대신 해마다의 횟수·극값·앞뒤 15일 통계로 쓴 이야기
+// v2(2026-10-18) 화면 모델: 해마다 이날(횟수·극값, 같은 날 평균 없음) + 앞뒤 15일 날씨 통계(31일 창). 배틀은 POLICY_VERSION 그대로
+export const DAY_VERSION = "date-day.2026-10-18.v2";
 // 표시 정책(서비스 제안 기준이며 기상청 공식 통계 기준이 아님)
 export const SAMPLE_POLICY = {
   minReference: 1, // N 1~2: 개별값 + '참고 평균 · N개 해'(승패·강한 요약·분포 밴드 없음)
@@ -214,7 +216,10 @@ export function dateWeather({ spec, store, hs = null, ctx, years, selectedYears 
       const items = rows.map((r) => ({ year: r.referenceYear, status: r.dateStatus === "ok" ? r.fieldStatus[k] : r.dateStatus, value: r.values[k] }));
       out.daily.metrics[k] = k === "rain" ? rainSummary(items) : summarize(items, { digits: m.digits });
     }
+    out.counts = yearCounts(rows);
+    out.around = aroundPart(store, resolved, ctx);
     out.selected = sel.map((r) => ({ ...dailyYear(store, r, ctx) }));
+    out.aroundSelected = sel.length ? aroundYear(store, sel[0], ctx) : null;
     out.stories = dailyStories(out);
   }
   if (part !== "daily") out.hourly = hourlyPart(hs, resolved, sel, ctx);
@@ -241,53 +246,192 @@ export function hourlyPart(hs, resolved, sel, ctx) {
   return out;
 }
 
-// ---------------------------------------------------------------- 규칙 기반 이야기(조건과 실제 계산값만, 최대 3개를 화면에서 우선순위로 고름)
+// ---------------------------------------------------------------- v2: 해마다 이날 — 평균 없이 '몇 번'(횟수)과 극값 해
+// 기준값은 stats-engine METRICS 의 정의를 그대로 쓴다(강수일 0.1mm·30℃·33℃ 폭염·최저 0℃ 미만·최고 0℃ 미만·신적설 > 0).
+// months = 이 날짜(양력 월)가 이 계절에 들 때 항상 보여 줌. 계절 밖이어도 한 번이라도 있었으면 보여 줌(없는 일을 0번이라고 늘어놓지 않음).
+export const COUNT_RULES = [
+  { id: "rain", field: "rain", test: METRICS.rain_days.test, label: "비·눈 온 해", cond: "일강수량 0.1mm 이상(비·눈 등 모든 강수)", months: null },
+  { id: "hot30", field: "max", test: METRICS.hot30_days.test, label: "최고 30℃ 이상", cond: "일최고기온 30℃ 이상", months: [5, 6, 7, 8, 9] },
+  { id: "heat33", field: "max", test: METRICS.heatwave_days.test, label: "최고 33℃ 이상", cond: "일최고기온 33℃ 이상(기상청 폭염일수 기준)", months: [6, 7, 8, 9] },
+  { id: "frost", field: "min", test: METRICS.frost_days.test, label: "최저 영하", cond: "일최저기온 0℃ 미만", months: [10, 11, 12, 1, 2, 3, 4] },
+  { id: "ice", field: "max", test: METRICS.ice_days.test, label: "하루 종일 영하", cond: "일최고기온 0℃ 미만", months: [11, 12, 1, 2, 3] },
+  { id: "snow", field: "nsnow", test: METRICS.snow_days.test, label: "눈이 새로 쌓인 해", cond: "일 최심신적설 0cm 초과(그날 행이 있고 공란이면 눈 없음)", months: [11, 12, 1, 2, 3] },
+];
+const fieldItems = (rows, f) => rows.map((r) => ({ year: r.referenceYear, status: r.dateStatus !== "ok" ? r.dateStatus : r.values[f] != null ? "ok" : r.fieldStatus[f] || "missing", value: r.values[f] }));
+export function yearCounts(rows) {
+  const months = new Set(rows.filter((r) => r.solarDate).map((r) => +r.solarDate.slice(5, 7)));
+  const counts = COUNT_RULES.map((rule) => {
+    const items = fieldItems(rows, rule.field);
+    const s = summarize(items, { digits: 1 });
+    const hitYears = s.validYears.filter((y) => rule.test(items.find((x) => x.year === y).value));
+    const seasonal = !rule.months || rule.months.some((m) => months.has(m));
+    return { id: rule.id, label: rule.label, cond: rule.cond, field: rule.field, k: hitYears.length, n: s.n, eligible: s.eligible, requested: items.length, hitYears, validYears: s.validYears, excludedYearsByReason: s.excludedYearsByReason, tier: s.tier, limited: s.limited, seasonal, show: seasonal || hitYears.length > 0 };
+  });
+  const ext = (f, which, cond = () => true) => {
+    const s = summarize(fieldItems(rows, f), { digits: 1 });
+    if (!s.n) return { n: 0, value: null, years: [] };
+    const v = which === "max" ? s.max : s.min;
+    if (!cond(v)) return { n: s.n, value: null, years: [] };
+    return { n: s.n, eligible: s.eligible, value: v, years: which === "max" ? s.maxYears : s.minYears, tier: s.tier, limited: s.limited };
+  };
+  const extremes = {
+    hottest: { label: "가장 더웠던 해", def: "일최고기온이 가장 높았던 해(표시 자리수로 같으면 공동)", field: "max", ...ext("max", "max") },
+    coldest: { label: "가장 추웠던 해", def: "일최저기온이 가장 낮았던 해(공동 포함)", field: "min", ...ext("min", "min") },
+    wettest: { label: "강수가 가장 많았던 해", def: "일강수량이 가장 많았던 해(0.1mm 이상일 때만, 공동 포함)", field: "rain", ...ext("rain", "max", (v) => v >= 0.1) },
+  };
+  return { rules: counts, extremes, months: [...months].sort((a, b) => a - b) };
+}
+
+// ---------------------------------------------------------------- v2: 앞뒤 15일 날씨 통계(그해 날짜 ±15일 = 31일 창)
+// 한 해의 창 = 그해 실제 양력 날짜(음력이면 그해 음력 날짜의 양력) 앞뒤 15일. 연말·연초를 넘으면 그대로 이어서(1/5 → 전년 12/21~1/20).
+// 그해에 날짜가 없으면(평년 2/29·윤달 없음·음력 30일 없음) 다른 날로 바꾸지 않고 창도 만들지 않는다(그해에는 없는 날짜).
+// 지표마다 stats-engine aggregate() 를 그대로 씀: 31일 중 자료 없는 날이 1일 이하면 그 해를 넣고(남은 날로만 집계), 2일 이상이면 '자료 부족'으로 뺀다.
+export const AROUND = { before: 15, after: 15, days: 31, maxMissing: MAX_MISSING_DAYS };
+export const AROUND_METRICS = {
+  avg: { id: "avg_temp", label: "평균기온", unit: "℃", digits: 1, kind: "mean", def: "31일 일평균기온의 평균 → 해마다 한 값 → 해들의 평균" },
+  max: { id: "avg_max", label: "평균 최고기온", unit: "℃", digits: 1, kind: "mean", def: "31일 일최고기온의 평균 → 해들의 평균" },
+  min: { id: "avg_min", label: "평균 최저기온", unit: "℃", digits: 1, kind: "mean", def: "31일 일최저기온의 평균 → 해들의 평균" },
+  rainDays: { id: "rain_days", label: "강수일", unit: "일", digits: 0, kind: "count", def: "일강수량 0.1mm 이상인 날 수" },
+  rainSum: { id: "rain_total", label: "강수량", unit: "mm", digits: 1, kind: "sum", def: "31일 일강수량 합" },
+  hot30: { id: "hot30_days", label: "최고 30℃ 이상인 날", unit: "일", digits: 0, kind: "count", def: "일최고기온 30℃ 이상" },
+  heat33: { id: "heatwave_days", label: "최고 33℃ 이상인 날", unit: "일", digits: 0, kind: "count", def: "일최고기온 33℃ 이상(폭염일)" },
+  frost: { id: "frost_days", label: "최저 영하인 날", unit: "일", digits: 0, kind: "count", def: "일최저기온 0℃ 미만" },
+  ice: { id: "ice_days", label: "하루 종일 영하인 날", unit: "일", digits: 0, kind: "count", def: "일최고기온 0℃ 미만" },
+  snow: { id: "snow_days", label: "눈이 새로 쌓인 날", unit: "일", digits: 0, kind: "count", def: "일 최심신적설 0cm 초과" },
+};
+export function aroundYear(store, res, ctx) {
+  const out = { referenceYear: res.referenceYear, center: res.solarDate || null, start: null, end: null, status: res.status === "ok" ? "ok" : res.status, metrics: {} };
+  if (res.status !== "ok") return out;
+  const c = ymdToDn(res.solarDate);
+  out.start = dnToYmd(c - AROUND.before);
+  out.end = dnToYmd(c + AROUND.after);
+  const from = ctx.dailyFrom;
+  const last = ctx.dailyLast;
+  if (out.start >= ctx.today) out.status = "future";
+  else if (out.end >= ctx.today) out.status = "ongoing";
+  else if (from && out.start < from) out.status = "unsupported";
+  else if (!last || out.end > last) out.status = "pending";
+  // 진행 중: 어제(또는 최신 자료)까지 관측된 만큼만 따로(sofar) — 완료된 창과 섞지 않음
+  let range = { start: out.start, end: out.end };
+  if (out.status === "ongoing" || out.status === "pending") {
+    const asOf = [last, dnToYmd(ymdToDn(ctx.today) - 1)].filter(Boolean).sort()[0];
+    if (!asOf || asOf < out.start) return out;
+    range = { start: out.start, end: asOf };
+    out.sofarEnd = asOf;
+  } else if (out.status !== "ok") return out;
+  for (const [k, m] of Object.entries(AROUND_METRICS)) {
+    const ag = aggregate(store, m.id, range);
+    out.metrics[k] = { raw: ag.raw, obs: ag.obs, days: ag.days, missing: ag.missing, missingDates: ag.missingDates, status: ag.complete ? "ok" : ag.obs ? "partial" : "missing" };
+  }
+  return out;
+}
+export function aroundPart(store, resolved, ctx) {
+  const years = resolved.map((r) => aroundYear(store, r, ctx));
+  const metrics = {};
+  for (const [k, m] of Object.entries(AROUND_METRICS)) {
+    const items = years.map((y) => ({ year: y.referenceYear, status: y.status !== "ok" ? y.status : y.metrics[k].status === "ok" ? "ok" : y.metrics[k].status === "partial" ? "partial" : "missing", value: y.status === "ok" && y.metrics[k].status === "ok" ? y.metrics[k].raw : null }));
+    const s = summarize(items.map((x) => ({ ...x, status: x.status === "partial" ? "missing" : x.status })), { digits: m.digits });
+    const partialYears = items.filter((x) => x.status === "partial").map((x) => x.year);
+    const ex = { ...s.excludedYearsByReason };
+    if (partialYears.length) { ex.missing = (ex.missing || []).filter((y) => !partialYears.includes(y)); if (!ex.missing.length) delete ex.missing; ex.partial = partialYears; }
+    const okYears = years.filter((y) => s.validYears.includes(y.referenceYear));
+    const obs = okYears.reduce((a, y) => a + y.metrics[k].obs, 0);
+    const o = { n: s.n, eligible: s.eligible, requested: items.length, tier: s.tier, limited: s.limited, coverage: s.coverage, validYears: s.validYears, excludedYearsByReason: ex, validDays: obs, mean: s.mean, min: s.min, max: s.max, minYears: s.minYears, maxYears: s.maxYears };
+    if (m.kind === "count") { o.total = s.n ? s.sum : null; o.share = obs ? (s.sum / obs) * 100 : null; o.yearsWith = okYears.filter((y) => y.metrics[k].raw > 0).map((y) => y.referenceYear); }
+    if (m.kind === "sum") { o.total = s.n ? s.sum : null; o.perDay = obs ? s.sum / obs : null; }
+    metrics[k] = o;
+  }
+  // 강수일 비율·평균 일강수량은 같은 해들(강수 유효)로: 강수일 ÷ 유효일, 강수량 합 ÷ 유효일
+  const rd = metrics.rainDays;
+  rd.ratioDef = "강수일 수 ÷ 유효한 날 수(자료가 있는 해들의 31일 창을 모두 합쳐서)";
+  metrics.rainSum.perDayDef = "강수량 합 ÷ 유효한 날 수(무강수 0 포함)";
+  return { window: AROUND, years: years.map((y) => ({ referenceYear: y.referenceYear, center: y.center, start: y.start, end: y.end, status: y.status, metrics: y.metrics })), metrics };
+}
+
+// ---------------------------------------------------------------- 규칙 기반 이야기 v2(평균 대신 횟수·순위·극값·앞뒤 15일)
 const r1 = (v, d = 1) => (v == null ? null : (Math.round(v * 10 ** d + (v >= 0 ? 1e-9 : -1e-9)) / 10 ** d));
 const fmt = (v, d = 1) => (v == null ? "-" : r1(v, d).toFixed(d));
 const yearWord = (spec, y) => (spec.calendar === "lunar" ? `${y}년(음력 기준연도)` : `${y}년`);
+const yearList = (ys, max = 6) => (ys.length > max ? `${ys.slice(-max).join("·")} 등` : ys.join("·"));
+// 순위(같은 표시값은 공동): high=true 면 높은 순
+export function rankAmong(values, x, digits = 1, high = true) {
+  const rv = (v) => Math.round(v * 10 ** digits);
+  const better = values.filter((v) => (high ? rv(v) > rv(x) : rv(v) < rv(x))).length;
+  const same = values.filter((v) => rv(v) === rv(x)).length;
+  return { rank: better + 1, tie: same > 1, of: values.length };
+}
 export function dailyStories(o) {
   const st = [];
-  const { spec, years, daily, dateCounts } = o;
+  const { spec, years, daily, dateCounts, counts } = o;
   const req = dateCounts.requested;
-  // 윤달·2월 29일: 존재하는 해 수
+  const per = `${years.fromYear}~${years.toYear}년`;
   if (dateCounts.nodate > 0 && (spec.leapMonth || (spec.calendar === "solar" && spec.month === 2 && spec.day === 29) || (spec.calendar === "lunar" && spec.day === 30))) {
     const what = spec.calendar === "solar" ? "양력 2월 29일" : spec.leapMonth ? "음력 윤달 날짜" : "음력 30일";
     st.push({ id: "D-exist", priority: 1, text: `이 ${what}는 요청한 ${req}개 해 중 ${dateCounts.exists}개 해에만 존재합니다.`, evidence: { metric: "date", years: o.dateMap.filter((r) => r.status === "ok").map((r) => r.referenceYear), formula: "기준연도마다 실제 날짜 대응을 계산(없는 해는 대체하지 않음)", excluded: o.dateMap.filter((r) => r.status === "nodate").map((r) => r.referenceYear) }, target: "yearly" });
   }
-  const rs = daily.metrics.rain;
-  if (rs.n >= 1) {
-    const ref = rs.tier === "reference" ? ` (참고 · ${rs.n}개 해)` : "";
-    st.push({ id: "D-rainy", priority: 2, text: `${years.fromYear}~${years.toYear}년 ${req}개 기준연도 중 자료가 있는 ${rs.n}개 해에서, 이날 강수가 있었던 해는 ${rs.k}개였습니다.${ref}`, evidence: { metric: "rain", years: rs.rainyYears, formula: "일강수량 0.1mm 이상인 해의 수 ÷ 자료가 있는 해의 수(과거 관측 비율이며 강수확률이 아님)", excluded: rs.excludedYearsByReason }, target: "yearly", metric: "rain" });
+  if (!counts) return st;
+  const C = Object.fromEntries(counts.rules.map((c) => [c.id, c]));
+  const rc = C.rain;
+  if (rc.n >= 1) {
+    const yrs = rc.k ? ` (${yearList(rc.hitYears)})` : "";
+    st.push({ id: "D-rainCount", priority: 2, text: `${per} 중 자료가 있는 ${rc.n}개 해에서, 이날 비나 눈이 온 해는 ${rc.k}번${yrs}이었습니다.${rc.tier === "reference" ? ` (참고 · ${rc.n}개 해)` : ""}`, evidence: { metric: "rain", years: rc.hitYears, formula: "일강수량 0.1mm 이상인 해를 셈(과거 관측 횟수이며 강수확률이 아님)", excluded: rc.excludedYearsByReason }, target: "yearly", metric: "rain" });
   }
-  if (rs.tier === "stats" && !rs.limited && rs.k >= 1) {
-    const wet = rs.maxYears;
-    const share = rs.total > 0 ? (rs.max / rs.total) * 100 : 0;
-    let text = `강수량은 평균 ${fmt(rs.mean)}mm였고, 가장 많았던 해는 ${wet.map((y) => yearWord(spec, y)).join("·")}(${fmt(rs.max)}mm)입니다.`;
-    if (rs.k === 1) text = `강수가 있었던 해는 ${yearWord(spec, wet[0])} 한 해(${fmt(rs.max)}mm)뿐이라, 평균 일강수량 ${fmt(rs.mean)}mm는 그 한 해 값을 ${rs.n}개 해로 나눈 값입니다. 연도별 그래프로 해마다의 차이를 확인해 보세요.`;
-    else if (share >= 50 && wet.length === 1) text += ` 그 한 해가 ${rs.n}개 해 강수량 합의 ${Math.round(share)}%를 차지해 평균을 크게 끌어올렸습니다. 연도별 그래프로 해마다의 차이를 확인해 보세요.`;
-    else text += " 평균과 함께 해마다의 차이도 확인해 보세요.";
-    st.push({ id: "D-rainAmt", priority: 4, text, evidence: { metric: "rain", years: rs.validYears, formula: "평균 일강수량 = 유효한 일강수량 합 ÷ N(무강수 0 포함)", excluded: rs.excludedYearsByReason }, target: "yearly", metric: "rain" });
+  const tempLines = ["heat33", "hot30", "ice", "frost", "snow"].map((id) => C[id]).filter((c) => c.show && c.n >= 3 && !c.limited && c.k >= 1);
+  // 같은 방향(더위·추위)은 더 강한 기준이 0번이 아닐 때 그것만
+  const pickT = [];
+  if (tempLines.find((c) => c.id === "heat33")) pickT.push(tempLines.find((c) => c.id === "heat33")); else if (tempLines.find((c) => c.id === "hot30")) pickT.push(tempLines.find((c) => c.id === "hot30"));
+  if (tempLines.find((c) => c.id === "ice")) pickT.push(tempLines.find((c) => c.id === "ice")); else if (tempLines.find((c) => c.id === "frost")) pickT.push(tempLines.find((c) => c.id === "frost"));
+  if (tempLines.find((c) => c.id === "snow")) pickT.push(tempLines.find((c) => c.id === "snow"));
+  if (pickT.length) {
+    st.push({ id: "D-tempCount", priority: 4, text: `같은 기간 ${pickT.map((c) => `${c.label}${c.id === "snow" ? "" : "이었던 해"}는 ${c.k}번(${yearList(c.hitYears, 4)})`).join(", ")}입니다.`, evidence: { metric: pickT[0].field, years: pickT.flatMap((c) => c.hitYears), formula: pickT.map((c) => `${c.label}: ${c.cond}, 자료가 있는 ${c.n}개 해 중`).join(" / "), excluded: pickT[0].excludedYearsByReason }, target: "yearly", metric: pickT[0].field });
   }
-  const ts = daily.metrics.avg;
-  if (ts.tier === "stats" && !ts.limited && ts.n >= 3 && ts.maxYears.length && ts.minYears.length) {
-    st.push({ id: "D-tempRange", priority: 5, text: `${ts.n}개 해의 이날 일평균기온은 ${fmt(ts.min)}℃(${ts.minYears.map((y) => yearWord(spec, y)).join("·")})부터 ${fmt(ts.max)}℃(${ts.maxYears.map((y) => yearWord(spec, y)).join("·")})까지였고, 평균은 ${fmt(ts.mean)}℃입니다. 하루씩 뽑은 값이라 계절 전체의 추세를 뜻하지는 않습니다.`, evidence: { metric: "avg", years: ts.validYears, formula: "각 해 공식 일평균기온의 산술평균", excluded: ts.excludedYearsByReason }, target: "yearly", metric: "avg" });
+  const E = counts.extremes;
+  if (E.hottest.value != null && E.coldest.value != null && E.hottest.n >= 3 && !E.hottest.limited) {
+    let text = `가장 더웠던 해는 ${E.hottest.years.map((y) => yearWord(spec, y)).join("·")}(최고 ${fmt(E.hottest.value)}℃), 가장 추웠던 해는 ${E.coldest.years.map((y) => yearWord(spec, y)).join("·")}(최저 ${fmt(E.coldest.value)}℃)입니다.`;
+    if (E.wettest.value != null) text += ` 강수가 가장 많았던 해는 ${E.wettest.years.map((y) => yearWord(spec, y)).join("·")}(${fmt(E.wettest.value)}mm)입니다.`;
+    st.push({ id: "D-extremes", priority: 5, text, evidence: { metric: "max", years: [...E.hottest.years, ...E.coldest.years, ...E.wettest.years], formula: "그날 일최고기온 최댓값·일최저기온 최솟값·일강수량 최댓값의 해(표시 자리수로 같으면 공동)" }, target: "yearly", metric: "max" });
+  }
+  // 고른 해: 같은 기간의 해들 사이에서 몇 번째(공동 포함)
+  const s = o.selected?.[0];
+  if (s && s.dateStatus === "ok" && s.values.max != null) {
+    const vals = daily.rows.filter((r) => r.dateStatus === "ok" && r.values.max != null && r.referenceYear !== s.referenceYear).map((r) => r.values.max);
+    if (vals.length >= 4) {
+      const all = [...vals, s.values.max];
+      const hi = rankAmong(all, s.values.max, 1, true);
+      const lo = rankAmong(all, s.values.max, 1, false);
+      const inPer = s.referenceYear >= years.fromYear && s.referenceYear <= years.toYear;
+      const scope = inPer ? `${per} ${all.length}개 해 중` : `${per} ${vals.length}개 해와 ${s.referenceYear}년을 합친 ${all.length}개 해 중`;
+      const word = hi.rank <= lo.rank ? `${hi.rank}번째로 높았습니다${hi.tie ? "(공동)" : ""}` : `${lo.rank}번째로 낮았습니다${lo.tie ? "(공동)" : ""}`;
+      st.push({ id: "D-selRank", priority: 3, text: `${yearWord(spec, s.referenceYear)} 이날 최고기온 ${fmt(s.values.max)}℃는 ${scope} ${word}.`, evidence: { metric: "max", years: [s.referenceYear], formula: "그날 일최고기온을 해마다 비교한 순위(같은 표시값은 공동 순위)", n: all.length }, target: "yearly", metric: "max" });
+    }
+  }
+  // 앞뒤 15일: 고른 해와 기간 비교(강수일 비율)
+  const A = o.around;
+  const as = o.aroundSelected;
+  if (A && as && as.status === "ok" && as.metrics.rainDays?.status === "ok" && A.metrics.rainDays.n >= 3 && !A.metrics.rainDays.limited) {
+    const m = A.metrics.rainDays;
+    const sel = as.metrics.rainDays;
+    st.push({ id: "A-rainDays", priority: 6, text: `앞뒤 15일(31일)로 넓혀 보면 ${per} ${m.n}개 해는 유효한 ${m.validDays}일 중 ${fmt(m.total, 0)}일(${fmt(m.share, 0)}%)에 비나 눈이 왔고, ${s ? `${s.referenceYear}년` : "고른 해"}은 ${sel.obs}일 중 ${fmt(sel.raw, 0)}일이었습니다.`, evidence: { metric: "rain", years: m.validYears, formula: "강수일(일강수량 0.1mm 이상) 수 ÷ 유효한 날 수, 31일 창(그해 날짜 ±15일)", excluded: m.excludedYearsByReason }, target: "around", metric: "rain" });
   }
   return st;
 }
+// 시간 이야기: 고른 해 하루의 실제 시간 관측만(평균과 비교하지 않음)
 export function hourlyStories(h, metrics, selected) {
   const st = [];
   const s = selected[0];
   if (!s || s.dateStatus !== "ok") return st;
-  let best = null;
-  for (let hh = 0; hh < 24; hh++) {
-    const m = metrics.ta.hours[hh];
-    const v = s.series.ta[hh];
-    if (v == null || m.tier !== "stats" || m.limited || m.mean == null) continue;
-    const d = v - m.mean;
-    if (!best || Math.abs(d) > Math.abs(best.d)) best = { hh, v, d, m };
-  }
-  if (best && Math.abs(r1(best.d)) >= 0.1) {
-    st.push({ id: "H-selDiff", priority: 3, text: `${s.referenceYear}년 이날 ${best.hh}시 기온은 ${fmt(best.v)}℃로, 비교 기간의 같은 시각 평균(${fmt(best.m.mean)}℃, ${best.m.n}개 해)보다 ${fmt(Math.abs(best.d))}℃ ${best.d > 0 ? "높았습니다" : "낮았습니다"}. 하루 중 평균과 가장 크게 달랐던 시각입니다.`, evidence: { metric: "ta", years: [s.referenceYear], hours: [best.hh], formula: "선택 연도 정시 기온 − 같은 시각 비교 기간 평균(해마다 한 값)", n: best.m.n }, target: "hourly", metric: "ta" });
+  const ta = s.series.ta;
+  const idx = ta.map((v, i) => [v, i]).filter(([v]) => v != null);
+  if (idx.length >= 12) {
+    let hi = idx[0], lo = idx[0];
+    for (const x of idx) { if (x[0] > hi[0]) hi = x; if (x[0] < lo[0]) lo = x; }
+    const part = idx.length < 24 ? `관측된 ${idx.length}개 정시 중 ` : "";
+    let text = `${s.referenceYear}년 이날은 ${part}${lo[1]}시 ${fmt(lo[0])}℃가 가장 낮았고 ${hi[1]}시 ${fmt(hi[0])}℃가 가장 높았습니다.`;
+    const rn = s.series.rn;
+    const valid = rn.filter((v) => v != null).length;
+    const wet = rn.map((v, i) => [v, i]).filter(([v]) => v != null && v >= 0.1);
+    if (valid >= 12) text += wet.length ? ` 1시간 강수 0.1mm 이상인 구간은 ${wet.length}개(${wet.slice(0, 4).map(([, i]) => `${i}~${i + 1}시`).join("·")}${wet.length > 4 ? " 등" : ""})였습니다.` : ` 시간 강수 자료가 있는 ${valid}개 구간에 강수가 없었습니다.`;
+    st.push({ id: "H-selDay", priority: 3.5, text, evidence: { metric: "ta", years: [s.referenceYear], hours: [lo[1], hi[1]], formula: "고른 해 그날 정시 기온의 최저·최고 시각(평균과 비교하지 않음), 강수 구간 h~h+1시 = (h+1)시 값" }, target: "hourly", metric: "ta" });
   }
   return st;
 }
@@ -298,6 +442,7 @@ export function withSelected(base, { spec, store, hs = null, ctx, selectedYears 
   const out = { ...base };
   if (base.daily) {
     out.selected = sel.map((r) => dailyYear(store, r, ctx));
+    out.aroundSelected = sel.length ? aroundYear(store, sel[0], ctx) : null;
     out.stories = dailyStories(out);
   }
   if (base.hourly) {

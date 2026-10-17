@@ -212,3 +212,89 @@ test("선택 연도만 바꾸면 과거 평균(base)을 그대로 재사용", as
   assert.equal(a.selected[0].referenceYear, 1999);
   assert.equal(a.daily.metrics.avg.mean, 14);
 });
+
+// ---------------------------------------------------------------- v2(2026-10-18): 해마다 이날 횟수·극값 · 앞뒤 15일
+test("v2 해마다 이날: 비 온 해·30℃·영하 횟수, 결측·없는 날짜는 세지 않음, 극값 공동", () => {
+  const rows = [];
+  for (let y = 2016; y <= 2025; y++) {
+    const v = { 2016: { precipitation: 5, max_temperature: 31.04, min_temperature: 20 }, 2017: { precipitation: 0, max_temperature: 31.0, min_temperature: 19 }, 2018: { precipitation: null }, 2019: { precipitation: 0.1 }, 2021: { precipitation: 12, max_temperature: 25, min_temperature: 19 } }[y] || {};
+    if (y === 2020) continue; // 행 없음 → 자료 없음
+    rows.push({ observation_date: `${y}-07-20`, ...T(26, { max_temperature: 28, min_temperature: 22, ...v }) });
+  }
+  const store = buildDailyStore("1", rows);
+  const r = dateWeather({ spec: S(7, 20), store, ctx: ctx(), years: { fromYear: 2016, toYear: 2025 }, part: "daily" });
+  const C = Object.fromEntries(r.counts.rules.map((c) => [c.id, c]));
+  assert.equal(C.rain.n, 9); // 2020 제외
+  assert.deepEqual(C.rain.hitYears, [2016, 2019, 2021]);
+  assert.deepEqual(C.rain.excludedYearsByReason.missing, [2020]);
+  assert.deepEqual(C.hot30.hitYears, [2016, 2017]);
+  assert.equal(C.hot30.show, true); // 7월 = 계절
+  assert.equal(C.frost.show, false); // 7월·0번 → 숨김
+  assert.equal(C.frost.k, 0);
+  assert.deepEqual(r.counts.extremes.hottest.years, [2016, 2017]); // 31.04 와 31.0 → 표시 31.0 공동
+  assert.deepEqual(r.counts.extremes.wettest.years, [2021]);
+  assert.ok(r.stories.some((s) => s.id === "D-rainCount" && s.text.includes("3번")));
+  assert.ok(!r.stories.some((s) => /평균/.test(s.text) && s.id.startsWith("D-")));
+});
+
+test("v2 앞뒤 15일: 31일 창, 연초는 전년 12월로 이어짐, 결측 2일 이상은 자료 부족", () => {
+  const rows = [];
+  const add = (ymd, o = {}) => rows.push({ observation_date: ymd, ...T(1, { precipitation: 0, ...o }) });
+  // 2023: 2022-12-21 ~ 2023-01-20 완전(그중 강수 3일, 최저 -4 = 영하 31일)
+  for (let dn = Date.UTC(2022, 11, 21); dn <= Date.UTC(2023, 0, 20); dn += 864e5) { const d = new Date(dn).toISOString().slice(0, 10); add(d, ["2022-12-25", "2023-01-01", "2023-01-10"].includes(d) ? { precipitation: 2 } : {}); }
+  // 2024: 하루 빠짐(1일 결측 허용)
+  for (let dn = Date.UTC(2023, 11, 21); dn <= Date.UTC(2024, 0, 20); dn += 864e5) { const d = new Date(dn).toISOString().slice(0, 10); if (d !== "2024-01-03") add(d); }
+  // 2025: 2일 빠짐 → 자료 부족
+  for (let dn = Date.UTC(2024, 11, 21); dn <= Date.UTC(2025, 0, 20); dn += 864e5) { const d = new Date(dn).toISOString().slice(0, 10); if (d !== "2025-01-03" && d !== "2025-01-04") add(d); }
+  const store = buildDailyStore("1", rows);
+  const r = dateWeather({ spec: S(1, 5), store, ctx: ctx(), years: { fromYear: 2023, toYear: 2025 }, selectedYears: [2026], part: "daily" });
+  const y23 = r.around.years.find((y) => y.referenceYear === 2023);
+  assert.equal(y23.start, "2022-12-21");
+  assert.equal(y23.end, "2023-01-20");
+  assert.equal(y23.metrics.rainDays.raw, 3);
+  assert.equal(y23.metrics.frost.raw, 31);
+  const m = r.around.metrics.rainDays;
+  assert.deepEqual(m.validYears, [2023, 2024]);
+  assert.deepEqual(m.excludedYearsByReason.partial, [2025]);
+  assert.equal(m.validDays, 31 + 30);
+  assert.equal(m.total, 3);
+  assert.ok(Math.abs(m.share - (3 / 61) * 100) < 1e-9);
+  assert.equal(r.around.metrics.avg.mean, 1);
+  // 고른 해 2026: 창이 끝났지만 그 기간 행이 없음 → ok·지표마다 자료 없음(0 으로 세지 않음)
+  assert.equal(r.aroundSelected.status, "ok");
+  assert.equal(r.aroundSelected.metrics.rainDays.status, "missing");
+  assert.equal(r.aroundSelected.metrics.rainDays.raw, null);
+  // 오늘(10-17)이 창 안: 진행 중 · 어제까지(sofarEnd)만, 미래(창 시작이 오늘 이후)는 값 없음
+  const on = dateWeather({ spec: S(10, 10), store, ctx: ctx(), years: { fromYear: 2023, toYear: 2025 }, selectedYears: [2026], part: "daily" }).aroundSelected;
+  assert.equal(on.status, "ongoing");
+  assert.equal(on.sofarEnd, "2026-10-16");
+  const fu = dateWeather({ spec: S(12, 1), store, ctx: ctx(), years: { fromYear: 2023, toYear: 2025 }, selectedYears: [2026], part: "daily" }).aroundSelected;
+  assert.equal(fu.status, "future");
+  assert.deepEqual(fu.metrics, {});
+  // 평년 2/29: 창을 만들지 않음(그해에는 없는 날짜)
+  const f29 = dateWeather({ spec: S(2, 29), store, ctx: ctx(), years: { fromYear: 2023, toYear: 2025 }, part: "daily" });
+  assert.deepEqual(f29.around.years.map((y) => y.status), ["nodate", "ok", "nodate"]);
+  assert.deepEqual(f29.around.metrics.avg.excludedYearsByReason.nodate, [2023, 2025]);
+});
+
+test("v2 음력: 해마다 그해 음력 날짜의 양력 날짜를 가운데로", () => {
+  const store = buildDailyStore("1", [{ observation_date: "2024-09-17", ...T(20) }]);
+  const r = dateWeather({ spec: L(8, 15), store, ctx: ctx(), years: { fromYear: 2023, toYear: 2025 }, part: "daily" });
+  assert.deepEqual(r.around.years.map((y) => y.center), ["2023-09-29", "2024-09-17", "2025-10-06"]);
+  assert.equal(r.around.years[1].start, "2024-09-02");
+  assert.equal(r.around.years[1].metrics.avg.status, "partial"); // 31일 중 1일만 → 자료 부족(값 없음)
+  assert.equal(r.around.metrics.avg.n, 0);
+});
+
+test("v2 주소: date=YYYY-MM-DD → m·d·years(겹쳐 볼 해 포함), 예전 m·d·year 그대로", async () => {
+  const { withDateParam } = await import("../date-api.mjs");
+  const q = withDateParam(new URLSearchParams("station=108&cal=solar&date=2018-07-05&cmp=2019,2020"));
+  assert.equal(q.get("m"), "7");
+  assert.equal(q.get("d"), "5");
+  assert.equal(q.get("years"), "2018,2019,2020");
+  assert.equal(q.get("date"), null);
+  const old = withDateParam(new URLSearchParams("m=10&d=17&year=2004"));
+  assert.equal(old.get("m"), "10");
+  assert.equal(old.get("years"), null); // 예전 주소는 year 로(아래 계산에서 그대로)
+  assert.equal(withDateParam(new URLSearchParams("date=bad&m=3&d=1")).get("m"), "3");
+});

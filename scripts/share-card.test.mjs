@@ -78,21 +78,34 @@ const D = {
   daily: { metrics: { avg: M(10, 14.94), max: M(10, 20.1), min: M(10, 9.9), rain: M(10, 1.25, { k: 3, share: 30 }), wind: M(0, null), sun: M(9, 6.04) } },
   selected: [{ referenceYear: 2025, dateStatus: "ok", rowPresent: true, solarDate: "2025-10-18", values: { avg: 13.2, rain: 0 } }],
 };
-test("날짜 카드: 숫자·표본·출처, 자료 없는 지표는 '자료 부족'", () => {
+// v2 카드: 횟수 + 앞뒤 15일(표본 해·유효일)
+D.spec = { calendar: "solar", month: 10, day: 18 };
+D.counts = { rules: [
+  { id: "rain", label: "비·눈 온 해", cond: "일강수량 0.1mm 이상", k: 3, n: 10, tier: "stats", limited: false, show: true },
+  { id: "hot30", label: "최고 30℃ 이상", cond: "일최고기온 30℃ 이상", k: 0, n: 10, tier: "stats", show: false },
+  { id: "frost", label: "최저 영하", cond: "일최저기온 0℃ 미만", k: 1, n: 10, tier: "stats", limited: false, show: true },
+], extremes: {} };
+const AM = (n, o) => ({ n, validDays: n * 31, tier: n >= 3 ? "stats" : n ? "reference" : "none", limited: false, ...o });
+D.around = { metrics: { avg: AM(10, { mean: 14.44 }), rainDays: AM(10, { share: 24.5 }), rainSum: AM(0, { perDay: null }) } };
+test("날짜 카드 v2: 날짜·횟수·앞뒤 15일 표본, 자료 없는 지표는 '자료 부족', 같은 날 평균 없음", () => {
   const sp = daySpec(D, { alias: "우리 기념일" });
   assert.equal(sp.title, "우리 기념일");
   const byLabel = Object.fromEntries(sp.rows.map((r) => [r.label, r]));
-  assert.equal(byLabel["평균기온"].value, "14.9℃");
-  assert.match(byLabel["평균기온"].note, /10개 해/);
-  assert.equal(byLabel["강수 있었던 해"].value, "3 / 10");
-  assert.equal(byLabel["평균 풍속"].value, "자료 부족");
-  assert.equal(byLabel["평균 일조시간"].value, "6.0시간");
+  assert.equal(byLabel["이날 비·눈 온 해"].value, "3번");
+  assert.match(byLabel["이날 비·눈 온 해"].note, /자료가 있는 10개 해 중/);
+  assert.equal(byLabel["이날 최고 30℃ 이상"], undefined); // 계절 밖·0번 → 숨김
+  assert.equal(byLabel["이날 최저 영하"].value, "1번");
+  assert.equal(byLabel["앞뒤 15일 평균기온"].value, "14.4℃");
+  assert.match(byLabel["앞뒤 15일 평균기온"].note, /10개 해 · 유효 310일/);
+  assert.equal(byLabel["앞뒤 15일 강수일 비율"].value, "25%");
+  assert.equal(byLabel["앞뒤 15일 하루 평균 강수량"].value, "자료 부족");
+  assert.ok(!sp.rows.some((r) => r.label === "평균기온"));
   assert.ok(sp.chips.includes("서울 (108)") && sp.chips.includes("최근 10년(2016~2025)"));
   assert.match(sp.foot.join(" "), /기상청 ASOS/);
-  assert.match(sp.story, /2025\.10\.18\(토\) 그날: 평균 13\.2℃ · 강수 0\.0mm/);
+  assert.equal(daySpec(D).title, "2025.10.18(토)의 날씨");
   const og = dayOg(D, "");
-  assert.match(og.title, /양력 10월 18일의 날씨 — 서울 최근 10년/);
-  assert.match(og.desc, /평균기온 14\.9℃\(10개 해\) · 강수 있었던 해 3\/10/);
+  assert.match(og.title, /2025\.10\.18\(토\)의 날씨 — 서울 최근 10년/);
+  assert.match(og.desc, /이날 비·눈 온 해 3번\(10개 해 중\) · 최저 영하 1번 · 앞뒤 15일 평균기온 14\.4℃·강수일 25%\(10개 해\)/);
 });
 
 const Bm = (label, vals, n, cmp, unit = "℃", digits = 1) => ({ label, unit, digits, n, tier: n === 0 ? "none" : n < 3 ? "reference" : "stats", limited: false, results: vals.map((v, i) => ({ case: "AB"[i], value: v })), comparison: cmp });
@@ -124,7 +137,7 @@ test("공유 경로: og 메타·이동 주소, 별칭 이스케이프, 잘못된
   assert.equal(await api({ method: "GET" }, res, new URL("http://x/s/day?station=108&cal=solar&m=10&d=18&year=2025&period=recent10&to=2025&alias=%3Cb%3E%22hi&evil=1")), true);
   assert.equal(res.status, 200);
   assert.match(res.headers["content-type"], /text\/html/);
-  assert.match(res.body, /property="og:title" content="b&quot;hi · 양력 10월 18일의 날씨/);
+  assert.match(res.body, /property="og:title" content="b&quot;hi · 2025\.10\.18\(토\)의 날씨/);
   assert.ok(!res.body.includes("<b>\"hi"));
   assert.match(res.body, /location\.replace\("\/#\/stories\/day\?station=108&cal=solar&m=10&d=18&year=2025&period=recent10&to=2025&alias=b%22hi"\)/);
   assert.ok(!res.body.includes("evil"));

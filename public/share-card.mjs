@@ -180,31 +180,42 @@ export function drawCanvas(ctx, { ops }) {
 // ---------------------------------------------------------------- 날짜로 보는 날씨 카드(/api/stats/date-weather part=daily 응답)
 const nOf = (m) => `${m.n}개 해${m.eligible !== m.n ? ` / 대상 ${m.eligible}` : ""}`;
 const tierNote = (m) => (m.tier === "reference" ? " · 참고" : m.limited ? " · 자료 제한" : "");
+// v2: 해마다 그날의 '횟수'(평균 없음) + 앞뒤 15일 통계(표본 해·유효일 함께). 고른 해 그날 값은 story 줄.
+export function selDateText(D) {
+  const s = D.selected?.[0];
+  if (!s) return D.specLabel;
+  if (!s.solarDate) return `${s.referenceYear}년 ${D.specLabel.replace(/^양력 /, "")}`;
+  const lunar = D.spec?.calendar === "lunar" && s.lunarText ? ` · ${s.lunarText}` : "";
+  return `${dot(s.solarDate)}(${dow(s.solarDate)})${lunar}`;
+}
 export function daySpec(D, { alias = "" } = {}) {
-  const M = D.daily.metrics;
   const stn = D.station;
   const rows = [];
-  const add = (label, m, val, note) => rows.push({ label, value: m.n ? val : "자료 부족", note: m.n ? note : "자료가 있는 해 없음" });
-  add("평균기온", M.avg, `${fmt(M.avg.mean)}℃`, `${nOf(M.avg)}${tierNote(M.avg)}`);
-  add("평균 최고 · 최저", M.max, `${fmt(M.max.mean)} · ${fmt(M.min.mean)}℃`, `${nOf(M.max)}${tierNote(M.max)}`);
-  const rn = M.rain;
-  add("강수 있었던 해", rn, `${rn.k} / ${rn.n}`, `${fmt(rn.share, 0)}% · 일강수량 0.1mm 이상 · 과거 비율(확률 아님)`);
-  add("평균 일강수량", rn, `${fmt(rn.mean)}mm`, `무강수 0 포함 · ${nOf(rn)}${tierNote(rn)}`);
-  add("평균 풍속", M.wind, `${fmt(M.wind.mean)}m/s`, `${nOf(M.wind)}${tierNote(M.wind)}`);
-  if (M.sun && M.sun.n) add("평균 일조시간", M.sun, `${fmt(M.sun.mean)}시간`, `${nOf(M.sun)}${tierNote(M.sun)}`);
+  const C = D.counts;
+  if (C) {
+    for (const c of C.rules.filter((x) => x.show).slice(0, 4)) rows.push({ label: `이날 ${c.label}`, value: c.n ? `${c.k}번` : "자료 부족", note: c.n ? `자료가 있는 ${c.n}개 해 중${c.tier === "reference" ? " · 참고" : c.limited ? " · 자료 제한" : ""} · ${c.cond}` : "자료가 있는 해 없음" });
+  }
+  const A = D.around?.metrics;
+  if (A) {
+    const nn = (m) => `${m.n}개 해 · 유효 ${m.validDays}일${m.tier === "reference" ? " · 참고" : m.limited ? " · 자료 제한" : ""}`;
+    const add = (label, m, val) => rows.push({ label, value: m.n ? val : "자료 부족", note: m.n ? nn(m) : "자료가 있는 해 없음" });
+    add("앞뒤 15일 평균기온", A.avg, `${fmt(A.avg.mean)}℃`);
+    add("앞뒤 15일 강수일 비율", A.rainDays, `${fmt(A.rainDays.share, 0)}%`);
+    add("앞뒤 15일 하루 평균 강수량", A.rainSum, `${fmt(A.rainSum.perDay)}mm`);
+  }
   const s = D.selected?.[0];
   let sel = "";
   if (s && s.dateStatus === "ok" && s.rowPresent) {
     const v = s.values;
-    sel = `${dot(s.solarDate)}(${dow(s.solarDate)}) 그날: 평균 ${fin(v.avg) ? `${fmt(v.avg)}℃` : "자료 없음"} · 강수 ${fin(v.rain) ? `${fmt(v.rain)}mm` : "자료 없음"}`;
-  }
-  const title = alias ? `${alias}` : `${D.specLabel}의 날씨`;
+    sel = `${selDateText(D)} 그날: 최고 ${fin(v.max) ? `${fmt(v.max)}℃` : "자료 없음"} · 최저 ${fin(v.min) ? `${fmt(v.min)}℃` : "자료 없음"} · 강수 ${fin(v.rain) ? `${fmt(v.rain)}mm` : "자료 없음"}`;
+  } else if (s) sel = `${selDateText(D)}: ${D.statusText?.[s.dateStatus] || (s.dateStatus === "ok" ? "자료 없음" : s.dateStatus)}`;
+  const title = alias ? `${alias}` : `${selDateText(D)}의 날씨`;
   return {
     kind: "day", accent: "#026ef8", eyebrow: "날짜로 보는 날씨",
-    title, subtitle: alias ? `매년 ${D.specLabel} · 과거 관측` : "매년 그날의 과거 관측 · 예보 아님",
+    title, subtitle: `해마다 ${D.specLabel} · 과거 관측(예보 아님)`,
     chips: [`${stn.station_name} (${stn.station_id})`, D.window.label, `기준연도 ${D.dateCounts.requested}개${D.dateCounts.nodate ? ` · 날짜 있는 해 ${D.dateCounts.exists}` : ""}`],
     rows, story: sel || null,
-    foot: [`출처 기상청 ASOS 공식 일자료 · 관측지점 한 곳 · 매년 정확히 그 날짜만(주변 날짜 섞지 않음)`, `일자료 ${String(D.dailyFrom || "1970").slice(0, 4)}~${dot(stn.dailyLast)} · N = 자료가 있는 해의 수 · ${D.today} 기준`, `이날 · ${SITE}`],
+    foot: [`출처 기상청 ASOS 공식 일자료 · 관측지점 한 곳 · 횟수 = 자료가 있는 해 중 조건을 만족한 해`, `앞뒤 15일 = 해마다 그 날짜 ±15일(31일) · ${D.today} 기준`, `이날 · ${SITE}`],
   };
 }
 // ---------------------------------------------------------------- 배틀 카드(/api/stats/date-battle part=summary 응답)

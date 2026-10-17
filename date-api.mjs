@@ -3,12 +3,24 @@
 // 캐시: 응답 JSON 을 키(지점·날짜 기준·윤달·기간·부분·선택 연도·달력/정책 버전·일/시간자료 판 번호·오늘 날짜)로 기억. 자료 저장 시 판 번호가 올라 자동 무효화.
 import { StatsError, toCsv, hourlyLastDay } from "./stats-engine.mjs";
 import { parseDateSpec, specKey, specLabel, resolveYears, CALENDAR_VERSION, LUNAR_RANGE, switchBasis, solarToLunar } from "./calendar-resolver.mjs";
-import { dateWeather, withSelected, windowYears, windowKey, windowLabel, allFromYear, DAILY_FROM, HOURLY_FROM, POLICY_VERSION, STORY_VERSION, SAMPLE_POLICY, DAILY_METRICS, HOURLY_METRICS, STATUS_TEXT, WINDOW_YEARS, bothCalendars } from "./date-weather-engine.mjs";
+import { dateWeather, withSelected, windowYears, windowKey, windowLabel, allFromYear, DAILY_FROM, HOURLY_FROM, POLICY_VERSION, STORY_VERSION, DAY_VERSION, SAMPLE_POLICY, DAILY_METRICS, HOURLY_METRICS, STATUS_TEXT, WINDOW_YEARS, bothCalendars, COUNT_RULES, AROUND, AROUND_METRICS } from "./date-weather-engine.mjs";
 import { battle, battleYear, BATTLE_METRICS, CORE_METRICS, CASE_IDS, BATTLE_VERSION } from "./date-battle-engine.mjs";
 
 const SOURCE = "기상청 ASOS 공식 일자료·시간자료(관측지점 한 곳)";
 export const kstToday = (now = new Date()) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 // CSV 칸: 수식으로 읽히지 않게(=,+,-,@ 로 시작하는 사용자 입력) 앞에 ' — 숫자는 그대로
+// v2 화면 주소: date=YYYY-MM-DD(양력 또는 음력 연월일, cal 로 구분) 하나 → 내부 m·d·years(첫 해 = 그 날짜의 연도, cmp = 겹쳐 볼 해)
+// 예전 주소(m·d·year·years)는 그대로 받는다.
+export function withDateParam(q0) {
+  const q = new URLSearchParams(q0);
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(String(q.get("date") || "").trim());
+  if (!m) return q;
+  q.set("m", String(+m[2]));
+  q.set("d", String(+m[3]));
+  if (!q.get("years")) q.set("years", [String(+m[1]), ...String(q.get("cmp") || "").split(",").map((s) => s.trim()).filter(Boolean)].join(","));
+  q.delete("date");
+  return q;
+}
 const safeText = (s) => { const t = String(s ?? "").slice(0, 40).replace(/[\r\n]/g, " "); return /^[=+\-@\t]/.test(t) ? `'${t}` : t; };
 
 export function createDateApi({ statsData, statsHourly = null, dayRow = null, stations, json, today = () => kstToday(), cacheSize = 300, log = () => {} }) {
@@ -78,13 +90,16 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
 
   // ---------------------------------------------------------------- 날짜로 보는 날씨
   // 계산(캐시 포함) — API 와 공유 경로(/s/day)가 같이 쓴다. 반환: { str(JSON 문자열) } 또는 CSV 용 { body, st, part }
-  async function dayResult(q, { csv = false } = {}) {
+  async function dayResult(q0, { csv = false } = {}) {
+    const q = withDateParam(q0);
     const st = await stationById(q.get("station") || "108");
     const spec = specParam(q);
     const t = today();
     const thisYear = +t.slice(0, 4);
     const win = windowParam(q, thisYear);
-    const part = ["daily", "hourly", "all"].includes(q.get("part")) ? q.get("part") : "daily";
+    const part0 = ["daily", "hourly", "all", "around"].includes(q.get("part")) ? q.get("part") : "daily";
+    const around = part0 === "around"; // 앞뒤 15일 CSV 용(계산은 daily 와 같은 결과)
+    const part = around ? "daily" : part0;
     const sel = yearsList(q.get("years") || q.get("year") || String(thisYear), thisYear);
     const store = await statsData.get(st.station_id);
     if (!store.n) throw new StatsError("이 지점에는 공식 일자료가 없습니다", 404);
@@ -92,7 +107,7 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
     if (needH && !statsHourly) throw new StatsError("시간자료 통계를 쓸 수 없습니다", 503);
     const hs = needH ? await statsHourly.get(st.station_id) : null;
     const years = windowYears(win, allFromYear(spec, store.firstDate));
-    const baseKey = ["dw", st.station_id, specKey(spec), windowKey(win), years.fromYear, part, CALENDAR_VERSION, POLICY_VERSION, STORY_VERSION, statsData.version(), needH ? statsHourly.version() : 0, store.lastDate, hs ? hs.lastIdx : -1, t].join("|");
+    const baseKey = ["dw", st.station_id, specKey(spec), windowKey(win), years.fromYear, part, CALENDAR_VERSION, POLICY_VERSION, STORY_VERSION, DAY_VERSION, statsData.version(), needH ? statsHourly.version() : 0, store.lastDate, hs ? hs.lastIdx : -1, t].join("|");
     const key = `${baseKey}|${sel.join(".")}|${csv ? "csv" : "json"}`;
     const hit = recall(key);
     if (hit && !csv) return { str: hit };
@@ -113,9 +128,9 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
     const body = {
       ok: true, source: SOURCE, timezone: "Asia/Seoul", today: t, station: stOut(st, store), window: { ...win, ...years, label: windowLabel(win, years), allFrom: allFromYear(spec, store.firstDate) },
       hourlyInfo: hs ? { from: HOURLY_FROM, last: hourlyLastDay(hs) } : null, dataRevision: { daily: statsData.version(), hourly: statsHourly ? statsHourly.version() : null, dailyLast: store.lastDate },
-      ...policy(), part, selectedYears: sel, selectedCalendars: r.selected ? r.selected.map((x) => bothCalendars(x.solarDate)) : undefined, official, ...r,
+      ...policy(), dayVersion: DAY_VERSION, countRules: COUNT_RULES.map(({ test, ...x }) => x), aroundInfo: { ...AROUND, metrics: AROUND_METRICS }, part, selectedYears: sel, selectedCalendars: r.selected ? r.selected.map((x) => bothCalendars(x.solarDate)) : undefined, official, ...r,
     };
-    if (csv) return { body, st, part };
+    if (csv) return { body, st, part: around ? "around" : part };
     return { str: remember(key, JSON.stringify(body)) };
   }
   async function dateWeatherApi(url, res) {
@@ -126,30 +141,45 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
   }
   function dateCsv(res, st, b, part) {
     const head = [`이날 · 날짜로 보는 날씨 (집계 결과 — 원자료 다운로드 아님)`, `지점 ${st.station_id} ${st.station_name || ""} · ${b.compareText} · ${b.window.label} · 오늘 ${b.today}(Asia/Seoul) · 출처 ${SOURCE}`, `정책 ${POLICY_VERSION} · 달력 ${CALENDAR_VERSION} · 일자료 ${DAILY_FROM.slice(0, 4)}~ / 시간자료 ${HOURLY_FROM.slice(0, 4)}~`];
+    head[2] = `화면 ${DAY_VERSION} · 정책 ${POLICY_VERSION} · 달력 ${CALENDAR_VERSION} · 일자료 ${DAILY_FROM.slice(0, 4)}~ / 시간자료 ${HOURLY_FROM.slice(0, 4)}~`;
+    const num = (v, d = 3) => (v == null ? "" : +v.toFixed(d));
     if (part === "hourly") {
+      // 고른 해(+겹쳐 본 해)의 실제 정시 관측만(같은 시각 평균 없음)
       const mets = Object.entries(HOURLY_METRICS);
       const columns = [{ key: "hour", label: "시각" }];
-      for (const [k, m] of mets) columns.push({ key: `${k}_mean`, label: `${m.label} 평균(${m.unit})${k === "rn" ? " h~h+1시" : ""}` }, { key: `${k}_n`, label: `${m.label} 유효 연도` }, { key: `${k}_e`, label: `${m.label} 대상 연도` });
-      columns.push({ key: "ta_p10", label: "기온 P10(℃)" }, { key: "ta_p90", label: "기온 P90(℃)" });
-      for (const s of b.hourly.selected) columns.push({ key: `y${s.referenceYear}`, label: `${s.referenceYear}년 기온(℃) ${s.solarDate || STATUS_TEXT[s.dateStatus]}` });
+      for (const s of b.hourly.selected) for (const [k, m] of mets) columns.push({ key: `y${s.referenceYear}_${k}`, label: `${s.referenceYear}년 ${m.label}(${m.unit})${k === "rn" ? " h~h+1시" : ""}${s.solarDate ? ` ${s.solarDate}` : ` ${STATUS_TEXT[s.dateStatus]}`}` });
       const rows = Array.from({ length: 24 }, (_, h) => {
         const o = { hour: `${h}시` };
-        for (const [k] of mets) { const x = b.hourly.metrics[k].hours[h]; o[`${k}_mean`] = x.mean == null ? "" : +x.mean.toFixed(3); o[`${k}_n`] = x.n; o[`${k}_e`] = x.eligible; }
-        const tx = b.hourly.metrics.ta.hours[h];
-        o.ta_p10 = tx.p10 == null ? "" : +tx.p10.toFixed(3); o.ta_p90 = tx.p90 == null ? "" : +tx.p90.toFixed(3);
-        for (const s of b.hourly.selected) o[`y${s.referenceYear}`] = s.series.ta[h] ?? (s.cellStatus.ta[h] === "ok" ? "" : STATUS_TEXT[s.cellStatus.ta[h]] || "");
+        for (const s of b.hourly.selected) for (const [k] of mets) o[`y${s.referenceYear}_${k}`] = s.series[k][h] != null ? num(s.series[k][h]) : STATUS_TEXT[s.cellStatus[k][h]] || "";
         return o;
       });
-      return sendCsv(res, `inal-date-hourly-${st.station_id}-${b.specKey}-${b.years.fromYear}-${b.years.toYear}`, { columns, rows }, [...head, "강수량 h칸 = h~h+1시 1시간 강수량(기상청 정시값 = 앞 1시간 누적). 하루 강수량으로 더하지 않음"]);
+      return sendCsv(res, `inal-date-hourly-${st.station_id}-${b.specKey}-${b.selectedYears.join("_")}`, { columns, rows }, [...head, "강수량 h칸 = h~h+1시 1시간 강수량(기상청 정시값 = 앞 1시간 누적). 하루 강수량으로 더하지 않음", ...((b.hourly.stories || []).map((x) => `이야기: ${x.text}`))]);
+    }
+    if (part === "around") {
+      // 앞뒤 15일: 해마다 31일 창 한 줄 + 기간 요약(머리말)
+      const A = b.around;
+      const mk = Object.keys(AROUND_METRICS);
+      const columns = [{ key: "y", label: "기준연도" }, { key: "center", label: "그해 날짜(양력)" }, { key: "start", label: "창 시작" }, { key: "end", label: "창 끝" }, { key: "status", label: "상태" },
+        ...mk.flatMap((k) => [{ key: k, label: `${AROUND_METRICS[k].label}(${AROUND_METRICS[k].unit})` }, { key: `${k}_obs`, label: `${AROUND_METRICS[k].label} 유효일` }])];
+      const ST = { ...STATUS_TEXT, partial: "자료 부족(2일 이상 빠짐)" };
+      const yr = (y, sel = false) => ({ y: `${y.referenceYear}${sel ? "(고른 해)" : ""}`, center: y.center || "", start: y.start || "", end: y.sofarEnd ? `${y.end}(관측 ${y.sofarEnd}까지)` : y.end || "", status: ST[y.status] || y.status,
+        ...Object.fromEntries(mk.flatMap((k) => { const m = y.metrics[k]; if (!m) return [[k, ""], [`${k}_obs`, ""]]; return [[k, m.status === "ok" || y.sofarEnd ? num(m.raw) : ST[m.status] || ""], [`${k}_obs`, m.obs]]; })) });
+      const rows = A.years.slice().reverse().map((y) => yr(y));
+      if (b.aroundSelected && !A.years.some((y) => y.referenceYear === b.aroundSelected.referenceYear)) rows.unshift(yr(b.aroundSelected, true));
+      const sm = mk.map((k) => { const m = A.metrics[k]; const d = AROUND_METRICS[k]; return `${d.label}: 해 ${m.n}/${m.eligible}(요청 ${m.requested}) 유효일 ${m.validDays}${d.kind === "mean" ? ` · 해들의 평균 ${m.mean == null ? "-" : m.mean.toFixed(2)}${d.unit}` : d.kind === "sum" ? ` · 합 ${m.total == null ? "-" : m.total.toFixed(1)}mm · 하루 평균 ${m.perDay == null ? "-" : m.perDay.toFixed(2)}mm` : ` · 합 ${m.total ?? "-"}일 · 해마다 평균 ${m.mean == null ? "-" : m.mean.toFixed(2)}일 · 유효일 대비 ${m.share == null ? "-" : m.share.toFixed(1)}%`}${m.limited ? " · 자료 제한" : ""}${m.tier === "reference" ? " · 참고" : ""}`; });
+      return sendCsv(res, `inal-date-around15-${st.station_id}-${b.specKey}-${b.years.fromYear}-${b.years.toYear}`, { columns, rows }, [...head, `앞뒤 15일 = 그해 날짜 ±15일(31일). 자료 없는 날이 ${AROUND.maxMissing}일 이하인 해만 넣음(남은 날로만 집계, 채우지 않음)`, ...sm]);
     }
     const mk = Object.keys(DAILY_METRICS);
     const columns = [{ key: "y", label: "기준연도" }, { key: "solar", label: "실제 양력 날짜" }, { key: "lunar", label: "음력 날짜" }, { key: "leap", label: "윤달" }, { key: "station", label: "지점" }, { key: "status", label: "날짜 상태" },
-      ...mk.map((k) => ({ key: k, label: `${DAILY_METRICS[k].label.replace(/^평균 /, "")}(${DAILY_METRICS[k].unit})` })), { key: "rainy", label: "강수(0.1mm 이상)" }, { key: "rainNorm", label: "강수 정규화" }];
+      ...mk.map((k) => ({ key: k, label: `${DAILY_METRICS[k].label.replace(/^평균 /, "")}(${DAILY_METRICS[k].unit})` })), { key: "nsnow", label: "신적설(cm)" }, { key: "rainy", label: "강수(0.1mm 이상)" }, { key: "rainNorm", label: "강수 정규화" }];
     const NORM = { value: "관측값", blank0: "공란=무강수 0(기상청 관례)", missing: "자료 없음", noRow: "그날 행 없음" };
-    const rows = b.daily.rows.map((r) => ({ y: r.referenceYear, solar: r.solarDate || "", lunar: r.lunarDate || "", leap: r.isLeapMonth ? "윤달" : "", station: st.station_id, status: STATUS_TEXT[r.dateStatus] || r.dateStatus, ...Object.fromEntries(mk.map((k) => [k, r.values[k] == null ? "" : +r.values[k].toFixed(3)])), rainy: r.values.rain == null ? "" : r.values.rain >= 0.1 ? "예" : "아니오", rainNorm: r.rainNorm ? NORM[r.rainNorm] : "" }));
-    const sm = mk.map((k) => { const s = b.daily.metrics[k]; return `${DAILY_METRICS[k].label}: N=${s.n}/${s.eligible}(요청 ${s.candidateYears.length}) 평균 ${s.mean == null ? "-" : s.mean.toFixed(2)}${DAILY_METRICS[k].unit}${s.limited ? " · 자료 제한" : ""}${s.tier === "reference" ? " · 참고 평균" : ""}`; });
-    const rs = b.daily.metrics.rain;
-    return sendCsv(res, `inal-date-daily-${st.station_id}-${b.specKey}-${b.years.fromYear}-${b.years.toYear}`, { columns, rows }, [...head, ...sm, `강수일수 ${rs.k}개 해 / N ${rs.n} · 비율 ${rs.share == null ? "-" : rs.share.toFixed(1)}% · 누적 ${rs.total == null ? "-" : rs.total.toFixed(1)}mm`, ...(b.stories || []).map((s) => `이야기: ${s.text}`)]);
+    const rowOf = (r, sel = false) => ({ y: `${r.referenceYear}${sel ? "(고른 해)" : ""}`, solar: r.solarDate || "", lunar: r.lunarDate || "", leap: r.isLeapMonth ? "윤달" : "", station: st.station_id, status: r.dateStatus === "ok" && !r.rowPresent ? "자료 없음" : STATUS_TEXT[r.dateStatus] || r.dateStatus, ...Object.fromEntries(mk.map((k) => [k, num(r.values[k])])), nsnow: num(r.values.nsnow), rainy: r.values.rain == null ? "" : r.values.rain >= 0.1 ? "예" : "아니오", rainNorm: r.rainNorm ? NORM[r.rainNorm] : "" });
+    const rows = b.daily.rows.slice().reverse().map((r) => rowOf(r));
+    const s0 = b.selected?.[0];
+    if (s0 && !b.daily.rows.some((r) => r.referenceYear === s0.referenceYear)) rows.unshift(rowOf(s0, true));
+    const cm = b.counts.rules.filter((c) => c.show).map((c) => `${c.label}(${c.cond}): ${c.k}번 / 자료가 있는 ${c.n}개 해(대상 ${c.eligible}, 요청 ${c.requested})${c.k ? ` — ${c.hitYears.join(" ")}` : ""}`);
+    const ex = Object.values(b.counts.extremes).filter((x) => x.value != null).map((x) => `${x.label}: ${x.years.join(" ")} (${x.value.toFixed(1)}${x.field === "rain" ? "mm" : "℃"})`);
+    return sendCsv(res, `inal-date-daily-${st.station_id}-${b.specKey}-${b.years.fromYear}-${b.years.toYear}`, { columns, rows }, [...head, "해마다 그날 하루씩의 공식 일자료(같은 날 평균 없음). 횟수 = 자료가 있는 해 중 조건을 만족한 해의 수", ...cm, ...ex, ...(b.stories || []).map((x) => `이야기: ${x.text}`)]);
   }
 
   // ---------------------------------------------------------------- 달력 대응표

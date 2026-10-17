@@ -4,27 +4,28 @@
 //   GET /s/battle?cases=...  · /s/battle.svg?cases=...  → 배틀 카드
 // og:image 는 정적 PNG(/brand/og.png): 메신저·SNS 미리보기는 대부분 SVG 를 받지 않고, 서버 PNG 래스터화에는 글꼴·네이티브 모듈이 필요해 넣지 않았다.
 // 사용자 입력(별칭)은 HTML·SVG 모두 이스케이프하고 30자로 자른다. 숫자는 date-api 의 같은 계산·캐시(dayBody·battleBody)에서만 가져온다.
-import { daySpec, battleSpec, layout, toSvg, fmt } from "./public/share-card.mjs";
+import { daySpec, battleSpec, layout, toSvg, fmt, selDateText } from "./public/share-card.mjs";
 import { StatsError } from "./stats-engine.mjs";
 
 const ORIGIN = process.env.PUBLIC_ORIGIN || "https://weather.nuni.co.kr";
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const clean = (s) => String(s ?? "").replace(/[\u0000-\u001f\u007f<>]/g, "").trim().slice(0, 30);
 // 화면 주소로 넘길 조건(허용한 키만, 순서 고정)
-const DAY_KEYS = ["station", "cal", "m", "d", "leap", "year", "cmp", "period", "to", "from", "alias"];
+const DAY_KEYS = ["station", "cal", "date", "m", "d", "leap", "year", "cmp", "period", "to", "from", "alias"];
 const BATTLE_KEYS = ["cases", "period", "to", "from", "ds", "labels"];
 const pick = (q, keys) => { const o = new URLSearchParams(); for (const k of keys) { const v = q.get(k); if (v != null && v !== "") o.set(k, k === "alias" ? clean(v) : String(v).slice(0, 200)); } return o; };
 
 export function dayOg(D, alias = "") {
-  const M = D.daily.metrics;
   const stn = D.station;
-  const title = `${alias ? `${alias} · ` : ""}${D.specLabel}의 날씨 — ${stn.station_name} ${D.window.label}`;
+  const title = `${alias ? `${alias} · ` : ""}${selDateText(D)}의 날씨 — ${stn.station_name} ${D.window.label}`;
   const parts = [];
-  if (M.avg.n) parts.push(`평균기온 ${fmt(M.avg.mean)}℃(${M.avg.n}개 해)`);
-  if (M.rain.n) parts.push(`강수 있었던 해 ${M.rain.k}/${M.rain.n}`, `평균 일강수량 ${fmt(M.rain.mean)}mm`);
-  if (M.wind.n) parts.push(`평균 풍속 ${fmt(M.wind.mean)}m/s`);
+  const rc = D.counts?.rules.find((c) => c.id === "rain");
+  if (rc && rc.n) parts.push(`이날 비·눈 온 해 ${rc.k}번(${rc.n}개 해 중)`);
+  for (const c of (D.counts?.rules || []).filter((x) => x.id !== "rain" && x.show && x.n).slice(0, 2)) parts.push(`${c.label} ${c.k}번`);
+  const A = D.around?.metrics;
+  if (A && A.avg.n) parts.push(`앞뒤 15일 평균기온 ${fmt(A.avg.mean)}℃·강수일 ${fmt(A.rainDays.share, 0)}%(${A.avg.n}개 해)`);
   if (!parts.length) parts.push("자료 부족");
-  return { title, desc: `${parts.join(" · ")} — 기상청 ASOS 공식 일자료, 매년 그 날짜의 과거 관측(예보 아님)` };
+  return { title, desc: `${parts.join(" · ")} — 기상청 ASOS 공식 일자료, 해마다 그 날짜의 과거 관측(예보 아님)` };
 }
 export function battleOg(B, labels = []) {
   const name = (c, i) => labels[i] || c.specLabel;
