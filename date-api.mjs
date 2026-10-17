@@ -86,7 +86,8 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
     res.end(toCsv(table, meta));
   };
   const sendJson = (res, body) => { res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); res.end(body); };
-  const policy = () => ({ policyVersion: POLICY_VERSION, calendarVersion: CALENDAR_VERSION, storyVersion: STORY_VERSION, battleVersion: BATTLE_VERSION, sample: SAMPLE_POLICY, dailyFrom: DAILY_FROM, hourlyFrom: HOURLY_FROM, lunarRange: LUNAR_RANGE, statusText: STATUS_TEXT });
+  // 배틀 응답은 이번 v2 에서 바꾸지 않음(이야기를 쓰지 않으므로 예전 이야기 판 표기 그대로). 날짜 화면은 아래에서 STORY_VERSION(v2)으로 덮어씀
+  const policy = () => ({ policyVersion: POLICY_VERSION, calendarVersion: CALENDAR_VERSION, storyVersion: "date-story.2026-10-17.v1", battleVersion: BATTLE_VERSION, sample: SAMPLE_POLICY, dailyFrom: DAILY_FROM, hourlyFrom: HOURLY_FROM, lunarRange: LUNAR_RANGE, statusText: STATUS_TEXT });
 
   // ---------------------------------------------------------------- 날짜로 보는 날씨
   // 계산(캐시 포함) — API 와 공유 경로(/s/day)가 같이 쓴다. 반환: { str(JSON 문자열) } 또는 CSV 용 { body, st, part }
@@ -128,7 +129,7 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
     const body = {
       ok: true, source: SOURCE, timezone: "Asia/Seoul", today: t, station: stOut(st, store), window: { ...win, ...years, label: windowLabel(win, years), allFrom: allFromYear(spec, store.firstDate) },
       hourlyInfo: hs ? { from: HOURLY_FROM, last: hourlyLastDay(hs) } : null, dataRevision: { daily: statsData.version(), hourly: statsHourly ? statsHourly.version() : null, dailyLast: store.lastDate },
-      ...policy(), dayVersion: DAY_VERSION, countRules: COUNT_RULES.map(({ test, ...x }) => x), aroundInfo: { ...AROUND, metrics: AROUND_METRICS }, part, selectedYears: sel, selectedCalendars: r.selected ? r.selected.map((x) => bothCalendars(x.solarDate)) : undefined, official, ...r,
+      ...policy(), storyVersion: STORY_VERSION, dayVersion: DAY_VERSION, countRules: COUNT_RULES.map(({ test, ...x }) => x), aroundInfo: { ...AROUND, metrics: AROUND_METRICS }, part, selectedYears: sel, selectedCalendars: r.selected ? r.selected.map((x) => bothCalendars(x.solarDate)) : undefined, official, ...r,
     };
     if (csv) return { body, st, part: around ? "around" : part };
     return { str: remember(key, JSON.stringify(body)) };
