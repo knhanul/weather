@@ -233,3 +233,4 @@
 .rtx-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:8px; } .rtx-3 h3 { font-size:14px; margin:0 0 2px; } .rtx-3 > div > small { display:block; font-size:11.5px; color:var(--muted); margin-bottom:4px; }
 @media (max-width:800px) { .rtx-3 { grid-template-columns:1fr; } }
 .rtx-checks .ck-pass { color:#0e7a3e; } .rtx-checks .ck-fail { color:#c0262d; } .rtx-checks .ck-unknown { color:#8a4b00; }
+.rtx-rankx { list-style:none; padding-left:0; } .rtx-rankx .rk { display:inline-block; min-width:4.2em; color:var(--muted); font-size:12px; }

@@ -93,13 +93,13 @@
       if (hasPty(hs[0])) {
         // 지금 강수형태 예보가 있음 → 강수형태가 '없음'으로 바뀌는 첫 시각
         const j = runEnd(hs, 0, hasPty);
-        out.push({ ico: kind(null, hs[0].pty) || "rain", t: j + 1 < hs.length ? `${dayWord(hs[j + 1].time.slice(0, 10), d.date)} ${hh(hs[j + 1].time)}시 예보부터 강수형태 없음` : `${allTxt} 강수형태(${hs[0].pty}) 예보`, sub: `지금 ${esc(hs[0].pty)} 예보${hs[0].pop != null ? ` · 강수확률 ${hs[0].pop}%` : ""}`, src: src(hs[0]) });
+        out.push({ ico: kind(null, hs[0].pty) || "rain", t: j + 1 < hs.length ? `${dayWord(hs[j + 1].time.slice(0, 10), d.date)} ${hh(hs[j + 1].time)}시 무렵부터 강수형태 예보 없음` : `${allTxt} 강수형태(${hs[0].pty}) 예보`, sub: `지금 ${esc(hs[0].pty)} 예보${hs[0].pop != null ? ` · 강수확률 ${hs[0].pop}%` : ""}`, src: src(hs[0]) });
       } else {
         const i = hs.findIndex(hasPty);
         if (i > 0) {
           const s0 = hs[i], j = runEnd(hs, i, hasPty);
           const mm = hs.slice(i, j + 1).reduce((a, x) => a + (x.pcpMm > 0 ? x.pcpMm : 0), 0);
-          out.push({ ico: kind(null, s0.pty) || "rain", t: `${dayWord(s0.time.slice(0, 10), d.date)} ${hh(s0.time)}시 예보부터 ${s0.pty}`, sub: `강수형태 예보 ${j - i + 1}시간(${hh(hs[j].time)}시 예보까지)${s0.pop != null ? ` · 강수확률 ${s0.pop}%` : ""}${mm > 0 ? ` · 숫자로 나온 강수량 합 ${Math.round(mm * 10) / 10}mm` : ""}`, src: src(s0) });
+          out.push({ ico: kind(null, s0.pty) || "rain", t: `${dayWord(s0.time.slice(0, 10), d.date)} ${hh(s0.time)}시 무렵부터 ${s0.pty} 예보`, sub: `강수형태 예보 ${j - i + 1}시간 이어짐(${hh(hs[j].time)}시까지)${s0.pop != null ? ` · 강수확률 ${s0.pop}%` : ""}${mm > 0 ? ` · 숫자로 나온 강수량 합 ${Math.round(mm * 10) / 10}mm` : ""}`, src: src(s0) });
         } else {
           // 강수형태 예보는 없고 강수확률만 높은 시간대
           const p = hs.findIndex(highPop);

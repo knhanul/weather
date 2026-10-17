@@ -52,7 +52,8 @@
     const per = (d.periods || []).find((p) => p.id === id0);
     const perTxt = per ? `${short(per.label)}(${per.range})` : "1990년 이후";
     const rows = d.rows.map((r) => `<tr><th scope="row">${esc(r.name)}</th><td>${r.temp == null ? `<span class="rt-ins">${esc(r.note)}</span>` : `${r.temp}℃`}</td>${pick(d.periods.map((p) => ({ ...p }))).map((p) => `<td>${r.diffs ? `<span class="${cls(r.diffs[p.id])}">${sg(r.diffs[p.id])}</span>` : "–"}</td>`).join("")}<td>${r.percentile ?? "–"}</td></tr>`).join("");
-    const rk = (list, f) => list.length ? `<ol class="rtx-rank">${list.map((x) => `<li value="${x.rank}">${esc(x.name)} <b>${f(x)}</b></li>`).join("")}</ol>` : `<p class="rt-ins">비교 가능한 지점이 없습니다</p>`;
+    // 순위는 글자로(동률 = '공동 n위')
+    const rk = (list, f) => list.length ? `<ol class="rtx-rank rtx-rankx">${list.map((x) => { const tie = list.filter((y) => y.rank === x.rank).length > 1; return `<li><span class="rk">${tie ? "공동 " : ""}${x.rank}위</span> ${esc(x.name)} <b>${f(x)}</b></li>`; }).join("")}</ol>` : `<p class="rt-ins">비교 가능한 지점이 없습니다</p>`;
     const of = (list) => `비교 가능한 ${list.length}개 지점 중`;
     const dev = (x) => `${x.direction === "high" ? "더운 쪽" : x.direction === "low" ? "추운 쪽" : "가운데"} · 백분위 ${x.percentile}`;
     const tm = d.time ? `${d.time.slice(11, 16)} 실황` : `${d.now} 실황`;
