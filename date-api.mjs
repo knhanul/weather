@@ -140,7 +140,7 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
     return sendJson(res, r.str);
   }
   function dateCsv(res, st, b, part) {
-    const head = [`이날 · 날짜로 보는 날씨 (집계 결과 — 원자료 다운로드 아님)`, `지점 ${st.station_id} ${st.station_name || ""} · ${b.compareText} · ${b.window.label} · 오늘 ${b.today}(Asia/Seoul) · 출처 ${SOURCE}`, `정책 ${POLICY_VERSION} · 달력 ${CALENDAR_VERSION} · 일자료 ${DAILY_FROM.slice(0, 4)}~ / 시간자료 ${HOURLY_FROM.slice(0, 4)}~`];
+    const head = [`이날 · 날짜로 보는 날씨 (집계 결과 — 원자료 다운로드 아님)`, `지점 ${st.station_id} ${st.station_name || ""} · 해마다 ${b.specLabel} · ${b.window.label} · 오늘 ${b.today}(Asia/Seoul) · 출처 ${SOURCE}`, `정책 ${POLICY_VERSION} · 달력 ${CALENDAR_VERSION} · 일자료 ${DAILY_FROM.slice(0, 4)}~ / 시간자료 ${HOURLY_FROM.slice(0, 4)}~`];
     head[2] = `화면 ${DAY_VERSION} · 정책 ${POLICY_VERSION} · 달력 ${CALENDAR_VERSION} · 일자료 ${DAILY_FROM.slice(0, 4)}~ / 시간자료 ${HOURLY_FROM.slice(0, 4)}~`;
     const num = (v, d = 3) => (v == null ? "" : +v.toFixed(d));
     if (part === "hourly") {

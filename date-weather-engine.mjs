@@ -251,11 +251,11 @@ export function hourlyPart(hs, resolved, sel, ctx) {
 // months = 이 날짜(양력 월)가 이 계절에 들 때 항상 보여 줌. 계절 밖이어도 한 번이라도 있었으면 보여 줌(없는 일을 0번이라고 늘어놓지 않음).
 export const COUNT_RULES = [
   { id: "rain", field: "rain", test: METRICS.rain_days.test, label: "비·눈 온 해", cond: "일강수량 0.1mm 이상(비·눈 등 모든 강수)", months: null },
-  { id: "hot30", field: "max", test: METRICS.hot30_days.test, label: "최고 30℃ 이상", cond: "일최고기온 30℃ 이상", months: [5, 6, 7, 8, 9] },
-  { id: "heat33", field: "max", test: METRICS.heatwave_days.test, label: "최고 33℃ 이상", cond: "일최고기온 33℃ 이상(기상청 폭염일수 기준)", months: [6, 7, 8, 9] },
-  { id: "frost", field: "min", test: METRICS.frost_days.test, label: "최저 영하", cond: "일최저기온 0℃ 미만", months: [10, 11, 12, 1, 2, 3, 4] },
-  { id: "ice", field: "max", test: METRICS.ice_days.test, label: "하루 종일 영하", cond: "일최고기온 0℃ 미만", months: [11, 12, 1, 2, 3] },
-  { id: "snow", field: "nsnow", test: METRICS.snow_days.test, label: "눈이 새로 쌓인 해", cond: "일 최심신적설 0cm 초과(그날 행이 있고 공란이면 눈 없음)", months: [11, 12, 1, 2, 3] },
+  { id: "hot30", phrase: "최고 30℃ 이상이었던 해", field: "max", test: METRICS.hot30_days.test, label: "최고 30℃ 이상", cond: "일최고기온 30℃ 이상", months: [5, 6, 7, 8, 9] },
+  { id: "heat33", phrase: "최고 33℃ 이상이었던 해", field: "max", test: METRICS.heatwave_days.test, label: "최고 33℃ 이상", cond: "일최고기온 33℃ 이상(기상청 폭염일수 기준)", months: [6, 7, 8, 9] },
+  { id: "frost", phrase: "최저기온이 영하였던 해", field: "min", test: METRICS.frost_days.test, label: "최저 영하", cond: "일최저기온 0℃ 미만", months: [10, 11, 12, 1, 2, 3, 4] },
+  { id: "ice", phrase: "하루 종일 영하였던 해", field: "max", test: METRICS.ice_days.test, label: "하루 종일 영하", cond: "일최고기온 0℃ 미만", months: [11, 12, 1, 2, 3] },
+  { id: "snow", phrase: "눈이 새로 쌓인 해", field: "nsnow", test: METRICS.snow_days.test, label: "눈이 새로 쌓인 해", cond: "일 최심신적설 0cm 초과(그날 행이 있고 공란이면 눈 없음)", months: [11, 12, 1, 2, 3] },
 ];
 const fieldItems = (rows, f) => rows.map((r) => ({ year: r.referenceYear, status: r.dateStatus !== "ok" ? r.dateStatus : r.values[f] != null ? "ok" : r.fieldStatus[f] || "missing", value: r.values[f] }));
 export function yearCounts(rows) {
@@ -265,7 +265,7 @@ export function yearCounts(rows) {
     const s = summarize(items, { digits: 1 });
     const hitYears = s.validYears.filter((y) => rule.test(items.find((x) => x.year === y).value));
     const seasonal = !rule.months || rule.months.some((m) => months.has(m));
-    return { id: rule.id, label: rule.label, cond: rule.cond, field: rule.field, k: hitYears.length, n: s.n, eligible: s.eligible, requested: items.length, hitYears, validYears: s.validYears, excludedYearsByReason: s.excludedYearsByReason, tier: s.tier, limited: s.limited, seasonal, show: seasonal || hitYears.length > 0 };
+    return { id: rule.id, label: rule.label, phrase: rule.phrase || rule.label, cond: rule.cond, field: rule.field, k: hitYears.length, n: s.n, eligible: s.eligible, requested: items.length, hitYears, validYears: s.validYears, excludedYearsByReason: s.excludedYearsByReason, tier: s.tier, limited: s.limited, seasonal, show: seasonal || hitYears.length > 0 };
   });
   const ext = (f, which, cond = () => true) => {
     const s = summarize(fieldItems(rows, f), { digits: 1 });
@@ -383,7 +383,7 @@ export function dailyStories(o) {
   if (tempLines.find((c) => c.id === "ice")) pickT.push(tempLines.find((c) => c.id === "ice")); else if (tempLines.find((c) => c.id === "frost")) pickT.push(tempLines.find((c) => c.id === "frost"));
   if (tempLines.find((c) => c.id === "snow")) pickT.push(tempLines.find((c) => c.id === "snow"));
   if (pickT.length) {
-    st.push({ id: "D-tempCount", priority: 4, text: `같은 기간 ${pickT.map((c) => `${c.label}${c.id === "snow" ? "" : "이었던 해"}는 ${c.k}번(${yearList(c.hitYears, 4)})`).join(", ")}입니다.`, evidence: { metric: pickT[0].field, years: pickT.flatMap((c) => c.hitYears), formula: pickT.map((c) => `${c.label}: ${c.cond}, 자료가 있는 ${c.n}개 해 중`).join(" / "), excluded: pickT[0].excludedYearsByReason }, target: "yearly", metric: pickT[0].field });
+    st.push({ id: "D-tempCount", priority: 4, text: `같은 기간 ${pickT.map((c) => `${c.phrase}는 ${c.k}번(${yearList(c.hitYears, 4)})`).join(", ")}입니다.`, evidence: { metric: pickT[0].field, years: pickT.flatMap((c) => c.hitYears), formula: pickT.map((c) => `${c.label}: ${c.cond}, 자료가 있는 ${c.n}개 해 중`).join(" / "), excluded: pickT[0].excludedYearsByReason }, target: "yearly", metric: pickT[0].field });
   }
   const E = counts.extremes;
   if (E.hottest.value != null && E.coldest.value != null && E.hottest.n >= 3 && !E.hottest.limited) {
