@@ -192,13 +192,17 @@ export function daySpec(D, { alias = "" } = {}) {
   const stn = D.station;
   const rows = [];
   const C = D.counts;
+  const rc = C?.rules.find((c) => c.id === "rain");
+  const baseN = rc ? rc.n : null;
   if (C) {
-    for (const c of C.rules.filter((x) => x.show).slice(0, 4)) rows.push({ label: `이날 ${c.label}`, value: c.n ? `${c.k}번` : "자료 부족", note: c.n ? `자료가 있는 ${c.n}개 해 중${c.tier === "reference" ? " · 참고" : c.limited ? " · 자료 제한" : ""} · ${c.cond}` : "자료가 있는 해 없음" });
+    // 카드가 좁아 보조 글이 빠질 수 있으므로 표본은 위 칩(자료 있는 해 N)에 두고, N 이 다른 줄만 이름 뒤에 붙인다
+    for (const c of C.rules.filter((x) => x.show).slice(0, 3)) rows.push({ label: `이날 ${c.label}${c.n !== baseN ? ` (${c.n}개 해 중)` : ""}`, value: c.n ? `${c.k}번` : "자료 부족", note: c.n ? `자료가 있는 ${c.n}개 해 중${c.tier === "reference" ? " · 참고" : c.limited ? " · 자료 제한" : ""} · ${c.cond}` : "자료가 있는 해 없음" });
   }
   const A = D.around?.metrics;
+  const aN = A ? A.avg.n : null;
   if (A) {
     const nn = (m) => `${m.n}개 해 · 유효 ${m.validDays}일${m.tier === "reference" ? " · 참고" : m.limited ? " · 자료 제한" : ""}`;
-    const add = (label, m, val) => rows.push({ label, value: m.n ? val : "자료 부족", note: m.n ? nn(m) : "자료가 있는 해 없음" });
+    const add = (label, m, val) => rows.push({ label: `${label}${m.n !== aN ? ` (${m.n}개 해)` : ""}`, value: m.n ? val : "자료 부족", note: m.n ? nn(m) : "자료가 있는 해 없음" });
     add("앞뒤 15일 평균기온", A.avg, `${fmt(A.avg.mean)}℃`);
     add("앞뒤 15일 강수일 비율", A.rainDays, `${fmt(A.rainDays.share, 0)}%`);
     add("앞뒤 15일 하루 평균 강수량", A.rainSum, `${fmt(A.rainSum.perDay)}mm`);
@@ -210,11 +214,13 @@ export function daySpec(D, { alias = "" } = {}) {
     sel = `${selDateText(D)} 그날: 최고 ${fin(v.max) ? `${fmt(v.max)}℃` : "자료 없음"} · 최저 ${fin(v.min) ? `${fmt(v.min)}℃` : "자료 없음"} · 강수 ${fin(v.rain) ? `${fmt(v.rain)}mm` : "자료 없음"}`;
   } else if (s) sel = `${selDateText(D)}: ${D.statusText?.[s.dateStatus] || (s.dateStatus === "ok" ? "자료 없음" : s.dateStatus)}`;
   const title = alias ? `${alias}` : `${selDateText(D)}의 날씨`;
+  const chips = [`${stn.station_name} (${stn.station_id})`, D.window.label];
+  if (baseN != null) chips.push(`이날 자료 있는 해 ${baseN}/${D.dateCounts.requested}`);
+  if (A) chips.push(`앞뒤 15일 ${aN}개 해 · 유효 ${A.avg.validDays}일`);
   return {
     kind: "day", accent: "#026ef8", eyebrow: "날짜로 보는 날씨",
     title, subtitle: `해마다 ${D.specLabel} · 과거 관측(예보 아님)`,
-    chips: [`${stn.station_name} (${stn.station_id})`, D.window.label, `기준연도 ${D.dateCounts.requested}개${D.dateCounts.nodate ? ` · 날짜 있는 해 ${D.dateCounts.exists}` : ""}`],
-    rows, story: sel || null,
+    chips, rows, story: sel || null,
     foot: [`출처 기상청 ASOS 공식 일자료 · 관측지점 한 곳 · 횟수 = 자료가 있는 해 중 조건을 만족한 해`, `앞뒤 15일 = 해마다 그 날짜 ±15일(31일) · ${D.today} 기준`, `이날 · ${SITE}`],
   };
 }

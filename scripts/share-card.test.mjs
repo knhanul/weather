@@ -98,9 +98,10 @@ test("날짜 카드 v2: 날짜·횟수·앞뒤 15일 표본, 자료 없는 지�
   assert.equal(byLabel["앞뒤 15일 평균기온"].value, "14.4℃");
   assert.match(byLabel["앞뒤 15일 평균기온"].note, /10개 해 · 유효 310일/);
   assert.equal(byLabel["앞뒤 15일 강수일 비율"].value, "25%");
-  assert.equal(byLabel["앞뒤 15일 하루 평균 강수량"].value, "자료 부족");
   assert.ok(!sp.rows.some((r) => r.label === "평균기온"));
   assert.ok(sp.chips.includes("서울 (108)") && sp.chips.includes("최근 10년(2016~2025)"));
+  assert.ok(sp.chips.includes("이날 자료 있는 해 10/10") && sp.chips.includes("앞뒤 15일 10개 해 · 유효 310일"));
+  assert.equal(byLabel["앞뒤 15일 하루 평균 강수량 (0개 해)"].value, "자료 부족");
   assert.match(sp.foot.join(" "), /기상청 ASOS/);
   assert.equal(daySpec(D).title, "2025.10.18(토)의 날씨");
   const og = dayOg(D, "");
