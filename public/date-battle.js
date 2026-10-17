@@ -37,6 +37,8 @@
   const tag = (id) => `<span class="db-tag" style="background:${V.CASE[id].color}" aria-label="${id}">${V.CASE[id].shape} ${id}</span>`;
   const stationName = (id) => (meta?.stations || []).find((s) => String(s.station_id) === String(id))?.station_name || id;
   const nameOf = (id) => { const c = st.cases.find((x) => x.id === id); return c ? c.label || caseText(c) : id; };
+  // 해마다 비교할 날(연도 없이) — 해마다 결과 문장용
+  const dayName = (id) => { const c = st.cases.find((x) => x.id === id); if (!c) return id; return c.label || (c.cal === "L" ? `음력 ${c.m}/${c.d}${c.leap ? "(윤)" : ""}` : `${c.m}월 ${c.d}일`); };
 
   function parseDate(raw, cal) {
     const t = String(raw || "").trim();
@@ -114,7 +116,7 @@
     }).join("") + (st.cases.length < 4 ? `<button type="button" class="sec db-add" id="dbAdd">+ 날짜 추가 (${st.cases.length}/4)</button>` : "");
     const toYears = []; for (let y = THIS_YEAR; y >= 1971; y--) toYears.push([y, `${y}년`]);
     renderFav();
-    $("dbCtl").innerHTML = `<div class="ds-wide"><label>공통 기간(모든 카드) <small class="muted">· 몇 해를 셀지 — 연도 = 해마다 결과·앞뒤 15일에 쓰는 해, 날짜 칸의 연도 = 강조할 해·시간별 맞대결의 해</small></label>${seg("period", PERIODS, st.period)}</div>${st.period === "custom" ? `<div><label for="dbFrom">시작 기준연도</label><input id="dbFrom" type="number" class="sx-num" min="1900" max="${st.to}" value="${st.from}"></div>` : ""}<div><label for="dbTo">끝 기준연도</label><select id="dbTo">${opt(toYears, st.to)}</select></div>${st.diff ? "" : `<div><label for="dbSt">관측지점(공통)</label><select id="dbSt">${opt(stations, st.cases[0].station)}</select></div>`}<div><label class="sx-check"><input type="checkbox" id="dbDiff"${st.diff ? " checked" : ""}> 지점도 다르게</label></div><div class="ds-acts"><button type="button" class="sec" id="dbCardImg">카드 이미지</button><button type="button" class="sec" id="dbCopy">공유 링크 복사</button></div>`;
+    $("dbCtl").innerHTML = `<div class="ds-wide"><label>공통 기간(모든 카드) <small class="muted">· 해마다 결과·앞뒤 15일에 쓸 해 · 날짜 칸의 연도는 강조·시간별 맞대결용</small></label>${seg("period", PERIODS, st.period)}</div>${st.period === "custom" ? `<div><label for="dbFrom">시작 기준연도</label><input id="dbFrom" type="number" class="sx-num" min="1900" max="${st.to}" value="${st.from}"></div>` : ""}<div><label for="dbTo">끝 기준연도</label><select id="dbTo">${opt(toYears, st.to)}</select></div>${st.diff ? "" : `<div><label for="dbSt">관측지점(공통)</label><select id="dbSt">${opt(stations, st.cases[0].station)}</select></div>`}<div><label class="sx-check"><input type="checkbox" id="dbDiff"${st.diff ? " checked" : ""}> 지점도 다르게</label></div><div class="ds-acts"><button type="button" class="sec" id="dbCardImg">카드 이미지</button><button type="button" class="sec" id="dbCopy">공유 링크 복사</button></div>`;
   }
   // ---- 자주 보는 배틀 조합(이 브라우저에만) — v2 는 카드마다 연도 포함(예전 저장은 끝 기준연도로 열림)
   const favKey = () => casesParam();
@@ -245,7 +247,7 @@
       const when = x.dateStatus === "nodate" ? `${x.year}년에는 없는 날짜` : x.solarDate ? `${dot(x.solarDate)}(${dow(x.solarDate)})${c?.cal === "L" && x.lunarText ? ` · ${E(x.lunarText)}` : ""}` : E(STATUS(x.dateStatus));
       const v = x.values;
       const body = x.dateStatus !== "ok" ? `<p class="dy-st">${E(STATUS(x.dateStatus))}</p>` : !x.rowPresent ? `<p class="dy-st">자료 없음</p>` : `<p class="db-chv"><b class="dy-hi">${tv(v.max)}°</b><span class="dy-sl">/</span><b class="dy-lo">${tv(v.min)}°</b> <small>평균 ${tv(v.avg)}℃</small></p><p>${rainMark(x)} <small class="muted">· 바람 ${tv(v.wind)}m/s${fin(v.gust) ? ` · 순간 ${tv(v.gust)}` : ""}${fin(v.hum) ? ` · 습도 ${tv(v.hum, 0)}%` : ""}</small></p>`;
-      return `<div class="db-ch" style="--cc:${V.CASE[x.case].color}"><div class="db-ch-h">${tag(x.case)} <b>${E(nameOf(x.case))}</b></div><p class="muted">${when}${B.differentStations ? ` · ${E(stationName(c?.station))}` : ""}${inPer ? "" : ` <em class="dy-tag">기간 밖</em>`}</p>${body}</div>`;
+      return `<div class="db-ch" style="--cc:${V.CASE[x.case].color}"><div class="db-ch-h">${tag(x.case)} <b>${E(c?.label || (c?.cal === "L" ? `음력 ${c.m}월 ${c.d}일${c.leap ? "(윤)" : ""}` : `${c?.m}월 ${c?.d}일`))}</b> <small class="muted">${x.year}년</small></div><p class="muted">${when}${B.differentStations ? ` · ${E(stationName(c?.station))}` : ""}${inPer ? "" : ` <em class="dy-tag">기간 밖</em>`}</p>${body}</div>`;
     }).join("")}</div>`;
   }
   // ---- ① 해마다 결과
@@ -257,10 +259,10 @@
     const two = B.cases.length === 2;
     const tl = B.tallies.map((x) => {
       if (!x.n) return `<li><b>${E(x.word)}</b> <span class="muted">— 공통으로 자료가 있는 해 없음</span></li>`;
-      const parts = x.results.map((r) => `${tag(r.case)} <b>${r.k}번</b>`);
+      const parts = x.results.map((r) => `${tag(r.case)}${two ? ` ${E(dayName(r.case))}` : ""} <b>${r.k}번</b>`);
       const tie = `같음 ${x.ties}번`;
       const none = x.none != null ? ` · 모두 강수 없음 ${x.none}번` : "";
-      const lead = two ? `${x.n}개 해 중 ${E(nameOf(x.results[0].case))} 쪽이 ${E(x.word.replace(/ 해$/, ""))} 해 ${x.results[0].k}번, ${E(nameOf(x.results[1].case))} 쪽 ${x.results[1].k}번` : `${x.n}개 해 중 ${E(x.word)}`;
+      const lead = `${x.n}개 해 중 <b>${E(x.word)}</b>`;
       return `<li title="${E(x.def)}"><span class="db-tl-t">${lead}</span><span class="db-tl-v">${parts.join(" ")} · ${tie}${none}${x.tier === "reference" ? ` <span class="sx-badge est">참고</span>` : x.limited ? ` <span class="sx-badge est">자료 제한</span>` : ""}</span></li>`;
     }).join("");
     const rows = B.yearly.slice().reverse();
@@ -297,8 +299,8 @@
       if (!m.n || r.mean == null) return `<span class="muted">자료 부족</span>`;
       if (kind === "mean") return `<b>${fmt(r.mean)}℃</b>`;
       if (kind === "ratio") return `<b>${fmt(r.share, 0)}%</b><small>${r.total}/${r.validDays}일</small>`;
-      if (kind === "perDay") return `<b>${fmt(r.perDay)}mm</b><small>31일 합 해마다 ${fmt(r.mean)}mm</small>`;
-      return `<b>${fmt(r.mean, 1)}일</b><small>해마다 평균 · 모두 ${r.total}일</small>`;
+      if (kind === "perDay") return `<b>${fmt(r.perDay)}mm</b><small>31일 합 평균 ${fmt(r.mean)}mm</small>`;
+      return `<b>${fmt(r.mean, 1)}일</b><small>모두 ${r.total}일</small>`;
     };
     const diffU = { mean: "℃", ratio: "%p", perDay: "mm", count: "일" };
     const dg = { mean: 1, ratio: 0, perDay: 1, count: 1 };
