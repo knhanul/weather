@@ -575,7 +575,7 @@ export async function statsDailyRows(stationId) {
 // 날씨 통계(시간자료 기반): 지점 하나의 [from, to) 정시 자료(통계용 항목만). 기본 키 (station_id, observation_datetime …) 범위 읽기 — 한 해 약 0.25초
 export async function statsHourlyRows(stationId, from, to) {
   return q(
-    `SELECT observation_datetime, temperature, precipitation, humidity, wind_speed, rn_qcflg, ta_qcflg
+    `SELECT observation_datetime, temperature, precipitation, humidity, wind_speed, rn_qcflg, ta_qcflg, ws_qcflg, hm_qcflg
      FROM observations_hourly WHERE station_id = ? AND observation_datetime >= ? AND observation_datetime < ? AND provider = 'KMA' AND dataset = 'ASOS_HOURLY'`,
     [stationId, from, to],
   );
@@ -586,7 +586,7 @@ export function statsHourlyStream(stationId, from, onRows, batch = 5000) {
     let buf = [], n = 0, done = false;
     const fail = (e) => { if (!done) { done = true; reject(e); } };
     const s = pool.pool.query({
-      sql: `SELECT observation_datetime, temperature, precipitation, humidity, wind_speed, rn_qcflg, ta_qcflg
+      sql: `SELECT observation_datetime, temperature, precipitation, humidity, wind_speed, rn_qcflg, ta_qcflg, ws_qcflg, hm_qcflg
      FROM observations_hourly WHERE station_id = ? AND observation_datetime >= ? AND provider = 'KMA' AND dataset = 'ASOS_HOURLY'`,
       timeout: 300000,
     }, [stationId, from]).stream({ highWaterMark: batch });

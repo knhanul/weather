@@ -331,7 +331,7 @@ export function statsHourlyStream(stationId, from, onRows) {
 export async function statsHourlyRows(stationId, from, to) {
   if (my) return my.statsHourlyRows(...arguments);
   const r = await pool.query(
-    `SELECT observation_datetime, temperature, precipitation, humidity, wind_speed, rn_qcflg, ta_qcflg
+    `SELECT observation_datetime, temperature, precipitation, humidity, wind_speed, rn_qcflg, ta_qcflg, ws_qcflg, hm_qcflg
      FROM observations_hourly WHERE station_id = $1 AND observation_datetime >= $2 AND observation_datetime < $3 AND provider = 'KMA' AND dataset = 'ASOS_HOURLY'`,
     [stationId, from, to],
   );

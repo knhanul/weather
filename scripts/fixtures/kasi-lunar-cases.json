@@ -1,0 +1,205 @@
+{
+ "source": "한국천문연구원 천문우주지식정보 생활천문관 음양력 변환(https://astro.kasi.re.kr/life/pageView/8 — /life/solc 양력→음력, /life/lunc 음력→양력)",
+ "fetchedAt": "2026-10-17T22:50+09:00",
+ "note": "q=solc: in=양력 날짜. q=lunc: in=음력 날짜(평달·윤달 둘 다 있으면 두 줄). none=그해 그 음력 날짜 없음. monthDays=그 음력 달의 일수(LUNC_EN_DD). 공공데이터포털 15012679(LrsrCldInfoService)는 현재 서비스키가 등록되지 않아(SERVICE_KEY_IS_NOT_REGISTERED_ERROR) 같은 기관의 공개 변환 화면 결과를 썼다.",
+ "cases": [
+  {"q": "solc", "in": "1970-01-01", "solar": "1970-01-01", "lunar": "1969-11-24", "leap": false, "monthDays": 30
+  },
+  {"q": "solc", "in": "1970-02-06", "solar": "1970-02-06", "lunar": "1970-01-01", "leap": false, "monthDays": 30
+  },
+  {"q": "solc", "in": "1975-12-31", "solar": "1975-12-31", "lunar": "1975-11-29", "leap": false, "monthDays": 29
+  },
+  {"q": "solc", "in": "1984-02-02", "solar": "1984-02-02", "lunar": "1984-01-01", "leap": false, "monthDays": 30
+  },
+  {"q": "solc", "in": "1985-02-20", "solar": "1985-02-20", "lunar": "1985-01-01", "leap": false, "monthDays": 29
+  },
+  {"q": "solc", "in": "1990-01-26", "solar": "1990-01-26", "lunar": "1989-12-30", "leap": false, "monthDays": 30
+  },
+  {"q": "solc", "in": "1997-02-07", "solar": "1997-02-07", "lunar": "1996-12-30", "leap": false, "monthDays": 30
+  },
+  {"q": "solc", "in": "1997-02-08", "solar": "1997-02-08", "lunar": "1997-01-01", "leap": false, "monthDays": 29
+  },
+  {"q": "solc", "in": "2000-02-29", "solar": "2000-02-29", "lunar": "2000-01-25", "leap": false, "monthDays": 30
+  },
+  {"q": "solc", "in": "2004-02-29", "solar": "2004-02-29", "lunar": "2004-02-10", "leap": false, "monthDays": 30
+  },
+  {"q": "solc", "in": "2012-02-29", "solar": "2012-02-29", "lunar": "2012-02-08", "leap": false, "monthDays": 29
+  },
+  {"q": "solc", "in": "2014-10-24", "solar": "2014-10-24", "lunar": "2014-09-01", "leap": true, "monthDays": 29
+  },
+  {"q": "solc", "in": "2017-06-24", "solar": "2017-06-24", "lunar": "2017-05-01", "leap": true, "monthDays": 29
+  },
+  {"q": "solc", "in": "2020-05-23", "solar": "2020-05-23", "lunar": "2020-04-01", "leap": true, "monthDays": 29
+  },
+  {"q": "solc", "in": "2023-03-22", "solar": "2023-03-22", "lunar": "2023-02-01", "leap": true, "monthDays": 29
+  },
+  {"q": "solc", "in": "2025-01-28", "solar": "2025-01-28", "lunar": "2024-12-29", "leap": false, "monthDays": 29
+  },
+  {"q": "solc", "in": "2025-12-31", "solar": "2025-12-31", "lunar": "2025-11-12", "leap": false, "monthDays": 30
+  },
+  {"q": "solc", "in": "2026-01-01", "solar": "2026-01-01", "lunar": "2025-11-13", "leap": false, "monthDays": 30
+  },
+  {"q": "solc", "in": "2026-02-16", "solar": "2026-02-16", "lunar": "2025-12-29", "leap": false, "monthDays": 29
+  },
+  {"q": "solc", "in": "2026-02-17", "solar": "2026-02-17", "lunar": "2026-01-01", "leap": false, "monthDays": 30
+  },
+  {"q": "solc", "in": "2026-10-17", "solar": "2026-10-17", "lunar": "2026-09-07", "leap": false, "monthDays": 29
+  },
+  {"q": "solc", "in": "2027-02-06", "solar": "2027-02-06", "lunar": "2026-12-30", "leap": false, "monthDays": 30
+  },
+  {"q": "solc", "in": "2027-02-07", "solar": "2027-02-07", "lunar": "2027-01-01", "leap": false, "monthDays": 29
+  },
+  {"q": "solc", "in": "2033-12-22", "solar": "2033-12-22", "lunar": "2033-11-01", "leap": true, "monthDays": 29
+  },
+  {"q": "solc", "in": "2034-01-20", "solar": "2034-01-20", "lunar": "2033-12-01", "leap": false, "monthDays": 30
+  },
+  {"q": "solc", "in": "2050-12-31", "solar": "2050-12-31", "lunar": "2050-11-18", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "1970-01-01", "solar": "1970-02-06", "lunar": "1970-01-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "1970-08-15", "solar": "1970-09-15", "lunar": "1970-08-15", "leap": false, "monthDays": 29
+  },
+  {"q": "lunc", "in": "1971-05-01", "solar": "1971-05-24", "lunar": "1971-05-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "1971-05-01", "solar": "1971-06-23", "lunar": "1971-05-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "1974-04-01", "solar": "1974-04-22", "lunar": "1974-04-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "1974-04-01", "solar": "1974-05-22", "lunar": "1974-04-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "1976-08-01", "solar": "1976-08-25", "lunar": "1976-08-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "1976-08-01", "solar": "1976-09-24", "lunar": "1976-08-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "1979-06-01", "solar": "1979-06-24", "lunar": "1979-06-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "1979-06-01", "solar": "1979-07-24", "lunar": "1979-06-01", "leap": true, "monthDays": 30
+  },
+  {"q": "lunc", "in": "1982-04-01", "solar": "1982-04-24", "lunar": "1982-04-01", "leap": false, "monthDays": 29
+  },
+  {"q": "lunc", "in": "1982-04-01", "solar": "1982-05-23", "lunar": "1982-04-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "1984-10-01", "solar": "1984-10-24", "lunar": "1984-10-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "1984-10-01", "solar": "1984-11-23", "lunar": "1984-10-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "1987-06-01", "solar": "1987-06-26", "lunar": "1987-06-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "1987-06-01", "solar": "1987-07-26", "lunar": "1987-06-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "1990-05-01", "solar": "1990-05-24", "lunar": "1990-05-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "1990-05-01", "solar": "1990-06-23", "lunar": "1990-05-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "1993-03-01", "solar": "1993-03-23", "lunar": "1993-03-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "1993-03-01", "solar": "1993-04-22", "lunar": "1993-03-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "1995-08-01", "solar": "1995-08-26", "lunar": "1995-08-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "1995-08-01", "solar": "1995-09-25", "lunar": "1995-08-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "1998-05-01", "solar": "1998-05-26", "lunar": "1998-05-01", "leap": false, "monthDays": 29
+  },
+  {"q": "lunc", "in": "1998-05-01", "solar": "1998-06-24", "lunar": "1998-05-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2001-04-01", "solar": "2001-04-24", "lunar": "2001-04-01", "leap": false, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2001-04-01", "solar": "2001-05-23", "lunar": "2001-04-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2004-02-01", "solar": "2004-02-20", "lunar": "2004-02-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2004-02-01", "solar": "2004-03-21", "lunar": "2004-02-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2006-07-01", "solar": "2006-07-25", "lunar": "2006-07-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2006-07-01", "solar": "2006-08-24", "lunar": "2006-07-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2009-05-01", "solar": "2009-05-24", "lunar": "2009-05-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2009-05-01", "solar": "2009-06-23", "lunar": "2009-05-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2012-03-01", "solar": "2012-03-22", "lunar": "2012-03-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2012-03-01", "solar": "2012-04-21", "lunar": "2012-03-01", "leap": true, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2014-09-01", "solar": "2014-09-24", "lunar": "2014-09-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2014-09-01", "solar": "2014-10-24", "lunar": "2014-09-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2017-05-01", "solar": "2017-05-26", "lunar": "2017-05-01", "leap": false, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2017-05-01", "solar": "2017-06-24", "lunar": "2017-05-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2020-04-01", "solar": "2020-04-23", "lunar": "2020-04-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2020-04-01", "solar": "2020-05-23", "lunar": "2020-04-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2020-04-30", "solar": "2020-05-22", "lunar": "2020-04-30", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2023-02-01", "solar": "2023-02-20", "lunar": "2023-02-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2023-02-01", "solar": "2023-03-22", "lunar": "2023-02-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2023-02-29", "solar": "2023-03-20", "lunar": "2023-02-29", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2023-02-29", "solar": "2023-04-19", "lunar": "2023-02-29", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2024-12-30", "none": true
+  },
+  {"q": "lunc", "in": "2025-06-01", "solar": "2025-06-25", "lunar": "2025-06-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2025-06-01", "solar": "2025-07-25", "lunar": "2025-06-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2025-06-30", "solar": "2025-07-24", "lunar": "2025-06-30", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2025-12-29", "solar": "2026-02-16", "lunar": "2025-12-29", "leap": false, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2025-12-30", "none": true
+  },
+  {"q": "lunc", "in": "2026-01-01", "solar": "2026-02-17", "lunar": "2026-01-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2026-08-15", "solar": "2026-09-25", "lunar": "2026-08-15", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2027-01-01", "solar": "2027-02-07", "lunar": "2027-01-01", "leap": false, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2028-05-01", "solar": "2028-05-24", "lunar": "2028-05-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2028-05-01", "solar": "2028-06-23", "lunar": "2028-05-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2031-03-01", "solar": "2031-03-23", "lunar": "2031-03-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2031-03-01", "solar": "2031-04-22", "lunar": "2031-03-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2033-11-01", "solar": "2033-11-22", "lunar": "2033-11-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2033-11-01", "solar": "2033-12-22", "lunar": "2033-11-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2036-06-01", "solar": "2036-06-24", "lunar": "2036-06-01", "leap": false, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2036-06-01", "solar": "2036-07-23", "lunar": "2036-06-01", "leap": true, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2039-05-01", "solar": "2039-05-23", "lunar": "2039-05-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2039-05-01", "solar": "2039-06-22", "lunar": "2039-05-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2042-02-01", "solar": "2042-02-20", "lunar": "2042-02-01", "leap": false, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2042-02-01", "solar": "2042-03-22", "lunar": "2042-02-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2044-07-01", "solar": "2044-07-25", "lunar": "2044-07-01", "leap": false, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2044-07-01", "solar": "2044-08-23", "lunar": "2044-07-01", "leap": true, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2047-05-01", "solar": "2047-05-25", "lunar": "2047-05-01", "leap": false, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2047-05-01", "solar": "2047-06-23", "lunar": "2047-05-01", "leap": true, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2050-03-01", "solar": "2050-03-23", "lunar": "2050-03-01", "leap": false, "monthDays": 29
+  },
+  {"q": "lunc", "in": "2050-03-01", "solar": "2050-04-21", "lunar": "2050-03-01", "leap": true, "monthDays": 30
+  },
+  {"q": "lunc", "in": "2050-11-18", "solar": "2050-12-31", "lunar": "2050-11-18", "leap": false, "monthDays": 30
+  }
+ ]
+}

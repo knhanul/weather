@@ -964,9 +964,12 @@ export function createHourlyStore(stationId, untilYear) {
   const base = ymdToDn(HOURLY_FROM);
   const n = (ymdToDn(`${untilYear}-12-31`) - base + 1) * 24;
   const f = () => new Int16Array(n).fill(H_NA);
-  return { stationId: String(stationId), base, n, ta: f(), rn: f(), ws: f(), hm: f(), src: new Uint8Array(n), firstIdx: -1, lastIdx: -1, rows: 0 };
+  // qc: 시각별 정규화 사유 비트(날짜 화면 '품질 확인으로 제외'·'공란 무강수' 구분용, 값 계산에는 쓰지 않음) — QC_BITS
+  return { stationId: String(stationId), base, n, ta: f(), rn: f(), ws: f(), hm: f(), src: new Uint8Array(n), qc: new Uint8Array(n), firstIdx: -1, lastIdx: -1, rows: 0 };
 }
 const HOUR_RE = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})/;
+// 시간자료 정규화 사유(hs.qc 비트): 플래그 9(결측)로 뺀 항목, 강수 공란을 무강수 0 으로 읽은 시각. 풍속·습도는 플래그 9 면 자료 없음(원자료에서 이때 값도 비어 있음 — 2026-10-17 108 지점 확인)
+export const QC_BITS = { ta: 1, rn: 2, ws: 4, hm: 8, rnBlank: 16 };
 export function addHourlyRows(hs, rows) {
   const num = (v) => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? NaN : Number(v));
   let added = 0;
@@ -983,11 +986,19 @@ export function addHourlyRows(hs, rows) {
     if (!hs.src[i]) hs.rows++;
     hs.src[i] = kind;
     const ta = num(r.temperature);
-    hs.ta[i] = henc(String(r.ta_qcflg ?? "") === "9" ? NaN : ta);
+    const f9 = (k) => String(r[k] ?? "") === "9";
+    let qc = 0;
+    if (f9("ta_qcflg")) qc |= QC_BITS.ta;
+    hs.ta[i] = henc(f9("ta_qcflg") ? NaN : ta);
     const rn = num(r.precipitation);
-    hs.rn[i] = henc(String(r.rn_qcflg ?? "") === "9" ? NaN : Number.isFinite(rn) ? rn : 0);
-    hs.ws[i] = henc(num(r.wind_speed));
-    hs.hm[i] = henc(num(r.humidity));
+    if (f9("rn_qcflg")) qc |= QC_BITS.rn;
+    else if (!Number.isFinite(rn)) qc |= QC_BITS.rnBlank;
+    hs.rn[i] = henc(f9("rn_qcflg") ? NaN : Number.isFinite(rn) ? rn : 0);
+    if (f9("ws_qcflg")) qc |= QC_BITS.ws;
+    if (f9("hm_qcflg")) qc |= QC_BITS.hm;
+    hs.ws[i] = henc(f9("ws_qcflg") ? NaN : num(r.wind_speed));
+    hs.hm[i] = henc(f9("hm_qcflg") ? NaN : num(r.humidity));
+    if (hs.qc) hs.qc[i] = qc;
     if (hs.firstIdx < 0 || i < hs.firstIdx) hs.firstIdx = i;
     if (i > hs.lastIdx) hs.lastIdx = i;
     added++;
