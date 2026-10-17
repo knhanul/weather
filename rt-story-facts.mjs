@@ -71,8 +71,8 @@ export function seasonExposure(type, event, today) {
   if (!event?.date) return { home: false, reason: "올해 아직 확인되지 않음" };
   const m = +today.slice(5, 7);
   const age = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${event.date}T00:00:00Z`)) / 864e5);
-  if (!w.months.includes(m)) return { home: false, ageDays: age, reason: `노출 기간 밖(${w.months[0]}~${w.months.at(-1)}월만)` };
-  if (age > w.daysAfter) return { home: false, ageDays: age, reason: `사건 뒤 ${w.daysAfter}일 지남(${age}일 전)` };
+  if (!w.months.includes(m)) return { home: false, ageDays: age, reason: `계절 노출 기간 밖(${w.months[0]}~${w.months.at(-1)}월만)` };
+  if (age > w.daysAfter) return { home: false, ageDays: age, reason: `계절 노출 기간 밖(확인 뒤 ${w.daysAfter}일 지남, ${age}일 전)` };
   if (event.firstConfirmed === false) return { home: false, ageDays: age, reason: "시즌 앞부분 자료가 빠져 '처음'을 확정할 수 없음" };
   return { home: true, ageDays: age, reason: null };
 }
