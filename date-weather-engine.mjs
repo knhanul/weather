@@ -259,7 +259,8 @@ export function dailyStories(o) {
     const wet = rs.maxYears;
     const share = rs.total > 0 ? (rs.max / rs.total) * 100 : 0;
     let text = `강수량은 평균 ${fmt(rs.mean)}mm였고, 가장 많았던 해는 ${wet.map((y) => yearWord(spec, y)).join("·")}(${fmt(rs.max)}mm)입니다.`;
-    if (rs.n >= 3 && share >= 50 && wet.length === 1) text += ` 그 한 해가 ${rs.n}개 해 강수량 합의 ${Math.round(share)}%를 차지해 평균을 크게 끌어올렸습니다. 연도별 그래프로 해마다의 차이를 확인해 보세요.`;
+    if (rs.k === 1) text = `강수가 있었던 해는 ${yearWord(spec, wet[0])} 한 해(${fmt(rs.max)}mm)뿐이라, 평균 일강수량 ${fmt(rs.mean)}mm는 그 한 해 값을 ${rs.n}개 해로 나눈 값입니다. 연도별 그래프로 해마다의 차이를 확인해 보세요.`;
+    else if (share >= 50 && wet.length === 1) text += ` 그 한 해가 ${rs.n}개 해 강수량 합의 ${Math.round(share)}%를 차지해 평균을 크게 끌어올렸습니다. 연도별 그래프로 해마다의 차이를 확인해 보세요.`;
     else text += " 평균과 함께 해마다의 차이도 확인해 보세요.";
     st.push({ id: "D-rainAmt", priority: 4, text, evidence: { metric: "rain", years: rs.validYears, formula: "평균 일강수량 = 유효한 일강수량 합 ÷ N(무강수 0 포함)", excluded: rs.excludedYearsByReason }, target: "yearly", metric: "rain" });
   }
@@ -285,6 +286,21 @@ export function hourlyStories(h, metrics, selected) {
     st.push({ id: "H-selDiff", priority: 3, text: `${s.referenceYear}년 이날 ${best.hh}시 기온은 ${fmt(best.v)}℃로, 비교 기간의 같은 시각 평균(${fmt(best.m.mean)}℃, ${best.m.n}개 해)보다 ${fmt(Math.abs(best.d))}℃ ${best.d > 0 ? "높았습니다" : "낮았습니다"}. 하루 중 평균과 가장 크게 달랐던 시각입니다.`, evidence: { metric: "ta", years: [s.referenceYear], hours: [best.hh], formula: "선택 연도 정시 기온 − 같은 시각 비교 기간 평균(해마다 한 값)", n: best.m.n }, target: "hourly", metric: "ta" });
   }
   return st;
+}
+
+// 선택 연도만 바뀔 때: 이미 계산한 과거 평균(base = selectedYears 없이 계산한 결과)을 그대로 두고 선택 연도 부분과 이야기만 새로 만든다
+export function withSelected(base, { spec, store, hs = null, ctx, selectedYears = [] }) {
+  const sel = selectedYears.slice(0, 3).map((y) => resolveYear(spec, y));
+  const out = { ...base };
+  if (base.daily) {
+    out.selected = sel.map((r) => dailyYear(store, r, ctx));
+    out.stories = dailyStories(out);
+  }
+  if (base.hourly) {
+    const selected = sel.map((r) => hourlyYear(hs, r, ctx));
+    out.hourly = { ...base.hourly, selected, stories: hourlyStories(base.hourly, base.hourly.metrics, selected) };
+  }
+  return out;
 }
 
 // 선택 연도 표시용 양력·음력 병기(기준 전환 없이 표시만)

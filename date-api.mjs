@@ -3,7 +3,7 @@
 // 캐시: 응답 JSON 을 키(지점·날짜 기준·윤달·기간·부분·선택 연도·달력/정책 버전·일/시간자료 판 번호·오늘 날짜)로 기억. 자료 저장 시 판 번호가 올라 자동 무효화.
 import { StatsError, toCsv, hourlyLastDay } from "./stats-engine.mjs";
 import { parseDateSpec, specKey, specLabel, resolveYears, CALENDAR_VERSION, LUNAR_RANGE, switchBasis, solarToLunar } from "./calendar-resolver.mjs";
-import { dateWeather, windowYears, windowKey, windowLabel, allFromYear, DAILY_FROM, HOURLY_FROM, POLICY_VERSION, STORY_VERSION, SAMPLE_POLICY, DAILY_METRICS, HOURLY_METRICS, STATUS_TEXT, WINDOW_YEARS, bothCalendars } from "./date-weather-engine.mjs";
+import { dateWeather, withSelected, windowYears, windowKey, windowLabel, allFromYear, DAILY_FROM, HOURLY_FROM, POLICY_VERSION, STORY_VERSION, SAMPLE_POLICY, DAILY_METRICS, HOURLY_METRICS, STATUS_TEXT, WINDOW_YEARS, bothCalendars } from "./date-weather-engine.mjs";
 import { battle, battleYear, BATTLE_METRICS, CORE_METRICS, CASE_IDS, BATTLE_VERSION } from "./date-battle-engine.mjs";
 
 const SOURCE = "기상청 ASOS 공식 일자료·시간자료(관측지점 한 곳)";
@@ -12,9 +12,23 @@ export const kstToday = (now = new Date()) => new Intl.DateTimeFormat("en-CA", {
 const safeText = (s) => { const t = String(s ?? "").slice(0, 40).replace(/[\r\n]/g, " "); return /^[=+\-@\t]/.test(t) ? `'${t}` : t; };
 
 export function createDateApi({ statsData, statsHourly = null, dayRow = null, stations, json, today = () => kstToday(), cacheSize = 300, log = () => {} }) {
+  // 응답 문자열 캐시(합계 약 8MB 이하) + 계산 base 캐시(최대 40개) — 운영 컨테이너 메모리 192MB 안에서
   const cache = new Map();
-  const remember = (k, v) => { cache.set(k, v); if (cache.size > cacheSize) cache.delete(cache.keys().next().value); return v; };
-  const recall = (k) => { if (!cache.has(k)) return undefined; const v = cache.get(k); cache.delete(k); cache.set(k, v); return v; };
+  let bytes = 0;
+  const MAX_BYTES = 8 * 1024 * 1024;
+  const baseCache = new Map();
+  const remember = (k, v) => {
+    if (typeof v !== "string") { baseCache.set(k, v); if (baseCache.size > 40) baseCache.delete(baseCache.keys().next().value); return v; }
+    if (cache.has(k)) bytes -= cache.get(k).length;
+    cache.set(k, v); bytes += v.length;
+    while ((bytes > MAX_BYTES || cache.size > cacheSize) && cache.size > 1) { const [k0, v0] = cache.entries().next().value; cache.delete(k0); bytes -= v0.length; }
+    return v;
+  };
+  const recall = (k) => {
+    const m = baseCache.has(k) ? baseCache : cache.has(k) ? cache : null;
+    if (!m) return undefined;
+    const v = m.get(k); m.delete(k); m.set(k, v); return v;
+  };
   async function stationById(id) {
     const list = await stations();
     const st = list.find((s) => String(s.station_id) === String(id ?? "").trim());
@@ -79,11 +93,15 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
     if (needH && !statsHourly) throw new StatsError("시간자료 통계를 쓸 수 없습니다", 503);
     const hs = needH ? await statsHourly.get(st.station_id) : null;
     const years = windowYears(win, allFromYear(spec, store.firstDate));
-    const key = ["dw", st.station_id, specKey(spec), windowKey(win), years.fromYear, part, sel.join("."), CALENDAR_VERSION, POLICY_VERSION, STORY_VERSION, statsData.version(), needH ? statsHourly.version() : 0, store.lastDate, hs ? hs.lastIdx : -1, t, csv ? "csv" : "json"].join("|");
+    const baseKey = ["dw", st.station_id, specKey(spec), windowKey(win), years.fromYear, part, CALENDAR_VERSION, POLICY_VERSION, STORY_VERSION, statsData.version(), needH ? statsHourly.version() : 0, store.lastDate, hs ? hs.lastIdx : -1, t].join("|");
+    const key = `${baseKey}|${sel.join(".")}|${csv ? "csv" : "json"}`;
     const hit = recall(key);
     if (hit && !csv) return sendJson(res, hit);
     const ctx = ctxFor(store, hs, t);
-    const r = dateWeather({ spec, store, hs, ctx, years, selectedYears: sel, part });
+    // 과거 평균(base)은 선택 연도와 무관 → 따로 기억해 선택 연도만 바뀌면 재사용
+    let base = recall(baseKey);
+    if (!base) base = remember(baseKey, dateWeather({ spec, store, hs, ctx, years, selectedYears: [], part }));
+    const r = withSelected(base, { spec, store, hs, ctx, selectedYears: sel });
     // 선택 연도(첫 번째)의 공식 일자료 한 행(최고·최저 발생 시각 등) — 일자료 부분에서만
     let official = null;
     if (part !== "hourly" && dayRow && r.selected?.[0]?.dateStatus === "ok") {

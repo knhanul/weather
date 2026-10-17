@@ -203,3 +203,12 @@ test("전체 기간 시작: 지원 범위 안 가장 이른 기준연도(음력 
   assert.equal(SAMPLE_POLICY.bandMinN, 10);
   assert.equal(summarize([{ year: 1, status: "ok", value: 1 }, { year: 2, status: "ok", value: 1.04 }], { digits: 1 }).maxYears.length, 2); // 표시 정밀도 동률 공개
 });
+test("선택 연도만 바꾸면 과거 평균(base)을 그대로 재사용", async () => {
+  const { withSelected } = await import("../date-weather-engine.mjs");
+  const store = buildDailyStore("1", [2023, 2024, 2025].map((y) => ({ observation_date: `${y}-10-17`, ...T(y - 2010) })));
+  const base = dateWeather({ spec: S(10, 17), store, ctx: ctx(), years: { fromYear: 2023, toYear: 2025 }, part: "daily" });
+  const a = withSelected(base, { spec: S(10, 17), store, ctx: ctx(), selectedYears: [1999] });
+  assert.equal(a.daily, base.daily); // 같은 객체
+  assert.equal(a.selected[0].referenceYear, 1999);
+  assert.equal(a.daily.metrics.avg.mean, 14);
+});
