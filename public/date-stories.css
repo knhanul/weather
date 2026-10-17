@@ -235,3 +235,8 @@ body.ssh-open { overflow:hidden; }
   .ds-datef, .ds-ctl > div:nth-child(2) { flex-basis:100%; }
 }
 .da-wrap { overflow-x:auto; border:1px solid var(--line); border-radius:10px; }
+.da-tbl td.num { white-space:normal; }
+.da-tbl td.num b { white-space:nowrap; }
+.da-tbl tbody th { min-width:78px; word-break:keep-all; }
+.da-tbl thead th { word-break:keep-all; }
+@media (max-width:640px) { .da-tbl td small { font-size:10.5px; } .da-tbl tbody th { min-width:70px; } }
