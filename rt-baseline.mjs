@@ -55,25 +55,31 @@ export function windowFor(y, md, toYear, w = WINDOW_DAYS) {
 }
 
 // 공통: getVal(dn) → 수 또는 NaN. 기준기간 하나의 연도별 평균·표본.
-function collect(period, md, getVal, expectedPerDay, w) {
+// filter(v) 가 있으면(조건부 분포 — 예: 비가 온 시간만) 해의 유효 여부는 전체 유효값으로 판단하고, 표본·해 평균은 조건을 만족한 값만
+function collect(period, md, getVal, expectedPerDay, w, filter = null) {
   const years = [];
   const samples = [];
   for (let y = period.from; y <= period.to; y++) {
     const { a, b } = windowFor(y, md, period.to, w);
-    let s = 0, n = 0;
+    let s = 0, n = 0, all = 0;
     const vals = [];
     for (let dn = a; dn <= b; dn++) {
-      for (const v of getVal(dn)) if (Number.isFinite(v)) { s += v; n++; vals.push({ v, dn }); }
+      for (const v of getVal(dn)) {
+        if (!Number.isFinite(v)) continue;
+        all++;
+        if (filter && !filter(v)) continue;
+        s += v; n++; vals.push({ v, dn });
+      }
     }
     const expected = (b - a + 1) * expectedPerDay;
-    const ok = n > 0 && n >= expected * MIN_IN_YEAR_SHARE;
-    years.push({ year: y, n, expected, mean: n ? s / n : null, ok });
+    const ok = all > 0 && all >= expected * MIN_IN_YEAR_SHARE;
+    years.push({ year: y, n, all, expected, mean: n ? s / n : null, ok });
     if (ok) for (const x of vals) samples.push(x);
   }
   return { years, samples };
 }
 
-function summarize(period, { years, samples }, value, digits) {
+function summarize(period, { years, samples }, value, digits, minRank = MIN_SAMPLES_RANK) {
   const good = years.filter((y) => y.ok);
   const out = {
     id: period.id, label: period.label, from: period.from, to: period.to, yearsInPeriod: period.years,
@@ -81,7 +87,10 @@ function summarize(period, { years, samples }, value, digits) {
     weighting: "연도별 평균의 산술평균(해마다 같은 무게)",
   };
   if (period.years === 0 || good.length < period.minYears) return { ...out, status: "insufficient", statusText: "비교 데이터 부족", mean: null, diff: null };
-  const mean = good.reduce((s, y) => s + y.mean, 0) / good.length;
+  const gm = good.filter((y) => y.mean != null); // 조건부 분포에서 그 해에 조건을 만족한 값이 없으면 평균에서만 빠짐(유효한 해로는 셈)
+  out.occurrenceYears = gm.length;
+  if (!gm.length) return { ...out, status: "insufficient", statusText: "비교 표본 없음", mean: null, diff: null, rankNote: "표본 부족 — 순위·백분위 표시 안 함" };
+  const mean = gm.reduce((s, y) => s + y.mean, 0) / gm.length;
   out.status = good.length === period.years ? "ok" : "partial";
   out.statusText = out.status === "ok" ? "" : `${period.years - good.length}개 해 자료 부족 — 나머지 ${good.length}개 해로 계산`;
   out.mean = round(mean, digits);
@@ -93,10 +102,11 @@ function summarize(period, { years, samples }, value, digits) {
   }
   out.max = mx ? { value: round(mx.v, digits), date: dnToYmd(mx.dn) } : null;
   out.min = mn ? { value: round(mn.v, digits), date: dnToYmd(mn.dn) } : null;
-  if (Number.isFinite(value) && samples.length >= MIN_SAMPLES_RANK) {
+  if (Number.isFinite(value) && samples.length >= minRank) {
     let lt = 0, eq = 0, gt = 0;
     for (const x of samples) x.v < value ? lt++ : x.v > value ? gt++ : eq++;
-    out.percentile = round(((lt + eq / 2) / samples.length) * 100, 1);
+    out.p = (lt + eq / 2) / samples.length; // 0~1(반올림 전) — 이례성 U 계산용
+    out.percentile = round(out.p * 100, 1);
     out.rankHigh = gt + 1; // 높은 쪽에서 몇 번째(같은 값 다음)
     out.rankLow = lt + 1;
     const sorted = samples.map((x) => x.v).sort((p, q) => p - q);
@@ -132,6 +142,13 @@ export function dailyCompare(store, ymd, field, value = NaN, { periods = basePer
     return [i >= 0 && i < store.n && store.present[i] ? store[field][i] : NaN];
   };
   return periods.map((p) => summarize(p, collect(p, md, get, 1, w), value, 1));
+}
+
+// 파생 분포 비교(astra 3-1): getVal(dn) → [수 또는 NaN, ...] 를 같은 시기(±7일) 해마다 모아 같은 규칙(연도 가중·유효 해 80%·표본 60)으로 요약.
+// filter 를 주면 조건부 분포(예: 1시간 강수 0.1mm 이상인 시간만). occurrenceYears = 조건을 만족한 값이 있었던 유효한 해 수.
+export function derivedCompare(getVal, ymd, value = NaN, { digits = 1, filter = null, periods = basePeriods(ymd), w = WINDOW_DAYS, expectedPerDay = 1, minRank = MIN_SAMPLES_RANK } = {}) {
+  const md = ymd.slice(5, 10);
+  return periods.map((p) => summarize(p, collect(p, md, getVal, expectedPerDay, w, filter), value, digits, minRank));
 }
 
 // 메모 캐시: 키 = 지점|자료|지표|월일|시각|기준기간|자료 판
@@ -222,5 +239,26 @@ export function outdoorWindow(hs, ymd, hour, cond, { periods = basePeriods(ymd),
       }
     }
     return { id: p.id, label: p.label, range: p.range, samples: valid, share: valid >= MIN_SAMPLES_RANK ? round((okN / valid) * 100, 0) : null };
+  });
+}
+
+// 첫 30℃ 날의 기준 평균(astra 4장 — 선택 편향 수정): 끝난 해는 한 해 전체(1/1~12/31)를 보고 '완전한 시즌'만 쓴다.
+//   완전 = 사건이 있으면 사건 전 결측이 1일 결측 규칙 안, 없으면 한 해 전체 결측이 1일 결측 규칙 안. 완전한 시즌이 기준 연도 수의 80% 미만이면 비교 데이터 부족.
+//   평균 날짜 = 발생한 시즌(k개)의 연중 일차 평균. k < 4 이면 평균을 내지 않음. 발생하지 않은 시즌은 n 에만 셈('n개 시즌 중 k개 발생').
+export const SEASON_MIN_OCCUR = 4;
+export function firstHotSeasons(store, refYmd, th = 30) {
+  return basePeriods(refYmd).map((p) => {
+    const rows = [];
+    for (let y = p.from; y <= p.to; y++) {
+      const r = firstHotDay(store, y, "12-31", th);
+      const days = ymdToDn(`${y}-12-31`) - ymdToDn(`${y}-01-01`) + 1;
+      const complete = r.date ? missingOk(r.doy, r.missingBeforeEvent) : missingOk(days, r.missing);
+      rows.push({ year: y, date: r.date, doy: r.doy, complete });
+    }
+    const comp = rows.filter((r) => r.complete), hit = comp.filter((r) => r.doy != null);
+    const base = { id: p.id, label: p.label, range: p.range, years: p.years, completeSeasons: comp.length, hitYears: hit.length, incompleteYears: rows.filter((r) => !r.complete).map((r) => r.year), method: "complete-seasons" };
+    if (comp.length < p.minYears) return { ...base, meanDoy: null, status: "insufficient", statusText: "비교 데이터 부족(완전한 시즌 부족)" };
+    if (hit.length < SEASON_MIN_OCCUR) return { ...base, meanDoy: null, status: "insufficient", statusText: `발생한 시즌 ${hit.length}개(${SEASON_MIN_OCCUR}개 미만) — 평균 날짜를 내지 않음` };
+    return { ...base, meanDoy: Math.round(hit.reduce((s, r) => s + r.doy, 0) / hit.length), status: "ok", statusText: `${comp.length}개 시즌 중 ${hit.length}개 발생 시즌의 평균` };
   });
 }

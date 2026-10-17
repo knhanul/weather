@@ -152,3 +152,25 @@ test("stories: 이야기 객체 계약 필드 + 빈 이야기 사유, 지역 이
   const st = (await call(fakes({ ncstLast: "2026-10-13 15:00:00" }), "/api/rt/stories?station=108")).body;
   if (!st.stories.length) assert.equal(st.emptyReason, "stale");
 });
+
+test("stories 2판: 새 규칙 진단(13개)·선별 점수 식·탐색 카드·지금 비 이야기는 rain1h 대신 R04", async () => {
+  const r = (await call(fakes(), "/api/rt/stories?station=108")).body;
+  assert.equal(Object.keys(r.rules).length, 13);
+  assert.match(r.rule.text, /0\.35U \+ 0\.35A/);
+  assert.ok(!r.dropped.some((x) => /^rain1h/.test(x.key)) && !r.stories.some((x) => /^rain1h/.test(x.key)));
+  assert.ok(r.exploreAlt && /이맘때의 하루|오늘과 닮은 날/.test(r.exploreAlt.title));
+  if (r.emptyReason === "normal") assert.ok(r.explore);
+  else assert.equal(r.explore, null);
+  for (const s of r.stories) assert.ok(typeof s.method === "string" && s.method.length > 10, s.key);
+  // 같은 발행 구간에 다시 불러도 같은 이야기(이력이 같은 날 점수를 흔들지 않음)
+  const api = fakes();
+  const a = (await call(api, "/api/rt/stories?station=108")).body;
+  const b = (await call(api, "/api/rt/stories?station=108")).body;
+  assert.deepEqual(a.stories.map((x) => [x.key, x.score]), b.stories.map((x) => [x.key, x.score]));
+});
+
+test("life 더위 시작: 완전한 시즌 기준 필드(completeSeasons·statusText)", async () => {
+  const r = (await call(fakes(), "/api/rt/life?station=108")).body;
+  const h = r.items.find((x) => x.id === "heat-start");
+  for (const p of h.periods) { assert.ok("completeSeasons" in p); assert.equal(p.method, "complete-seasons"); }
+});

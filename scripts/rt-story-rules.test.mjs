@@ -53,7 +53,7 @@ test("문장 틀: 같은 키면 늘 같은 틀, 빈 값이 있는 틀은 건너�
   const r1 = render(k, T, { x: 1 }), r2 = render(k, T, { x: 1 });
   assert.deepEqual(r1, r2);
   assert.ok(!/C /.test(r1.title)); // y 가 없으니 C 는 못 씀
-  assert.match(r1.templateId, /^r\.[ab]\.v1$/);
+  assert.match(r1.templateId, /^r\.[ab]\.v\d+$/);
   const days = new Set(); for (let d = 10; d < 30; d++) days.add(pickTemplate({ ...k, date: `2026-10-${d}` }, T).id);
   assert.ok(days.size > 1); // 날짜가 바뀌면 다른 틀도 나옴
   assert.equal(fill("{a}℃", { a: null }), null);

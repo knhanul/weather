@@ -12,6 +12,20 @@ export const addDays = (ymd, n) => dnToYmd(ymdToDn(ymd) + n);
 const num = (v) => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? NaN : Number(v));
 const fin = (v) => (Number.isFinite(v) ? v : null);
 
+// 예보 항목의 시간 의미(astra 2단계). 기온·습도·풍속 = 그 정시의 값(순간), 강수량·강수형태·강수확률·하늘 = 그 정시 앞 1시간 구간(이전 1시간)으로 둔다.
+// 기상청 안내가 자료마다 달라(공공데이터 해설은 '그 시각부터 1시간'으로 읽히기도 함) 한곳(이 상수)에서만 정하고, 생활 판단(L01 출퇴근 비)은 이 구간으로 겹침을 계산한다.
+export const ELEMENT_TIME = {
+  convention: "preceding-hour",
+  note: "기온·습도·풍속은 정시 값, 강수량·강수형태·강수확률·하늘상태는 그 정시 앞 1시간(예: 15시 = 14~15시)으로 해석",
+  instant: ["ta", "hm", "ws"],
+  interval: ["pcp", "pty", "pop", "sky"],
+};
+const wallAdd = (w, h) => { const t = new Date(Date.parse(`${w.replace(" ", "T")}Z`) + h * 3600000).toISOString(); return `${t.slice(0, 10)} ${t.slice(11, 19)}`; };
+export function elementInterval(time, el) {
+  if (!ELEMENT_TIME.interval.includes(el)) return { intervalStart: time, intervalEnd: time };
+  return ELEMENT_TIME.convention === "preceding-hour" ? { intervalStart: wallAdd(time, -1), intervalEnd: time } : { intervalStart: time, intervalEnd: wallAdd(time, 1) };
+}
+
 // 시간별: rows = 단기예보 최신 발표 전부 + 초단기예보 최신 발표 전부(각 { fcst, category, value, base })
 export function hourlyForecast({ vilRows = [], ultraRows = [], fromWall }) {
   const m = new Map();
@@ -24,11 +38,21 @@ export function hourlyForecast({ vilRows = [], ultraRows = [], fromWall }) {
     const pick = (uk, vk) => (useU && s.u[uk] != null ? s.u[uk] : s.v[vk]);
     const pty = num(pick("PTY", "PTY")), sky = num(pick("SKY", "SKY"));
     const pcp = rainText(useU ? s.u.RN1 ?? s.v.PCP : s.v.PCP);
+    // 항목별 출처·발표·대상 구간(같은 시각이라도 항목마다 출처가 다를 수 있음 — 예: 기온은 초단기, 강수확률은 단기)
+    const U = { source: "초단기예보", base: s.uBase }, V = { source: "단기예보", base: s.vBase };
+    const from = (uk, vk) => (useU && s.u[uk] != null ? U : s.v[vk] != null ? V : null);
+    const iv = (src, el) => (src ? { ...src, ...elementInterval(s.time, el) } : null);
+    const items = {
+      ta: iv(useU ? U : s.v.TMP != null ? V : null, "ta"), pop: iv(s.v.POP != null ? V : null, "pop"),
+      pcp: iv(useU && s.u.RN1 != null ? U : s.v.PCP != null ? V : null, "pcp"), pty: iv(from("PTY", "PTY"), "pty"), sky: iv(from("SKY", "SKY"), "sky"),
+      hm: iv(from("REH", "REH"), "hm"), ws: iv(from("WSD", "WSD"), "ws"),
+    };
     return {
       time: s.time, ta: fin(ta), pop: fin(num(s.v.POP)), // 강수확률은 단기예보에만 있음
       pcp: pcp ? pcp.text : null, pcpMm: pcp ? pcp.mm : null, pty: Number.isFinite(pty) ? PTY[pty] ?? String(pty) : null, sky: Number.isFinite(sky) ? SKY[sky] ?? String(sky) : null,
       hm: fin(num(pick("REH", "REH"))), ws: fin(num(pick("WSD", "WSD"))),
       source: useU ? "초단기예보" : "단기예보", base: useU ? s.uBase : s.vBase,
+      items,
     };
   }).filter((h) => h.ta != null || h.pop != null);
 }

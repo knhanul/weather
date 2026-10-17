@@ -8,7 +8,7 @@
   const ymdK = (s) => `${s.slice(0, 4)}년 ${Number(s.slice(5, 7))}월 ${Number(s.slice(8, 10))}일`;
   // 이야기가 없을 때: 서버 emptyReason(normal | insufficient | stale | error)에 따라 말을 다르게. 'normal' 일 때만 '평소와 비슷'
   const EMPTY = {
-    normal: (d) => `오늘은 평소와 크게 다른 점이 없습니다(후보 ${d.candidates}개 모두 선별 기준 미달).`,
+    normal: (d) => `오늘은 평소와 크게 다른 점이 없어요(후보 ${d.candidates}개 모두 선별 기준 미달).`,
     insufficient: (d) => `비교할 자료가 부족해 오늘의 이야기를 고르지 못했습니다(후보 ${d.candidates}개).`,
     stale: (d) => `실황 자료가 늦어지고 있어 이야기를 고르지 않았습니다${d.staleNote ? ` — ${d.staleNote}` : ""}.`,
     error: (d) => `일부 자료(${(d.failedParts || []).join(", ") || "알 수 없음"})를 불러오지 못해 이야기를 고르지 못했습니다.`,
@@ -16,10 +16,18 @@
   };
   const shell = (inner) => `<section class="card rt-stories" aria-label="오늘의 날씨 이야기"><h2>오늘의 날씨 이야기</h2>${inner}</section>`;
   const emptyHtml = (reason, d = {}) => shell(`<p class="${reason === "loading" ? "rt-load" : "rt-ins"}" data-empty="${esc(reason)}">${esc((EMPTY[reason] || EMPTY.insufficient)(d))}</p>${d.dropped?.length ? `<details class="rts-why"><summary>빠진 후보</summary><p class="rt-note">${d.dropped.map((x) => `${esc(x.key)}(${esc(x.reason)})`).join(", ")}</p></details>` : ""}`);
+  // 평범한 날(emptyReason=normal)의 탐색 카드 하나: 오늘과 닮은 날 / 이맘때의 하루(서버가 고름 — 숫자는 서버 값 그대로)
+  const exploreHtml = (x) => (x ? `<article class="rt-story rts-explore" data-explore="${esc(x.type)}"><h3><span class="rt-badge ok">${x.type === "similar" ? "과거" : "이맘때"}</span> ${esc(x.title)}</h3><p>${esc(x.text)}</p><p class="rt-note">${x.more ? `${esc(x.more)} · ` : ""}${esc(x.basis || "")}</p></article>` : "");
+  // 이야기 카드: 제목(쉬운 말) → 본문(숫자) → 묶인 강수 항목 → 접힘(방법·근거)
+  const storyCard = (s, i, n) => `<article class="rt-story" data-rule="${esc(s.ruleId || "")}"><small class="rts-n">${i + 1}/${n}</small><h3><span class="rt-badge ${s.kind === "관측" ? "ok" : "fc"}">${esc(s.kind)}</span> ${esc(s.title)}</h3><p>${esc(s.text)}</p>${(s.related || []).length ? `<ul class="rts-rel">${s.related.map((r) => `<li>${esc(r.title)}<small> — ${esc(r.text)}</small></li>`).join("")}</ul>` : ""}<details class="rts-how"><summary>어떻게 계산했나요</summary>${s.method ? `<p class="rt-note">${esc(s.method)}</p>` : ""}<p class="rt-note">근거: ${esc(s.basis)}</p></details></article>`;
   function storiesHtml(d) {
     // 예전 응답(emptyReason 없음)은 예전처럼 normal 로 봄
-    if (!d.stories.length) return emptyHtml(d.emptyReason || "normal", d);
-    return `<section class="card rt-stories" aria-label="오늘의 날씨 이야기"><h2>오늘의 날씨 이야기 <small class="rts-sub">후보 ${d.candidates}개 중 ${d.stories.length}개 자동 선별</small></h2>${d.staleNote ? `<p class="rt-ins">${esc(d.staleNote)}</p>` : ""}<div class="rts-swipe">${d.stories.map((s, i) => `<article class="rt-story"><small class="rts-n">${i + 1}/${d.stories.length}</small><h3><span class="rt-badge ${s.kind === "관측" ? "ok" : "fc"}">${esc(s.kind)}</span> ${esc(s.title)}</h3><p>${esc(s.text)}</p><p class="rt-note">근거: ${esc(s.basis)}</p></article>`).join("")}</div><details class="rts-why"><summary>선별 방법</summary><p class="rt-note">${esc(d.rule.text)}</p>${d.dropped.length ? `<p class="rt-note">빠진 후보: ${d.dropped.map((x) => `${esc(x.key)}(${esc(x.reason)})`).join(", ")}</p>` : ""}</details></section>`;
+    if (!d.stories.length) {
+      const r = d.emptyReason || "normal";
+      if (r === "normal" && d.explore) return shell(`<p class="rt-ins" data-empty="normal">${esc(EMPTY.normal(d))} 대신 이런 이야기는 어때요?</p>${exploreHtml(d.explore)}`);
+      return emptyHtml(r, d);
+    }
+    return `<section class="card rt-stories" aria-label="오늘의 날씨 이야기"><h2>오늘의 날씨 이야기 <small class="rts-sub">후보 ${d.candidates}개 중 ${d.stories.length}개 자동 선별</small></h2>${d.staleNote ? `<p class="rt-ins">${esc(d.staleNote)}</p>` : ""}<div class="rts-swipe">${d.stories.map((s, i) => storyCard(s, i, d.stories.length)).join("")}</div><details class="rts-why"><summary>선별 방법</summary><p class="rt-note">${esc(d.rule.text)}</p>${d.dropped.length ? `<p class="rt-note">빠진 후보: ${d.dropped.map((x) => `${esc(x.key)}(${esc(x.reason)})`).join(", ")}</p>` : ""}</details></section>`;
   }
   function simList(r) {
     if (!r.ok) return `<p class="rt-ins">${esc(r.message)}</p>`;

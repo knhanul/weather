@@ -234,3 +234,8 @@
 @media (max-width:800px) { .rtx-3 { grid-template-columns:1fr; } }
 .rtx-checks .ck-pass { color:#0e7a3e; } .rtx-checks .ck-fail { color:#c0262d; } .rtx-checks .ck-unknown { color:#8a4b00; }
 .rtx-rankx { list-style:none; padding-left:0; } .rtx-rankx .rk { display:inline-block; min-width:4.2em; color:var(--muted); font-size:12px; }
+
+/* astra 2단계: 이야기 접힘(방법)·묶인 강수 항목·탐색 카드 */
+.rts-how { margin-top:6px; } .rts-how summary { font-size:12.5px; color:var(--muted, #667); cursor:pointer; }
+.rts-rel { margin:6px 0 0; padding-left:18px; font-size:13px; } .rts-rel small { color:var(--muted, #667); }
+.rts-explore { border:1px dashed var(--line); border-radius:14px; padding:12px 14px !important; margin-top:8px; background:#fbfcff; }
