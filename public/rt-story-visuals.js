@@ -29,7 +29,7 @@
     const pad = (hi0 - lo0) * 0.04 || 1, lo = lo0 - pad, hi = hi0 + pad;
     const L = 8, R = 8, x = (v) => L + ((v - lo) / (hi - lo)) * (width - L - R);
     const fc = c.valueKind === "fcst";
-    const word = fc ? "예보" : "지금";
+    const word = c.word || (fc ? "예보" : "지금");
     const label = `${c.label || "값"} ${word} ${f1(c.value)}${u}. ${c.range ? `${c.range}년 ` : ""}같은 시기 ${c.N}개 중 보통 범위(10~90%) ${c.p10}~${c.p90}${u}, 평균 ${f1(c.mean)}${u}${fin(c.min) && fin(c.max) ? `, 최저 ${c.min}${u}·최고 ${c.max}${u}` : ""}.`;
     const o = svgOpen(width, 58, label);
     let s = o.s;
@@ -75,7 +75,7 @@
     const tick = (i) => `<text x="${L + i * cw + cw / 2}" y="46" font-size="10" text-anchor="${i === 0 ? "start" : i === n - 1 ? "end" : "middle"}" fill="${C.muted}">${i === n - 1 ? "오늘" : md(ds[i].date)}</text>`;
     s += tick(0) + tick(Math.floor(n / 2)) + tick(n - 1) + `</svg>`;
     const sw = (inner) => `<svg width="11" height="11" aria-hidden="true"><defs>${hatch(`cl${uid}`)}</defs>${inner}</svg>`;
-    const cap = `<span class="vz-key">${sw(`<rect x="1" y="1" width="9" height="9" rx="2" fill="${C.wet}"/>`)}강수일 ${cnt("wet")}</span><span class="vz-key">${sw(`<rect x="1.5" y="1.5" width="8" height="8" rx="2" fill="#fff" stroke="#9aa8bd"/>`)}무강수 ${cnt("dry")}</span><span class="vz-key">${sw(`<rect x="1.5" y="1.5" width="8" height="8" rx="2" fill="url(#cl${uid})" stroke="#9aa8bd"/>`)}결측 ${cnt("missing")}</span><span class="vz-key">${sw(`<rect x="1.5" y="1.5" width="8" height="8" rx="2" fill="none" stroke="${C.fc}" stroke-dasharray="2 1.5"/>`)}아직 안 온 날</span><span class="vz-key"><b class="vz-run">┌─┐</b>${md(c.from)}~${md(c.to)} 연속 ${runN}일</span>`;
+    const cap = `<span class="vz-key">${sw(`<rect x="1" y="1" width="9" height="9" rx="2" fill="${C.wet}"/>`)}강수일 ${cnt("wet")}</span><span class="vz-key">${sw(`<rect x="1.5" y="1.5" width="8" height="8" rx="2" fill="#fff" stroke="#9aa8bd"/>`)}무강수 ${cnt("dry")}</span><span class="vz-key">${sw(`<rect x="1.5" y="1.5" width="8" height="8" rx="2" fill="url(#cl${uid})" stroke="#9aa8bd"/>`)}결측 ${cnt("missing")}</span><span class="vz-key">${sw(`<rect x="1.5" y="1.5" width="8" height="8" rx="2" fill="none" stroke="${C.fc}" stroke-dasharray="2 1.5"/>`)}아직 안 온 날</span><span class="vz-key"><svg width="16" height="9" aria-hidden="true"><path d="M1,8 v-6 H15 v6" fill="none" stroke="#c0262d" stroke-width="1.6"/></svg>${md(c.from)}~${md(c.to)} 연속 ${runN}일</span>`;
     return fig(s, cap, "vz-cal");
   }
 
@@ -94,7 +94,7 @@
     };
     row(18, c.min, c.max, `${md(c.date)} 예보`, true);
     row(44, c.meanMin, c.meanMax, "평균", false);
-    if (fin(c.lowest)) s += `<line x1="${x(c.lowest)}" x2="${x(c.lowest)}" y1="34" y2="54" stroke="${C.obs}" stroke-width="1.5"/><text x="${clamp(x(c.lowest), 30, width - 30)}" y="68" font-size="10" text-anchor="middle" fill="${C.muted}">같은 시기 가장 낮은 최저 ${c.lowest}℃${c.lowestDate ? `(${c.lowestDate.slice(0, 4)})` : ""}</text>`;
+    if (fin(c.lowest)) s += `<line x1="${x(c.lowest)}" x2="${x(c.lowest)}" y1="34" y2="54" stroke="${C.obs}" stroke-width="1.5"/><text x="${clamp(x(c.lowest), 2, width - 2)}" y="68" font-size="10" text-anchor="${x(c.lowest) < 110 ? "start" : x(c.lowest) > width - 110 ? "end" : "middle"}" fill="${C.muted}">같은 시기 가장 낮은 최저 ${c.lowest}℃${c.lowestDate ? `(${c.lowestDate.slice(0, 4)})` : ""}</text>`;
     s += `</svg>`;
     return fig(s, `${legend("fc")}<span class="vz-key"><i class="k-mean2"></i>${c.range ? `${esc(c.range)}년 ` : ""}같은 시기 평균(관측${c.N ? ` ${c.N}개` : ""})</span>${fin(c.d) ? `<span class="vz-key">예보 일교차 ${f1(c.d)}℃${fin(c.meanD) ? ` · 평균 ${f1(c.meanD)}℃` : ""}</span>` : ""}`, "vz-range");
   }
@@ -103,7 +103,7 @@
   function line(c, { width = 340 } = {}) {
     const ps = (c.points || []); if (ps.length < 2) return "";
     const vals = ps.map((p) => p.ta).filter(fin).concat(fin(c.threshold) ? [c.threshold] : []); if (!vals.length) return "";
-    const lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1), L = 26, R = 8, T = 10, B = 20, H = 96;
+    const lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1), L = 26, R = 8, T = c.hl ? 20 : 10, B = 20, H = c.hl ? 106 : 96;
     const t0 = Date.parse(ps[0].time.replace(" ", "T") + "Z"), span = (Date.parse(ps.at(-1).time.replace(" ", "T") + "Z") - t0) / 36e5 || 1;
     const x = (t) => L + ((Date.parse(t.replace(" ", "T") + "Z") - t0) / 36e5 / span) * (width - L - R), y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
     const ms = (t) => Date.parse(t.replace(" ", "T") + "Z");
@@ -115,7 +115,7 @@
     let s = o.s;
     const step = hi - lo > 10 ? 4 : 2;
     for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) s += `<line x1="${L}" x2="${width - R}" y1="${y(v)}" y2="${y(v)}" stroke="${C.grid}"/><text x="${L - 4}" y="${y(v) + 3.5}" font-size="10" text-anchor="end" fill="${C.muted}">${v}</text>`;
-    if (c.hl) { const xa = x(c.hl[0]), xb = x(c.hl[1]); s += `<rect x="${xa}" y="${T}" width="${xb - xa}" height="${H - T - B}" fill="#ffe7c2" opacity=".75"/><text x="${(xa + xb) / 2}" y="${T + 10}" font-size="10.5" font-weight="700" text-anchor="middle" fill="#8a4b00">3시간 ${c.d > 0 ? "+" : ""}${c.d}℃</text>`; }
+    if (c.hl) { const xa = x(c.hl[0]), xb = x(c.hl[1]); s += `<rect x="${xa}" y="${T}" width="${xb - xa}" height="${H - T - B}" fill="#ffe7c2" opacity=".75"/><rect x="${xa}" y="${T - 14}" width="${xb - xa}" height="14" fill="#ffe7c2" opacity=".75"/><text x="${clamp((xa + xb) / 2, L + 30, width - 40)}" y="${T - 3}" font-size="10.5" font-weight="700" text-anchor="middle" fill="#8a4b00">3시간 ${c.d > 0 ? "+" : ""}${c.d}℃</text>`; }
     if (fin(c.threshold)) s += `<line x1="${L}" x2="${width - R}" y1="${y(c.threshold)}" y2="${y(c.threshold)}" stroke="${C.warn}" stroke-width="1.4" stroke-dasharray="1 0"/><text x="${width - R}" y="${y(c.threshold) - 3}" font-size="10.5" text-anchor="end" fill="${C.warn}" font-weight="700">${c.threshold}℃</text>`;
     s += `<path d="${path("obs")}" fill="none" stroke="${C.obs}" stroke-width="2.6"/><path d="${path("fcst")}" fill="none" stroke="${C.fc}" stroke-width="2.4" stroke-dasharray="5 4"/>`;
     ps.forEach((p, i) => { if (i % 3 === 0 || i === ps.length - 1) s += `<text x="${x(p.time)}" y="${H - 6}" font-size="10" text-anchor="${i === 0 ? "start" : i === ps.length - 1 ? "end" : "middle"}" fill="${C.muted}">${hh(p.time)}시</text>`; });

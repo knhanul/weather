@@ -164,9 +164,9 @@ export const METHOD = {
 
 
 // ---------------------------------------------------------------- 작은 그래프 자료(story.chart, astra 2장·3단계) — 화면(public/rt-story-visuals.js)이 그대로 그림. 값은 위 계산 결과만
-export function distChart(f, { metric, unit, value, valueKind = "obs", label }) {
+export function distChart(f, { metric, unit, value, valueKind = "obs", label, word = null }) {
   if (!f) return null;
-  return { type: "dist", metric, unit, value, valueKind, label, mean: f.mean ?? null, p10: f.p10 ?? null, p90: f.p90 ?? null, min: f.min?.value ?? null, minDate: f.min?.date ?? null, max: f.max?.value ?? null, maxDate: f.max?.date ?? null, N: f.N, range: f.range };
+  return { type: "dist", metric, unit, value, valueKind, label, word, mean: f.mean ?? null, p10: f.p10 ?? null, p90: f.p90 ?? null, min: f.min?.value ?? null, minDate: f.min?.date ?? null, max: f.max?.value ?? null, maxDate: f.max?.date ?? null, N: f.N, range: f.range };
 }
 // 최근 30일 강수 달력: wet(0.1mm 이상)·dry·missing(행 없음·값 없음)·pending(오늘 — 아직 끝나지 않은 날)
 export function rainCalendar(store, today, days = 30) {
@@ -290,7 +290,7 @@ function R03(ctx) {
   if (!(f.p >= R.p)) return res(false, "조건 밖");
   const dr = describeDifference("rain", null, { percentile: f.pct, samplesOk: true, mean: f.mean });
   const facts = { ...f, sum, lastWord: dayWord(L, ctx.ymd), fromWord: md(dnToYmd(ymdToDn(L) - 6)), phrase: dr?.phrase ? `${dr.phrase}(높은 쪽 ${f.hiPct}%)` : `높은 쪽 ${f.hiPct}%`, rangeNote: rangeNote(f, "mm") };
-  return res(true, "wet", make(ctx, "R03", `${ctx.sid}|R03|${L}`, facts, { topic: "precipitation", path: "stat", kind: "관측", U: f.U, A: LV.info, T: timeValue({ endW: `${L} 23:59`, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { sum: roundTo(sum, 5) }, basis: "ASOS 공식 일자료 7일 합", chart: distChart(f, { metric: "rain7", unit: "mm", value: sum, label: "최근 7일 강수량" }) }));
+  return res(true, "wet", make(ctx, "R03", `${ctx.sid}|R03|${L}`, facts, { topic: "precipitation", path: "stat", kind: "관측", U: f.U, A: LV.info, T: timeValue({ endW: `${L} 23:59`, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { sum: roundTo(sum, 5) }, basis: "ASOS 공식 일자료 7일 합", chart: distChart(f, { metric: "rain7", unit: "mm", value: sum, label: "최근 7일 강수량", word: "7일 합" }) }));
 }
 function R04(ctx) {
   const R = SR.R04;

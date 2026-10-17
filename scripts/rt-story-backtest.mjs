@@ -57,6 +57,7 @@ async function main() {
   const sel = Object.fromEntries(ids.map((id) => [id, 0]));
   const per = [];
   let stDays = 0, storedFc = 0;
+  const charts = {};
   for (const s of list) {
     const sid = String(s.station_id);
     const store = buildDailyStore(sid, await statsDailyRows(sid));
@@ -75,6 +76,8 @@ async function main() {
         any = true;
         const r = runCatalog(ctx);
         if (process.env.DUMP) for (const c of r.cands) if (process.env.DUMP.split(",").includes(c.ruleId)) console.error(`  ${D} ${H}시 [${fcKind}] ${c.ruleId} U=${c.U == null ? "-" : c.U.toFixed(2)} ${c.title} | ${c.text}`);
+        // CHARTS=1: 규칙마다 그래프 자료가 있는 첫 후보(실제 과거 자료)를 모아 화면 점검용으로 출력
+        if (process.env.CHARTS) for (const c of r.cands) if (c.chart && !charts[c.ruleId]) charts[c.ruleId] = { station: s.station_name, at: ctx.nowW, title: c.title, text: c.text, kind: c.kind, chart: c.chart };
         for (const id of ids) if (r.diag[id]?.fired) firedToday.add(id);
         const v = selectV2(r.cands, { history: [], slot: D, nowW: ctx.nowW });
         for (const c of v.stories) selToday.add(c.ruleId);
@@ -88,6 +91,7 @@ async function main() {
     per.push(row);
     console.error(`${sid} ${s.station_name}: ${row.days}일 ` + ids.map((id) => `${id}=${row.fired[id]}`).join(" "));
   }
+  if (process.env.CHARTS) console.log(`CHARTS ${JSON.stringify(charts)}`);
   console.log(JSON.stringify({ days, stations: per.length, stationDays: stDays, snapshotsWithStoredForecast: storedFc, firedDays: tot, selectedDays: sel, perStation: per }, null, 1));
   process.exit(0);
 }

@@ -271,3 +271,9 @@
 .vz-seg small { font-size:11.5px; color:var(--muted); } .vz-seg .vz-segi { color:#8a4b00; font-weight:600; }
 .vz-segp { margin-top:8px; padding:8px 10px; border-radius:10px; background:var(--soft,#f3f6fb); font-size:13px; } .vz-segp ul { margin:4px 0; padding-left:18px; } .vz-segp li { margin:2px 0; }
 @media (prefers-reduced-motion: reduce) { .vz *, .fv-art *, .wa-art * { animation:none !important; transition:none !important; } }
+/* 전역 svg{width:100%;height:160px}·button{height:40px; 파란 배경} 덮어쓰기 */
+.vz svg.vz-svg { width:100%; height:auto; } .vz-cap svg, .vz-key svg, .vz-lg svg { width:auto; height:auto; flex:none; }
+.vz-segs .vz-seg, .vz-segs .vz-seg:hover:not(:disabled) { height:auto; background:#fff; color:var(--fg); font-weight:400; white-space:normal; line-height:1.35; padding:8px 10px; }
+.vz-segs .vz-seg.on, .vz-segs .vz-seg.on:hover:not(:disabled) { background:#fffaf0; border:2px solid #c98a00; }
+.vz-picks .vz-pick, .vz-picks .vz-pick:hover:not(:disabled) { height:auto; background:#fff; color:var(--fg); font-weight:500; border:1px solid var(--line,#d5deea); }
+.vz-picks .vz-pick[aria-pressed="true"], .vz-picks .vz-pick[aria-pressed="true"]:hover:not(:disabled) { background:#0d1b3d; border-color:#0d1b3d; color:#fff; font-weight:700; }
