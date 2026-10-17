@@ -167,10 +167,11 @@
       go();
     } catch (e) { toast(`조회 실패 · ${e.message}`); }
   }
-  function applyDate() {
+  function applyDate(focus = true) {
     const el = $("dsDate");
     const r = parseDate(el.value, st.cal);
-    if (!r.ok) { el.setAttribute("aria-invalid", "true"); toast(r.message); el.focus(); return false; }
+    if (!r.ok) { el.setAttribute("aria-invalid", "true"); toast(r.message); if (focus) el.focus(); return false; }
+    if (r.y === st.y && r.m === st.m && r.d === st.d && !focus) return true; // 값이 그대로면 다시 부르지 않음
     el.removeAttribute("aria-invalid");
     Object.assign(st, { y: r.y, m: r.m, d: r.d });
     st.cmp = st.cmp.filter((y) => y !== st.y);
@@ -180,7 +181,7 @@
   function onChange(e) {
     const t = e.target;
     if (t.id === "dsSt") { st.station = t.value; if (window.NWStation) NWStation.manual(t.value); }
-    else if (t.id === "dsDate") { applyDate(); return; }
+    else if (t.id === "dsDate") { applyDate(false); return; }
     else if (t.id === "dsPick") { if (!/^\d{4}-\d{2}-\d{2}$/.test(t.value)) return; $("dsDate").value = t.value; applyDate(); return; }
     else if (t.id === "dsLeap") st.leap = t.checked;
     else if (t.id === "dsTo") { st.to = +t.value; if (st.from > st.to) st.from = st.to; }
