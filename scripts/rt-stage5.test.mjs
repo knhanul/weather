@@ -182,3 +182,11 @@ test("5단계: 1MB 패킷 한도 — 기준 분포는 바이트로 나눠 넣고
   assert.ok(sent.every((x) => x.bytes < 1048576 - 4096));
   await assert.rejects(db.putSnapshot({ kind: "today", stationId: "1", basisId: "-", version: 2, sourceRev: "b", payload: "x".repeat(1000000), sources: "{}" }), /too big/);
 });
+test("5단계: 스냅샷 쓰기 교착(ER_LOCK_DEADLOCK)은 다시 시도", async () => {
+  const { createRtSnapshotDb } = await import("../rt-snapshot-db.mjs");
+  let n = 0;
+  const h = { query: async () => ({ affectedRows: 1 }), read: async () => [], tx: async (fn) => { if (n++ === 0) { const e = new Error("dl"); e.code = "ER_LOCK_DEADLOCK"; throw e; } return fn(async () => ({ affectedRows: 1 })); } };
+  const db = createRtSnapshotDb(h, { ns: "t" });
+  const r = await db.putSnapshot({ kind: "seasons", stationId: "1", basisId: "all", version: 1, sourceRev: "a", payload: "{}", sources: "{}" });
+  assert.equal(r.written, true); assert.equal(n, 2); assert.equal(db.stats.retried, 1);
+});

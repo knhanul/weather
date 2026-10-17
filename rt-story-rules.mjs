@@ -1,7 +1,7 @@
 // 이야기·판정 규칙 상수 한곳 모음(astra 지침 3-1·4·8·13·15). 값은 서비스 초기 설정이며 기상청 특보·공식 기준이 아니다.
 // 상수를 바꾸면 RULES_VERSION 을 올린다(이야기 객체·캐시·나중의 사전 계산 스냅샷이 이 값을 함께 기록).
 // 기존 숫자(평균·차이·백분위·순위)는 이 모듈로 옮겨도 바뀌지 않게, 기존 함수가 쓰던 값과 같은 값만 둔다.
-export const RULES_VERSION = "2026-10-17.2";
+export const RULES_VERSION = "2026-10-17.3"; // 5단계: G01 문턱 0.8→0.9(45일 중 33일→18일)
 export const STORY_SCHEMA_VERSION = 1;
 export const TEMPLATE_VERSION = 2;
 
@@ -74,7 +74,7 @@ export const SEASON_EVENTS = {
 };
 
 // 지역 비교(1-2·13장)
-export const REGION_RULES = { minStationsStory: 6, deviationDigits: 3, topMinU: 0.8, spreadP: 0.9, togetherDelta: 3, togetherShare: 0.5 };
+export const REGION_RULES = { minStationsStory: 6, deviationDigits: 3, topMinU: 0.9, spreadP: 0.9, togetherDelta: 3, togetherShare: 0.5 };
 
 // 예보 문구(1-4·6장) — 화면(public/rt-forecast-visual.js·rt-home.js)도 같은 값을 쓴다(값을 바꾸면 그쪽 RULES 도 같이)
 export const FORECAST_RULES = { popHigh: 60, drop3h: 4, dayJump: 5, releaseJump: 3, fullHours: 72 };

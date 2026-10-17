@@ -80,7 +80,14 @@ export function createRtSnapshotDb(h, { ns = "main", log = () => {} } = {}) {
         if (written && pub?.entries?.length) await insertPub(q, pub, s.version);
         return { written };
       };
-      return h.tx ? h.tx(body) : body(run);
+      // 같은 표에 동시 트랜잭션(이야기·계절·이력)이 겹치면 InnoDB 가 교착으로 하나를 되돌림 → 잠깐 뒤 두 번까지 다시
+      for (let k = 0; ; k++) {
+        try { return h.tx ? await h.tx(body) : await body(run); } catch (e) {
+          if (k >= 2 || !/DEADLOCK|LOCK_WAIT/.test(String(e?.code))) throw e;
+          stats.retried = (stats.retried || 0) + 1;
+          await new Promise((r) => setTimeout(r, 80 + Math.random() * 220));
+        }
+      }
     },
     // ---- 게시 이력(rt-story-select createMemoryHistory 와 같은 두 함수)
     async listHistory(key, sinceWall) {
