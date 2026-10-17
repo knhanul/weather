@@ -72,10 +72,13 @@ tr.ds-tr-sel td, tr.ds-tr-sel th { background:#fff4e6; }
 /* 날씨 배틀 */
 .db-ex { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:10px; }
 .db-ex button { height:30px; padding:0 11px; font-size:12.5px; border-radius:999px; }
-.db-cases { display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); margin:12px 0; }
-.db-case { border:1px solid var(--line); border-left:5px solid var(--cc); border-radius:12px; padding:10px 12px; display:grid; gap:8px; min-width:0; }
+.db-cases { display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); margin:12px 0; }
+.db-case { border:1px solid var(--line); border-left:5px solid var(--cc); border-radius:12px; padding:10px 12px; display:grid; grid-template-columns:minmax(0,1fr); gap:8px; min-width:0; }
+.db-case-b .sx-inline { flex-wrap:nowrap; }
+.db-case-b .sx-inline select { flex:1 1 0; min-width:0; }
+.db-case-b > select { max-width:100%; }
 .db-case-h { display:flex; gap:8px; align-items:center; }
-.db-case-h input { flex:1; min-width:0; height:34px; }
+.db-case-h input { flex:1 1 0; width:0; min-width:0; height:34px; }
 .db-del { width:34px; height:34px; padding:0; }
 .db-case-b { display:flex; flex-wrap:wrap; gap:6px 8px; align-items:center; }
 .db-case-b select { height:34px; }
@@ -126,3 +129,5 @@ tr.ds-tr-sel td, tr.ds-tr-sel th { background:#fff4e6; }
   .db-row .db-track { grid-column:1 / 4; grid-row:2; }
   .db-row .sx-badge, .db-rank { grid-column:1 / 4; }
 }
+.ds-selbar button { white-space:nowrap; flex:none; padding:0 10px; }
+.ds-selbar b { flex:1; text-align:center; }

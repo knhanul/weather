@@ -131,7 +131,7 @@
         }
         // 선 끝 표식(색 외 구분)
         const last = [...s.values.keys()].reverse().find((i) => fin(s.values[i]));
-        if (last != null && s.mark) g += `<text x="${Math.min(W - R - 4, xs(last) + 4)}" y="${ys(s.values[last]) - 5}" font-size="11" font-weight="700" fill="${s.color}">${esc(s.mark)}</text>`;
+        if (last != null && s.mark) { const nearR = xs(last) > W - R - 40; g += `<text x="${nearR ? xs(last) - 5 : xs(last) + 4}" y="${ys(s.values[last]) - 6}" text-anchor="${nearR ? "end" : "start"}" font-size="11" font-weight="700" fill="${s.color}" paint-order="stroke" stroke="#fff" stroke-width="3">${esc(s.mark)}</text>`; }
       }
     }
     g += `<line class="dv-hv" x1="0" x2="0" y1="${T}" y2="${H - B}" visibility="hidden"/></svg>`;
