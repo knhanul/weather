@@ -289,7 +289,7 @@
 .rts-basis { margin:4px 0 0; font-size:12px; color:var(--muted); }
 /* 계절 신호 · 비 달력 · 내가 기억하는 이날 */
 .rhc-sevs { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:6px; margin:6px 0 4px; }
-#today button.rhc-sev, .rhc-sev { height:auto; display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; padding:8px 10px; border-radius:12px; background:var(--soft,#f3f6fb); color:var(--ink,#0d1b3d); border:2px solid transparent; font:inherit; cursor:pointer; }
+#today button.rhc-sev, .rhc-sev { height:auto; display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; padding:7px 9px; border-radius:12px; font-size:13.5px; background:var(--soft,#f3f6fb); color:var(--ink,#0d1b3d); border:2px solid transparent; font:inherit; cursor:pointer; }
 #today button.rhc-sev:hover { background:#e8f0fb; }
 #today button.rhc-sev.on { border-color:#c98a00; background:#fff8e6; }
 .rhc-sev b { font-size:13px; } .rhc-sev span { font-size:14px; font-weight:700; } .rhc-sev small { font-size:11px; color:var(--muted); }
@@ -301,15 +301,17 @@
 /* 예보: 가장 큰 변화 시간선 · 예보가 바뀐 흐름 · 중기전망 */
 .fv-tl { list-style:none; margin:6px 0 0; padding:0 0 0 14px; border-left:2px solid #d5deeb; display:flex; flex-direction:column; gap:6px; }
 .fv-tl li { position:relative; } .fv-tl li::before { content:""; position:absolute; left:-21px; top:16px; width:10px; height:10px; border-radius:50%; background:#026ef8; border:2px solid #fff; }
-#forecast button.fv-tli, .fv-tli { width:100%; height:auto; display:grid; grid-template-columns:auto auto 1fr 54px; align-items:center; gap:8px; text-align:left; padding:8px 10px; border-radius:12px; background:var(--soft,#f3f6fb); color:var(--ink,#0d1b3d); border:2px solid transparent; font:inherit; cursor:pointer; }
+#forecast button.fv-tli, .fv-tli { width:100%; height:auto; display:grid; grid-template-columns:auto auto 1fr 54px; align-items:center; gap:8px; text-align:left; padding:7px 9px; border-radius:12px; font-size:13.5px; background:var(--soft,#f3f6fb); color:var(--ink,#0d1b3d); border:2px solid transparent; font:inherit; cursor:pointer; }
 #forecast button.fv-tli:hover { background:#e8f0fb; } #forecast button.fv-tli.on { border-color:#c98a00; background:#fff8e6; }
 .fv-tlt { font-size:12px; font-weight:700; color:#026ef8; white-space:nowrap; }
 .fv-tlb { display:flex; flex-direction:column; min-width:0; } .fv-tlb b { font-size:14px; } .fv-tlb small { font-size:11.5px; color:var(--muted); }
 .fv-tlk { font-size:11px; padding:2px 6px; border-radius:8px; background:#e4ecff; color:#163d73; white-space:nowrap; }
 .fv-m { height:6px; border-radius:3px; background:#e0e8f4; overflow:hidden; } .fv-m i { display:block; height:100%; background:#c98a00; }
 .fv-more { margin-top:8px; font-size:13px; } .fv-more ul { margin:4px 0 0; padding-left:18px; } .fv-more small { display:block; color:var(--muted); }
-.fv-rvs { display:flex; flex-direction:column; gap:6px; margin:6px 0; }
-#forecast button.fv-rv, .fv-rv { height:auto; display:block; text-align:left; padding:8px 10px; border-radius:12px; background:var(--soft,#f3f6fb); color:var(--ink,#0d1b3d); border:2px solid transparent; font:inherit; cursor:pointer; }
+.fv-rvs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin:6px 0; }
+.fv-rvt { font-size:13.5px; margin:6px 0 2px; }
+@media(min-width:801px){ .fv-rvs { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+#forecast button.fv-rv, .fv-rv { height:auto; display:block; text-align:left; padding:7px 9px; border-radius:12px; font-size:13.5px; background:var(--soft,#f3f6fb); color:var(--ink,#0d1b3d); border:2px solid transparent; font:inherit; cursor:pointer; }
 #forecast button.fv-rv:hover { background:#e8f0fb; } #forecast button.fv-rv.on { border-color:#026ef8; background:#eef5ff; }
 .fv-rv small { display:block; font-size:12px; color:var(--muted); margin-top:2px; }
 .fv-rvpop { font-size:13px; margin:6px 0 0; }
@@ -318,3 +320,4 @@
 #forecast button.fv-olk[aria-pressed="true"] { background:#026ef8; color:#fff; }
 .fv-oltext { white-space:normal; } .fv-ols { margin:4px 0; font-size:14px; line-height:1.55; padding:2px 6px; border-radius:6px; } .fv-ols.hit { background:#fff1c2; }
 @media (min-width:801px) { .vz-svg { max-width:720px; } .rh-meter2 .vz-svg { max-width:720px; } }
+#rhHours[hidden], .rh-hours [hidden] { display:none !important; }

@@ -185,7 +185,7 @@
     if (cur) {
       const cx = x(cur.pos), fc = cur.kind === "fcst";
       s += `<line x1="${L}" x2="${width - R}" y1="${T - 4}" y2="${T - 4}" stroke="${C.grid}"/>` + (fc ? `<circle cx="${cx}" cy="${T - 4}" r="6" fill="#fff" stroke="${C.fc}" stroke-width="2.4" stroke-dasharray="3 2"/>` : `<circle cx="${cx}" cy="${T - 4}" r="6" fill="${C.warn}" stroke="#fff" stroke-width="2"/>`);
-      s += `<text x="${clamp(cx + 9, 2, width - 70)}" y="${T}" font-size="11" font-weight="700" fill="${fc ? C.fc : C.warn}">${fc ? "가능성 " : "이번 "}${md(cur.date)}</text>`;
+      const rt = cx + 9 + 70 > width; s += `<text x="${rt ? cx - 9 : cx + 9}" y="${T}" text-anchor="${rt ? "end" : "start"}" font-size="11" font-weight="700" fill="${fc ? C.fc : C.warn}">${fc ? "가능성 " : "이번 "}${md(cur.date)}</text>`;
     } else s += `<text x="${L}" y="${T}" font-size="10.5" fill="${C.muted}">이번 시즌: 현재까지 확인되지 않음</text>`;
     s += `<text x="${width - R + 4}" y="${T + rowH * 1.6 - 6}" font-size="9" fill="${C.muted}">없음</text></svg>`;
     const none = rows.filter((r) => r.state === "none").length, inc = rows.filter((r) => r.state === "incomplete").length;

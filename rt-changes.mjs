@@ -88,6 +88,11 @@ export function bigChanges({ hours = [], days = [], revisions = [], pop = null, 
   for (const r of revisions) if (r.kind === "big" && r.date >= today) C.push({ kind: "revision", M: Math.min(1, Math.abs(r.delta) / CR.revision.taRef), delta: r.delta, unit: "℃", startW: `${r.date} ${r.metric === "max" ? "12:00" : "04:00"}`, endW: `${r.date} ${r.metric === "max" ? "16:00" : "08:00"}`, title: `발표 변경: ${dayWord(r.date, today)} ${r.label} ${r.prev}→${r.last}℃`, sub: `${r.source} ${String(r.prevBase).slice(5, 16)} → ${String(r.lastBase).slice(5, 16)} 발표`, source: r.source });
   for (const p of (pop?.list || []).slice().sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 1)) C.push({ kind: "revision", M: Math.min(1, Math.abs(p.delta) / CR.revision.popRef), delta: p.delta, unit: "%p", startW: p.time.slice(0, 16), endW: p.time.slice(0, 16), title: `발표 변경: ${dayWord(p.time.slice(0, 10), today)} ${hh(p.time)} 강수확률 ${p.prev}→${p.value}%`, sub: `단기예보 ${String(pop.prevBase).slice(11, 16)} → ${String(pop.base).slice(11, 16)} 발표(같은 대상 시각)`, source: "단기예보" });
   const all = C.filter((x) => !nowW || x.endW >= nowW.slice(0, 13));
-  const top = all.slice().sort((a, b) => b.M - a.M || (a.startW < b.startW ? -1 : 1)).slice(0, CR.max).sort((a, b) => (a.startW < b.startW ? -1 : 1));
-  return { items: top.map((x) => ({ ...x, M: Math.round(x.M * 100) / 100 })), found: all.length, rule: "크기 M = min(1, |변화|/기준) — 통계적 희귀도가 아님. 큰 순 3개를 시간순으로" };
+  // 종류가 겹치지 않게 먼저 종류마다 하나씩, 모자라면 나머지에서 채움
+  const ord = all.slice().sort((a, b) => b.M - a.M || (a.startW < b.startW ? -1 : 1));
+  const seen = new Set(), pick = [];
+  for (const x of ord) if (pick.length < CR.max && !seen.has(x.kind)) { seen.add(x.kind); pick.push(x); }
+  for (const x of ord) if (pick.length < CR.max && !pick.includes(x)) pick.push(x);
+  const top = pick.sort((a, b) => (a.startW < b.startW ? -1 : 1));
+  return { items: top.map((x) => ({ ...x, M: Math.round(x.M * 100) / 100 })), found: all.length, rule: "크기 M = min(1, |변화|/기준) — 통계적 희귀도가 아님. 종류마다 큰 것 하나씩 먼저, 최대 3개를 시간순으로" };
 }

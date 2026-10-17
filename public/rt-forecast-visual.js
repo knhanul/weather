@@ -122,24 +122,29 @@
     const rv = (d.revisions || []).filter((x) => x.kind !== "few" && Math.round((Date.parse(x.date) - Date.parse(d.date)) / 864e5) <= 2);
     const pr = d.popRevision;
     if (!rv.length && !pr?.list?.length) return d.revisions ? "" : releaseLine(d);
-    const i0 = Math.min(sel, Math.max(0, rv.length - 1)), x0 = rv[i0];
+    // 기본 선택 = 수정이 있었던 첫 항목(모두 '큰 수정 없음'이면 첫 항목)
+    const i0 = sel == null ? Math.max(0, rv.findIndex((x) => x.kind !== "steady")) : Math.min(sel, Math.max(0, rv.length - 1)), x0 = rv[i0];
     const viz = x0 && window.RTViz ? window.RTViz.revision({ type: "revision", date: x0.date, metric: x0.metric, label: x0.label, unit: "℃", points: x0.points }) : "";
-    const rows = rv.map((x, i) => { const [w, c] = REV_KIND[x.kind] || ["", ""]; return `<button type="button" class="fv-rv${i === i0 ? " on" : ""}" data-rv="${i}" aria-pressed="${i === i0}"><b>${esc(dlab(x.date))} ${esc(x.label)}</b> <span class="rt-badge ${c}">${esc(w)}</span><small>${esc(x.text)} · ${esc(x.source)} ${x.gap ? `확보된 ${x.n}회` : `${x.n}회`}</small></button>`; }).join("");
+    const rows = rv.map((x, i) => { const [w, c] = REV_KIND[x.kind] || ["", ""]; return `<button type="button" class="fv-rv${i === i0 ? " on" : ""}" data-rv="${i}" aria-pressed="${i === i0}"><b>${esc(dlab(x.date))} ${esc(x.label.replace("기온", ""))}</b> <span class="rt-badge ${c}">${esc(w)}</span></button>`; }).join("");
     const pop = pr?.list?.length ? `<p class="fv-rvpop">☂ 강수확률: 직전 단기 발표(${esc(hm(pr.prevBase))})와 같은 대상 시각 ${pr.compared}개 중 ${pr.list.length}개가 ${pr.threshold}%p 이상 바뀜 — ${pr.list.slice(0, 3).map((p) => `${esc(dlab(p.time.slice(0, 10)))} ${hh(p.time)}시 ${p.prev}→${p.value}%`).join(", ")}${pr.list.length > 3 ? " 등" : ""}</p>` : pr && pr.compared ? `<p class="rt-note">강수확률: 직전 단기 발표와 같은 대상 시각 ${pr.compared}개 모두 ${pr.threshold}%p 미만 변화.</p>` : "";
-    return `<section class="card fv-rev" aria-label="예보가 바뀐 흐름"><h2>예보가 바뀐 흐름 <span class="rt-badge fc">발표 이력</span></h2>${rows ? `<div class="fv-rvs" role="group" aria-label="날짜·지표 고르기">${rows}</div>` : ""}${viz}${pop}<p class="rt-note">같은 상품(단기/중기)·대상일·지표의 발표값만 비교합니다(단기 최근 24시간, 중기 48시간). 예정 회차가 빠지면 '확보된 n회'. 단기↔중기 전환은 선을 끊습니다. 발표가 일정하다고 정확하다는 뜻은 아니며, 신뢰도 %는 내지 않습니다.</p></section>`;
+    return `<section class="card fv-rev" aria-label="예보가 바뀐 흐름"><h2>예보가 바뀐 흐름 <span class="rt-badge fc">발표 이력</span></h2>${rows ? `<div class="fv-rvs" role="group" aria-label="날짜·지표 고르기">${rows}</div>` : ""}${x0 ? `<p class="fv-rvt"><b>${esc(dlab(x0.date))} ${esc(x0.label)}</b> — ${esc(x0.text)} · ${esc(x0.source)} ${x0.gap ? `확보된 ${x0.n}회` : `${x0.n}회`}</p>` : ""}${viz}${pop}<p class="rt-note">같은 상품(단기/중기)·대상일·지표의 발표값만 비교합니다(단기 최근 24시간, 중기 48시간). 예정 회차가 빠지면 '확보된 n회'. 단기↔중기 전환은 선을 끊습니다. 발표가 일정하다고 정확하다는 뜻은 아니며, 신뢰도 %는 내지 않습니다.</p></section>`;
   }
   // 기상청 중기전망(10장): 원문 그대로(이스케이프), 발표시각·구역·지연 표시. 낱말 표지는 문장으로 가는 길잡이일 뿐
   const OL_KEYS = ["비", "눈", "기온", "바람"];
+  // 낱말 단위로만(비슷·비교·눈금 같은 말은 빼려고): 앞이 한글이 아니고 뒤가 조사·문장부호·공백
+  const OL_RE = { 비: /(^|[^가-힣])비(?=[\s,.)·가는와나도소]|$)/, 눈: /(^|[^가-힣])눈(?=[\s,.)·이은과나도소]|$)/, 기온: /기온/, 바람: /바람/ };
+  const olKeys = (t) => OL_KEYS.filter((k) => OL_RE[k].test(t));
   function outlookFold(d) {
     const o = d.outlook;
     if (!o) return "";
     if (!o.text) return `<details class="card rh-fold fv-fold fv-outlook"><summary>기상청 중기전망 — 자료 없음</summary><p class="rt-ins">${esc(o.note || "중기전망 자료 없음")}</p></details>`;
-    const lines = String(o.text).split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    // 원문 줄바꿈 중 ○·* 로 시작하지 않는 줄은 앞 문장의 이어짐
+    const lines = String(o.text).split(/\n+/).map((l) => l.trim()).filter(Boolean).reduce((a, l) => { if (a.length && !/^[○*※\-]/.test(l)) a[a.length - 1] += ` ${l}`; else a.push(l); return a; }, []);
     const sents = lines.flatMap((l) => l.split(/(?<=다\.)\s+/));
-    const has = (k) => sents.some((x) => x.includes(k));
+    const has = (k) => sents.some((x) => OL_RE[k].test(x));
     const stale = o.freshness?.state === "stale";
     const tags = OL_KEYS.filter(has).map((k) => `<button type="button" class="fv-olk" data-olk="${esc(k)}">${esc(k)}</button>`).join("");
-    return `<details class="card rh-fold fv-fold fv-outlook"><summary>기상청 중기전망 — ${esc(o.region || o.regionId || "")} ${esc(hm(o.tmFc))} 발표${stale ? ` <span class="rt-badge bad">지연</span>` : ""}</summary><section>${stale ? `<p class="rt-ins">${esc(o.freshness.text)} — 최신 전망이 아닐 수 있습니다.</p>` : ""}${tags ? `<p class="fv-olks">문장 찾기: ${tags}</p>` : ""}<div class="fv-oltext">${sents.map((x) => `<p class="fv-ols">${esc(x)}</p>`).join("")}</div><p class="rt-note">${esc(o.source || "")} 원문을 그대로 보여 줍니다(구역 ${esc(o.region || "")} 전체에 대한 문장이며, 이 지점 값으로 바꾸지 않았습니다). 낱말 단추는 그 낱말이 든 문장을 표시할 뿐 판단이 아닙니다.</p></section></details>`;
+    return `<details class="card rh-fold fv-fold fv-outlook"><summary>기상청 중기전망 — ${esc(o.region || o.regionId || "")} ${esc(hm(o.tmFc))} 발표${stale ? ` <span class="rt-badge bad">지연</span>` : ""}</summary><section>${stale ? `<p class="rt-ins">${esc(o.freshness.text)} — 최신 전망이 아닐 수 있습니다.</p>` : ""}${tags ? `<p class="fv-olks">문장 찾기: ${tags}</p>` : ""}<div class="fv-oltext">${sents.map((x) => `<p class="fv-ols" data-k="${esc(olKeys(x).join(" "))}">${esc(x)}</p>`).join("")}</div><p class="rt-note">${esc(o.source || "")} 원문을 그대로 보여 줍니다(구역 ${esc(o.region || "")} 전체에 대한 문장이며, 이 지점 값으로 바꾸지 않았습니다). 낱말 단추는 그 낱말이 든 문장을 표시할 뿐 판단이 아닙니다.</p></section></details>`;
   }
   // 3) 72시간 그래프: 위 날씨 그림 띠, 가운데 기온선(예보 점선)+기준 평균선, 아래 강수확률 막대·강수량, 맨 아래 바람 화살표. 밤(18~6시) 음영
   const PAD = { L: 34, R: 10 };

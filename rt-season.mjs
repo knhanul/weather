@@ -101,7 +101,7 @@ export function seasonEvent(id, { store, hs, refYmd, untilYmd, retro = false }) 
     }
     const comp = rows.filter((r) => r.complete), hit = comp.filter((r) => r.date);
     const base = { id: p.id, label: p.label, range: p.range, years: p.years, completeSeasons: comp.length, hitSeasons: hit.length, incomplete: rows.filter((r) => !r.complete).map((r) => r.season), rows };
-    if (comp.length < p.minYears) return { ...base, meanPos: null, status: "insufficient", statusText: "비교 데이터 부족(완전한 시즌 부족)" };
+    if (comp.length < p.minYears) return { ...base, meanPos: null, status: "insufficient", statusText: `비교 데이터 부족(완전한 시즌 ${comp.length}개, 필요 ${p.minYears}개)` };
     if (hit.length < ev.minOccur) return { ...base, meanPos: null, status: "insufficient", statusText: `발생한 시즌 ${hit.length}개(${ev.minOccur}개 미만) — 대표 날짜를 내지 않음` };
     const ps = hit.map((r) => r.pos).sort((a, b) => a - b);
     const meanPos = ps.reduce((s, v) => s + v, 0) / ps.length;
@@ -168,7 +168,7 @@ export function seasonCands(seasons, { sid, basis, bi, today, tv, LIFE_VALUE, ba
       const what = e.kind === "last" ? (e.retro ? `지난해 마지막 ${ev.short.replace("마지막 ", "")}` : "가장 최근 30℃ 이상인 날") : ev.short;
       C.push({ ...base, eventId: `${sid}|${e.id}|${e.season}|${cur.date}`, kind: "관측", U: Math.min(1, Math.abs(d) / 14), T: tv(`${cur.date} 00:00`, `${cur.date} 23:59`), material: { d, date: cur.date },
         title: `${what} ${dateW(cur.date)} — ${rel}`,
-        text: `${e.kind === "last" ? (e.retro ? `${e.season}년 마지막` : `올해 ${e.scannedTo.slice(5)}까지 가장 최근`) : `이번 시즌(${e.season}) ${firstWord}`} ${ev.label.replace(/^(올해|이번 [^ ]+ 계절) (처음 )?/, "")}: ${dateW(cur.date)}(${cur.value}${ev.unit}). ${p.range}년 완전한 ${p.completeSeasons}개 시즌 중 ${p.hitSeasons}개 발생 시즌의 평균 ${p.meanDate.replace("-", "/")}${p.earlier != null ? ` — 발생 시즌 ${p.hitSeasons}개 중 이보다 이른 해 ${p.earlier}개` : ""}.${e.kind === "last" && !e.retro ? " 연말 전이라 '올해 마지막'으로 말하지 않아요." : ""}` });
+        text: `${e.kind === "last" ? (e.retro ? `${e.season}년 마지막 ${ev.label.replace(/^가장 최근 /, "")}` : `올해 ${e.scannedTo.slice(5).replace("-", "/")}까지 ${ev.label}`) : `이번 시즌(${e.season}) ${firstWord} ${ev.label.replace(/^(올해|이번 [^ ]+ 계절) (처음 )?/, "")}`}: ${dateW(cur.date)}(${cur.value}${ev.unit}). ${p.range}년 완전한 ${p.completeSeasons}개 시즌 중 ${p.hitSeasons}개 발생 시즌의 평균 ${p.meanDate.replace("-", "/")}${p.earlier != null ? ` — 발생 시즌 ${p.hitSeasons}개 중 이보다 ${e.kind === "last" ? "일찍 끝난" : "이른"} 시즌 ${p.earlier}개` : ""}.${e.kind === "last" && !e.retro ? " 연말 전이라 '올해 마지막'으로 말하지 않아요." : ""}` });
     } else if (!cur?.date && e.forecast && p.meanPos != null) {
       const fc = e.forecast;
       C.push({ ...base, key: `${key}-fc`, eventId: `${sid}|${e.id}|${e.season}|fc|${fc.date}`, kind: "예보", path: "life", U: Math.min(1, Math.abs(fc.pos - p.meanPos) / 14), T: tv(`${fc.date} 00:00`, `${fc.date} 23:59`), material: { fc: fc.date }, samples: p.hitSeasons,

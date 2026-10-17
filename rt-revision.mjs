@@ -44,7 +44,7 @@ export function classifySeries(list, { date, metric }) {
     if (r1(hi - lo) >= R.oscRange && rev >= R.oscReversals) return { ...out, kind: "osc", lo, hi, reversals: rev, text: `${nWord} 발표의 ${METRIC[metric]} 예보 범위 ${lo}~${hi}℃ — 발표마다 오르내렸어요` };
   }
   const s4 = win.slice(-R.steadyN);
-  if (s4.length === R.steadyN) { const { lo, hi } = range(s4); if (r1(hi - lo) <= R.steadyRange) return { ...out, kind: "steady", lo, hi, text: `${gap ? `확보된 최근 ${R.steadyN}회` : `최근 ${R.steadyN}회`} 발표 사이 큰 수정 없음(${lo}~${hi}℃)` }; }
+  if (s4.length === R.steadyN) { const { lo, hi } = range(s4); if (r1(hi - lo) <= R.steadyRange) return { ...out, kind: "steady", lo, hi, text: `${gap ? `확보된 최근 ${R.steadyN}회` : `최근 ${R.steadyN}회`} 발표 사이 큰 수정 없음(${lo === hi ? `모두 ${lo}` : `${lo}~${hi}`}℃)` }; }
   return { ...out, kind: "mixed", delta: d, text: `${nWord} 발표 사이 작은 변화(직전 대비 ${d > 0 ? "+" : ""}${d}℃)` };
 }
 // changes = forecastChanges 결과. today 이후 날짜만

@@ -8,7 +8,7 @@
   const dlab = (ymd) => `${+ymd.slice(5, 7)}/${+ymd.slice(8, 10)}(${DOW[new Date(`${ymd}T00:00:00Z`).getUTCDay()]})`;
   const hm = (w) => (w ? `${+w.slice(5, 7)}/${+w.slice(8, 10)} ${w.slice(11, 16)}` : "");
   const COLORS = { all: "#8a4b00", r10: "#0e7a3e", r5: "#c0262d", fc: "#026ef8" };
-  const state = { station: null, data: null, stations: [], show: { all: true, r10: true, r5: true }, bcSel: null, rvSel: 0 };
+  const state = { station: null, data: null, stations: [], show: { all: true, r10: true, r5: true }, bcSel: null, rvSel: null };
   const hlOf = () => { const it = state.bcSel != null ? state.data?.bigChanges?.items?.[state.bcSel] : null; return it ? { startW: it.startW, endW: it.endW, label: it.title.length > 18 ? `${it.title.slice(0, 18)}…` : it.title } : null; };
   // 강조 구간이 보이게 가로 스크롤·카드 위치 맞춤
   function focusHl() {
@@ -36,7 +36,7 @@
         const rv = e.target.closest("[data-rv]");
         if (rv) { state.rvSel = +rv.dataset.rv; render(); return; }
         const ok = e.target.closest("[data-olk]");
-        if (ok) { const k = ok.dataset.olk, box = ok.closest(".fv-outlook"); let first = null; for (const p0 of box.querySelectorAll(".fv-ols")) { const on = p0.textContent.includes(k); p0.classList.toggle("hit", on); if (on && !first) first = p0; } for (const b0 of box.querySelectorAll("[data-olk]")) b0.setAttribute("aria-pressed", String(b0 === ok)); if (first) first.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+        if (ok) { const k = ok.dataset.olk, box = ok.closest(".fv-outlook"); let first = null; for (const p0 of box.querySelectorAll(".fv-ols")) { const on = (p0.dataset.k || "").split(" ").includes(k); p0.classList.toggle("hit", on); if (on && !first) first = p0; } for (const b0 of box.querySelectorAll("[data-olk]")) b0.setAttribute("aria-pressed", String(b0 === ok)); if (first) first.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
       });
     }
     if (!state.stations.length) {
@@ -69,7 +69,7 @@
       }
       if (my !== seq) return;
       if (!d) throw new Error("불러오지 못했습니다");
-      state.data = d; state.wind = null; state.bcSel = null; state.rvSel = 0; render(); document.dispatchEvent(new Event("rt:ready"));
+      state.data = d; state.wind = null; state.bcSel = null; state.rvSel = null; render(); document.dispatchEvent(new Event("rt:ready"));
       // 바람 띠(읽기 전용 추가 자료): 받으면 그래프만 다시
       const ws = state.station;
       fetch(`/api/rt/forecast-wind?station=${encodeURIComponent(ws)}`).then((r) => r.json()).then((w) => { if (my !== seq || ws !== state.station || !w.ok || !w.hours?.length) return; state.wind = w.hours; render(); }).catch(() => {});
