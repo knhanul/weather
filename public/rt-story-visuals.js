@@ -417,15 +417,17 @@
   }
 
   // ---------------------------------------------------------------- 9) 앞으로 12시간 공용 시간축: 기온 선 · 강수 띠 · 바람 띠 + 구간 음영(탭하면 이유)
-  // colW 를 주면 시간 칸 폭을 고정(칸 머리 칩과 같은 열에 맞추려고) — width = 34 + 10 + 시간 수 × colW
+  // colW 를 주면 시간 칸 폭을 고정(칸 머리 칩과 같은 열에 맞추려고) — width = AXL + 10 + 시간 수 × colW
+  // AXL: 왼쪽 줄 제목 칸(기온 ℃ / 강수확률 % / 바람 m/s 두 줄 제목)
+  const AXL = 54;
   const axisSpan = (o) => { const fc = (o.fc || []).slice(0, 12); if (!fc.length) return null; const cur = o.current && fin(o.current.ta) ? o.current : null; const first = cur ? cur.time : fc[0].time; const T = (t) => Date.parse(t.replace(" ", "T") + "Z"); return { span: Math.max(1, (T(fc.at(-1).time) - T(first)) / 36e5), off: (T(fc[0].time) - T(first)) / 36e5, fc }; };
   function axis12(o, segs, sel, { width = 340, colW = null, parts = false } = {}) {
-    if (colW) { const sp = axisSpan(o); if (sp) width = Math.round(34 + 10 + sp.span * colW); }
+    if (colW) { const sp = axisSpan(o); if (sp) width = Math.round(AXL + 10 + sp.span * colW); }
     const fc = (o.fc || []).slice(0, 12); if (!fc.length) return `<p class="rt-ins">예보 자료가 없습니다</p>`;
     const cur = o.current && fin(o.current.ta) ? o.current : null;
     const pts = (cur ? [{ time: cur.time, ta: cur.ta, kind: "obs", ws: cur.ws }] : []).concat(fc.map((h) => ({ ...h, kind: "fcst" })));
     const t0 = Date.parse(pts[0].time.replace(" ", "T") + "Z"), span = Math.max(1, (Date.parse(pts.at(-1).time.replace(" ", "T") + "Z") - t0) / 36e5);
-    const L = 34, R = 10, H = 168;
+    const L = AXL, R = 10, H = 168;
     const xt = (t) => L + ((Date.parse(t.replace(" ", "T") + "Z") - t0) / 36e5 / span) * (width - L - R);
     const cw = (width - L - R) / span;
     const tas = pts.map((p) => p.ta).filter(fin);
@@ -445,7 +447,8 @@
       s += `<g class="vz-segz" data-seg="${esc(sg.id)}" tabindex="-1"><rect x="${xa}" y="2" width="${xb - xa}" height="${H - 18}" fill="${sg.id === sel ? "#ffe7a8" : C.seg}" stroke="${sg.id === sel ? "#c98a00" : "#ecd393"}"/><text x="${xa + 3}" y="12" font-size="10.5" font-weight="700" fill="#8a4b00">${esc(sg.label)}</text></g>`;
     }
     // 기온
-    s += `<text x="0" y="${TT + 6}" font-size="10" fill="${C.muted}">기온</text>`;
+    const rowT = (yy, a, b) => `<text x="0" y="${yy}" font-size="10.5" font-weight="700" fill="${C.obs}">${a}</text><text x="0" y="${yy + 11}" font-size="9.5" fill="${C.muted}">${b}</text>`;
+    s += `<g class="vz-rowt" data-tip="기온 줄: 점선 = 시간별 예보 기온(℃)${cur ? ", 점 = 지금 관측 기온" : ""}"><title>기온 줄: 점선 = 시간별 예보 기온(℃)${cur ? ", 점 = 지금 관측 기온" : ""}</title>${rowT(TT + 14, "기온", "(℃)")}</g>`;
     let d = "", pen = false, prev = null;
     for (const p of fc) { if (!fin(p.ta) || (prev && Date.parse(p.time.replace(" ", "T") + "Z") - Date.parse(prev.replace(" ", "T") + "Z") > 36e5)) pen = false; if (fin(p.ta)) { d += `${pen ? "L" : "M"}${xt(p.time).toFixed(1)},${y(p.ta).toFixed(1)}`; pen = true; } prev = p.time; }
     s += `<path d="${d}" fill="none" stroke="${C.fc}" stroke-width="2.4" stroke-dasharray="5 4"/>`;
@@ -453,19 +456,27 @@
     fc.forEach((p, i) => { if (fin(p.ta) && (i % 3 === 2 || p === minP || p === maxP)) s += `<text x="${xt(p.time)}" y="${y(p.ta) + (p === minP ? 13 : -6)}" font-size="10" text-anchor="middle" fill="${p === minP || p === maxP ? C.obs : C.muted}" font-weight="${p === minP || p === maxP ? 700 : 400}">${p.ta}</text>`; });
     // 강수 띠: 강수형태(채움) / 없음(점선 빈 칸) / 칸 없음(빗금), 위에 강수확률 숫자(60% 이상 굵게)
     const RY = 96, WY = 126;
-    s += `<text x="0" y="${RY + 10}" font-size="10" fill="${C.muted}">강수</text><text x="0" y="${WY + 10}" font-size="10" fill="${C.muted}">바람</text>`;
+    s += `<g class="vz-rowt" data-tip="강수확률 줄: 숫자 = 그 시간 강수확률(%, 20% 이상만 표시·60% 이상 굵게), 파란 칸 = 비·눈 예보"><title>강수확률 줄: 숫자 = 강수확률(%), 파란 칸 = 비·눈 예보</title>${rowT(RY + 6, "강수확률", "(%)")}</g><g class="vz-rowt" data-tip="바람 줄: 숫자 = 그 시간 예보 풍속(m/s, 초당 미터), 진한 칸 = 5m/s 이상"><title>바람 줄: 숫자 = 풍속(m/s), 진한 칸 = 5m/s 이상</title>${rowT(WY + 6, "바람", "(m/s)")}</g>`;
+    const tipG = (t, inner) => `<g class="vz-tip" data-tip="${esc(t)}"><title>${esc(t)}</title>${inner}</g>`;
     fc.forEach((h, i) => {
-      const xb = xt(h.time), xa = xb - cw, w = cw - 2, x = xa + 1;
+      // 칸 = 그 정시 앞 1시간. 첫 칸이 지금 시각과 같으면 왼쪽 줄 제목 칸을 덮지 않게 L 에서 자름
+      const xb = xt(h.time), xa = Math.max(xb - cw, L - 1), w = Math.max(6, xb - xa - 2), x = xa + 1;
       const w2 = h.pty && h.pty !== "없음";
-      s += w2 ? `<rect x="${x}" y="${RY}" width="${w}" height="14" rx="2" fill="${/눈/.test(h.pty) ? "#6aa6ff" : C.wet}"/>` : h.pty == null ? `<rect x="${x}" y="${RY}" width="${w}" height="14" rx="2" fill="url(#${og.id}h)"/>` : `<rect x="${x + 0.5}" y="${RY + 0.5}" width="${w - 1}" height="13" rx="2" fill="#fff" stroke="#c7d2e2" stroke-dasharray="3 2"/>`;
-      if (w2) s += `<text x="${x + w / 2}" y="${RY + 10.5}" font-size="9.5" fill="#fff" text-anchor="middle">${esc(/눈/.test(h.pty) ? "눈" : "비")}</text>`;
-      else if (fin(h.pop) && h.pop >= 20) s += `<text x="${x + w / 2}" y="${RY + 10.5}" font-size="9.5" text-anchor="middle" fill="${h.pop >= RULE.popHigh ? C.fc : C.muted}" font-weight="${h.pop >= RULE.popHigh ? 700 : 400}">${h.pop}</text>`;
+      const at = `${hh(h.time)}시`, popT = fin(h.pop) ? `강수확률 ${h.pop}%${h.pop >= RULE.popHigh ? " (60% 이상)" : ""}` : "강수확률 자료 없음";
+      const rT = w2 ? `${at} ${h.pty} 예보 · ${popT}` : h.pty == null ? `${at} 강수 예보 자료 없음${fin(h.pop) ? ` · ${popT}` : ""}` : `${at} 강수형태 예보 없음 · ${popT}`;
+      const wT = fin(h.ws) ? `${at} 풍속 ${r1(h.ws)}m/s${h.ws >= RULE.wind ? " (5m/s 이상)" : ""}` : `${at} 바람 예보 자료 없음`;
+      let rs = "", wsS = "";
+      rs += w2 ? `<rect x="${x}" y="${RY}" width="${w}" height="14" rx="2" fill="${/눈/.test(h.pty) ? "#6aa6ff" : C.wet}"/>` : h.pty == null ? `<rect x="${x}" y="${RY}" width="${w}" height="14" rx="2" fill="url(#${og.id}h)"/>` : `<rect x="${x + 0.5}" y="${RY + 0.5}" width="${w - 1}" height="13" rx="2" fill="#fff" stroke="#c7d2e2" stroke-dasharray="3 2"/>`;
+      const nar = w < 16;
+      if (nar) {} else if (w2) rs += `<text x="${x + w / 2}" y="${RY + 10.5}" font-size="9.5" fill="#fff" text-anchor="middle">${esc(/눈/.test(h.pty) ? "눈" : "비")}</text>`;
+      else if (fin(h.pop) && h.pop >= 20) rs += `<text x="${x + w / 2}" y="${RY + 10.5}" font-size="9.5" text-anchor="middle" fill="${h.pop >= RULE.popHigh ? C.fc : C.muted}" font-weight="${h.pop >= RULE.popHigh ? 700 : 400}">${h.pop}</text>`;
       const ws = h.ws;
-      s += fin(ws) ? `<rect x="${x}" y="${WY}" width="${w}" height="14" rx="2" fill="${ws >= RULE.wind ? "#5e7090" : "#eef2f7"}"/><text x="${x + w / 2}" y="${WY + 10.5}" font-size="9.5" text-anchor="middle" fill="${ws >= RULE.wind ? "#fff" : C.muted}" font-weight="${ws >= RULE.wind ? 700 : 400}">${cw > 22 || i % 2 === 0 || ws >= RULE.wind ? r1(ws) : ""}</text>` : `<rect x="${x}" y="${WY}" width="${w}" height="14" rx="2" fill="url(#${og.id}h)"/>`;
+      wsS += fin(ws) ? `<rect x="${x}" y="${WY}" width="${w}" height="14" rx="2" fill="${ws >= RULE.wind ? "#5e7090" : "#eef2f7"}"/>${nar ? "" : `<text x="${x + w / 2}" y="${WY + 10.5}" font-size="9.5" text-anchor="middle" fill="${ws >= RULE.wind ? "#fff" : C.muted}" font-weight="${ws >= RULE.wind ? 700 : 400}">${cw > 22 || i % 2 === 0 || ws >= RULE.wind ? r1(ws) : ""}</text>`}` : `<rect x="${x}" y="${WY}" width="${w}" height="14" rx="2" fill="url(#${og.id}h)"/>`;
+      s += tipG(rT, rs) + tipG(wT, wsS);
     });
     pts.forEach((p, i) => { if (i % 2 === 0 || i === pts.length - 1) s += `<text x="${clamp(xt(p.time), 8, width - 8)}" y="${H - 4}" font-size="10" text-anchor="middle" fill="${C.muted}">${i === 0 && cur ? "지금" : `${hh(p.time)}시`}</text>`; });
     s += `</svg>`;
-    const cap = `${cur ? legend("obs") : ""}${legend("fc")}<span class="vz-key"><i class="k-wet"></i>강수형태 예보</span><span class="vz-key">숫자 = 강수확률%</span><span class="vz-key"><i class="k-wind"></i>바람 5m/s 이상</span>${legend("miss")}<span class="vz-key"><i class="k-seg"></i>구간(누르면 이유)</span>`;
+    const cap = `${cur ? legend("obs") : ""}${legend("fc")}<span class="vz-key"><i class="k-wet"></i>강수형태 예보</span><span class="vz-key">강수확률 줄 숫자 = 강수확률%</span><span class="vz-key">바람 줄 숫자 = 풍속 m/s</span><span class="vz-key"><i class="k-wind"></i>바람 5m/s 이상</span>${legend("miss")}<span class="vz-key"><i class="k-seg"></i>구간(누르면 이유)</span>`;
     if (parts) return { svg: s, cap, width };
     return fig(s, cap, "vz-axis");
   }
@@ -479,19 +490,21 @@
     const sp = o.chip ? axisSpan(o) : null;
     if (sp) {
       const avail = Math.max(300, el.clientWidth || 340);
-      const colW = Math.max(56, Math.floor((avail - 44) / sp.span));
+      const colW = Math.max(56, Math.floor((avail - AXL - 10) / sp.span));
       const a = axis12(o, segs, s0?.id, { colW, parts: true });
-      const pl = 34 + sp.off * colW - colW / 2;
+      const pl = AXL + sp.off * colW - colW / 2;
       top = `<div class="vz-sync" role="group" aria-label="앞으로 12시간 시간별 예보와 시간축"><div class="vz-sync-in" style="width:${a.width}px"><div class="vz-chiprow" style="margin-left:${pl}px">${sp.fc.map((h) => `<div class="vz-chipc" style="width:${colW}px">${o.chip(h)}</div>`).join("")}</div><figure class="vz vz-axis">${a.svg.replace('class="vz-svg"', `class="vz-svg" style="width:${a.width}px;max-width:none"`)}</figure></div></div><figcaption class="vz-cap">${a.cap}</figcaption>${o.more || ""}`;
     } else top = axis12(o, segs, s0?.id);
     const sl = el.querySelector(".vz-sync")?.scrollLeft || 0;
-    el.innerHTML = `${top}<div class="vz-segs" role="group" aria-label="하루 구간별 옷차림">${segs.map((x) => segCard(x, today, x === s0)).join("")}</div>${segPanel(s0, today)}`;
+    el.innerHTML = `${top}<p class="vz-axtip" aria-live="polite">칸이나 줄 제목을 누르면 설명이 나와요</p><div class="vz-segs" role="group" aria-label="하루 구간별 옷차림">${segs.map((x) => segCard(x, today, x === s0)).join("")}</div>${segPanel(s0, today)}`;
     const sy = el.querySelector(".vz-sync"); if (sy && sl) sy.scrollLeft = sl;
   }
   function day(el, o) { DAY.o = o; DAY.segs = segments(o); DAY.sel = DAY.segs[0]?.id ?? null; dayPaint(el); el.dataset.vzDay = "1"; }
   if (typeof document !== "undefined") document.addEventListener("click", (e) => {
     const sb = e.target.closest?.("[data-vz-day] [data-seg]");
     if (sb) { DAY.sel = sb.dataset.seg; dayPaint(sb.closest("[data-vz-day]")); return; }
+    const tp = e.target.closest?.("[data-vz-day] [data-tip]");
+    if (tp) { const host = tp.closest("[data-vz-day]"), line = host.querySelector(".vz-axtip"); host.querySelectorAll(".vz-tip.on").forEach((g) => g.classList.remove("on")); tp.classList.add("on"); if (line) { line.textContent = tp.dataset.tip; line.classList.add("on"); } return; }
     const pk = e.target.closest?.("[data-simov] [data-simpick]");
     if (pk) { const host = pk.closest("[data-simov]"); const r = SIM.get(host.dataset.simov); if (r) host.innerHTML = simOverlay(r, +pk.dataset.simpick); }
   });

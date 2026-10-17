@@ -127,10 +127,13 @@ test("4단계 그림: 계절 점그래프·발표 흐름(전환에서 끊김)·�
   assert.equal(V.chart({ type: "season", rows: [], label: "x", startMd: "01-01" }).includes("지난 시즌 자료 부족"), true);
 });
 
-test("4단계 시간축: 칩과 같은 열 폭(colW) — 너비 = 34 + 10 + 시간 수 × colW", () => {
+test("4단계 시간축: 칩과 같은 열 폭(colW) — 너비 = 54 + 10 + 시간 수 × colW", () => {
   const { RTViz: V } = load();
   const fc = fcFrom("2026-10-17 16:00:00", 12);
   const a = V.axis12({ nowW: "2026-10-17 15:20", fc, current: { time: "2026-10-17 15:00:00", ta: 15 } }, [], null, { colW: 62, parts: true });
-  assert.equal(a.width, 34 + 10 + 12 * 62);
-  assert.match(a.svg, /viewBox="0 0 788 /);
+  assert.equal(a.width, 54 + 10 + 12 * 62);
+  assert.match(a.svg, /viewBox="0 0 808 /);
+  assert.match(a.svg, />강수확률<\/text>/); assert.match(a.svg, />\(m\/s\)<\/text>/);
+  assert.match(a.svg, /<title>\d+시 (강수형태 예보 없음|비 예보|강수 예보 자료 없음)/); assert.match(a.svg, /<title>\d+시 (풍속 [\d.]+m\/s|바람 예보 자료 없음)/);
+  assert.match(a.cap, /바람 줄 숫자 = 풍속 m\/s/);
 });
