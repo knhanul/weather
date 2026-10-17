@@ -61,7 +61,7 @@ function distFacts(c, { side = "both", observed = true } = {}) {
   if (!c || c.p == null) return null;
   const U = side === "hi" ? Uhi(c.p) : side === "lo" ? Ulo(c.p) : U2(c.p);
   const out = observed && c.newHigh ? "high" : observed && c.newLow ? "low" : null;
-  return { p: c.p, N: c.samples, U, pct: c.percentile, hiPct: r1(100 - c.percentile), loPct: c.percentile, mean: c.mean, range: `${c.from}~${c.to}`, outOfRange: out, max: c.max, min: c.min };
+  return { p: c.p, N: c.samples, U, p10: c.p10 ?? null, p90: c.p90 ?? null, pct: c.percentile, hiPct: r1(100 - c.percentile), loPct: c.percentile, mean: c.mean, range: `${c.from}~${c.to}`, outOfRange: out, max: c.max, min: c.min };
 }
 const rangeNote = (f, unit) => (f?.outOfRange === "high" ? ` 보유 비교 표본 범위 밖(가장 높았던 ${f.max.value}${unit}, ${f.max.date}보다 높음).` : f?.outOfRange === "low" ? ` 보유 비교 표본 범위 밖(가장 낮았던 ${f.min.value}${unit}, ${f.min.date}보다 낮음).` : "");
 
@@ -162,6 +162,24 @@ export const METHOD = {
   L01: "다음 출근(7~9시) 또는 퇴근(18~20시) 구간과 겹치는 예보 시간 중 강수형태가 있으면 '비 예보', 없고 강수확률 60% 이상만 있으면 '강수확률 높은 시간대'. 강수형태·강수확률은 그 정시 앞 1시간 구간으로 겹침을 계산해요.",
 };
 
+
+// ---------------------------------------------------------------- 작은 그래프 자료(story.chart, astra 2장·3단계) — 화면(public/rt-story-visuals.js)이 그대로 그림. 값은 위 계산 결과만
+export function distChart(f, { metric, unit, value, valueKind = "obs", label }) {
+  if (!f) return null;
+  return { type: "dist", metric, unit, value, valueKind, label, mean: f.mean ?? null, p10: f.p10 ?? null, p90: f.p90 ?? null, min: f.min?.value ?? null, minDate: f.min?.date ?? null, max: f.max?.value ?? null, maxDate: f.max?.date ?? null, N: f.N, range: f.range };
+}
+// 최근 30일 강수 달력: wet(0.1mm 이상)·dry·missing(행 없음·값 없음)·pending(오늘 — 아직 끝나지 않은 날)
+export function rainCalendar(store, today, days = 30) {
+  const out = [];
+  const t = ymdToDn(today);
+  for (let dn = t - days + 1; dn <= t; dn++) {
+    const v = dAt(store, "rain", dn);
+    out.push({ date: dnToYmd(dn), state: dn >= t ? "pending" : !Number.isFinite(v) ? "missing" : v >= 0.1 ? "wet" : "dry", mm: Number.isFinite(v) ? r1(v) : null });
+  }
+  return out;
+}
+const pt = (h) => ({ time: h.time, ta: fin(h.ta) ? h.ta : null, kind: h.kind });
+
 // ---------------------------------------------------------------- 규칙
 const tk = (ctx, ruleId, eventId) => ({ station: ctx.sid, date: ctx.ymd, ruleId, eventId });
 function make(ctx, ruleId, eventId, facts, base) {
@@ -183,7 +201,7 @@ function H01(ctx) {
   if (!state) return res(false, "조건 밖");
   const dd = describeDifference("hm", cmp.diff);
   const facts = { ...f, state, hm: c.hm, hour: c.hour, abs: Math.abs(cmp.diff), diff: cmp.diff, levelWord: dd && dd.level !== "similar" ? dd.levelWord : null, rangeNote: rangeNote(f, "%") };
-  return res(true, state, make(ctx, "H01", `${ctx.sid}|H01|${ctx.ymd}|${state}`, facts, { topic: "wind-humidity", lifeDecision: "humidity", path: "stat", kind: "관측", U: state === "dry" ? Ulo(f.p) : Uhi(f.p), A: LV.day, T: timeValue({ startW: c.time, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { state, hm: roundTo(c.hm, 5) }, basis: `초단기실황 ${c.time.slice(0, 16)} vs ASOS 정시 습도`, asOf: c.time.slice(0, 16), lifeSlot: false }));
+  return res(true, state, make(ctx, "H01", `${ctx.sid}|H01|${ctx.ymd}|${state}`, facts, { topic: "wind-humidity", lifeDecision: "humidity", path: "stat", kind: "관측", U: state === "dry" ? Ulo(f.p) : Uhi(f.p), A: LV.day, T: timeValue({ startW: c.time, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { state, hm: roundTo(c.hm, 5) }, basis: `초단기실황 ${c.time.slice(0, 16)} vs ASOS 정시 습도`, asOf: c.time.slice(0, 16), lifeSlot: false, chart: distChart(f, { metric: "hm", unit: "%", value: c.hm, label: `${c.hour}시 습도` }) }));
 }
 function W01(ctx) {
   const c = ctx.current;
@@ -196,7 +214,7 @@ function W01(ctx) {
   if (!(c.ws >= R.min && f.p >= R.p)) return res(false, "조건 밖");
   const dd = describeDifference("ws", cmp.diff);
   const facts = { ...f, ws: c.ws, hour: c.hour, abs: Math.abs(cmp.diff), levelWord: dd && dd.level !== "similar" && dd.direction === "up" ? dd.levelWord : null, dayPart: c.hour >= 18 || c.hour < 6 ? "밤" : c.hour < 12 ? "오전" : "오후", rangeNote: rangeNote(f, "m/s") };
-  return res(true, "strong", make(ctx, "W01", `${ctx.sid}|W01|${ctx.ymd}`, facts, { topic: "wind-humidity", lifeDecision: "wind", path: "stat", kind: "관측", U: f.U, A: LV.day, T: timeValue({ startW: c.time, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { ws: roundTo(c.ws, 1) }, basis: `초단기실황 ${c.time.slice(0, 16)} vs ASOS 정시 풍속`, asOf: c.time.slice(0, 16), lifeSlot: true }));
+  return res(true, "strong", make(ctx, "W01", `${ctx.sid}|W01|${ctx.ymd}`, facts, { topic: "wind-humidity", lifeDecision: "wind", path: "stat", kind: "관측", U: f.U, A: LV.day, T: timeValue({ startW: c.time, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { ws: roundTo(c.ws, 1) }, basis: `초단기실황 ${c.time.slice(0, 16)} vs ASOS 정시 풍속`, asOf: c.time.slice(0, 16), lifeSlot: true, chart: distChart(f, { metric: "ws", unit: "m/s", value: c.ws, label: `${c.hour}시 풍속` }) }));
 }
 function T01(ctx) {
   const R = SR.T01;
@@ -216,7 +234,7 @@ function T01(ctx) {
   out.sort((a, b) => (b.state === "big" ? Uhi(b.f.p) : Ulo(b.f.p)) - (a.state === "big" ? Uhi(a.f.p) : Ulo(a.f.p)));
   const { d, D, f, state } = out[0];
   const facts = { ...f, state, d: D, max: d.max, min: d.min, dayWord: dayWord(d.date, ctx.ymd), date: d.date };
-  return res(true, state, make(ctx, "T01", `${ctx.sid}|T01|${d.date}|${state}`, facts, { topic: "temperature", lifeDecision: "layering", path: "stat", kind: "예보", U: state === "big" ? Uhi(f.p) : Ulo(f.p), A: state === "big" ? LV.decision : LV.info, T: timeValue({ startW: `${d.date} 00:00`, endW: `${d.date} 23:59`, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { date: d.date, state, d: roundTo(D, 1) }, basis: `단기예보 최고(${String(d.maxBase || "").slice(0, 16)})·최저(${String(d.minBase || "").slice(0, 16)}) 발표 vs ASOS 공식 일자료`, lifeSlot: state === "big" }));
+  return res(true, state, make(ctx, "T01", `${ctx.sid}|T01|${d.date}|${state}`, facts, { topic: "temperature", lifeDecision: "layering", path: "stat", kind: "예보", U: state === "big" ? Uhi(f.p) : Ulo(f.p), A: state === "big" ? LV.decision : LV.info, T: timeValue({ startW: `${d.date} 00:00`, endW: `${d.date} 23:59`, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { date: d.date, state, d: roundTo(D, 1) }, basis: `단기예보 최고(${String(d.maxBase || "").slice(0, 16)})·최저(${String(d.minBase || "").slice(0, 16)}) 발표 vs ASOS 공식 일자료`, lifeSlot: state === "big", chart: { type: "range", focus: "both", date: d.date, unit: "℃", valueKind: "fcst", max: d.max, min: d.min, meanMax: dailyCompare(ctx.store, d.date, "max")[0].mean, meanMin: dailyCompare(ctx.store, d.date, "min")[0].mean, d: D, meanD: f.mean, N: f.N, range: f.range } }));
 }
 function T02(ctx) {
   const R = SR.T02;
@@ -232,7 +250,7 @@ function T02(ctx) {
   if (!(f.p <= R.p || near)) return res(false, "조건 밖");
   const dd = describeDifference("ta", cmp.diff);
   const facts = { ...f, min: d.min, abs: Math.abs(cmp.diff), dayWord: dayWord(date, ctx.ymd), levelWord: dd && dd.direction === "down" && dd.level !== "similar" ? dd.levelWord : null, nearText: near ? ` 같은 시기 보유 표본 가장 낮은 값(${cmp.min.value}℃, ${cmp.min.date})에 1℃ 이내인 예보예요(예보값이라 기록으로 말하지 않음).` : "" };
-  return res(true, near ? "near-low" : "low", make(ctx, "T02", `${ctx.sid}|T02|${date}`, facts, { topic: "temperature", lifeDecision: "morning", path: "stat", kind: "예보", U: Math.max(Ulo(f.p), near ? 0.9 : 0), A: LV.decision, T: timeValue({ startW: `${date} 06:00`, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { date, min: roundTo(d.min, 1), near: !!near }, basis: `단기예보 최저 ${String(d.minBase || "").slice(0, 16)} 발표 vs ASOS 공식 일자료`, lifeSlot: true }));
+  return res(true, near ? "near-low" : "low", make(ctx, "T02", `${ctx.sid}|T02|${date}`, facts, { topic: "temperature", lifeDecision: "morning", path: "stat", kind: "예보", U: Math.max(Ulo(f.p), near ? 0.9 : 0), A: LV.decision, T: timeValue({ startW: `${date} 06:00`, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { date, min: roundTo(d.min, 1), near: !!near }, basis: `단기예보 최저 ${String(d.minBase || "").slice(0, 16)} 발표 vs ASOS 공식 일자료`, lifeSlot: true, chart: { type: "range", focus: "min", date, unit: "℃", valueKind: "fcst", max: fin(d.max) ? d.max : null, min: d.min, meanMax: dailyCompare(ctx.store, date, "max")[0].mean, meanMin: cmp.mean, lowest: cmp.min?.value ?? null, lowestDate: cmp.min?.date ?? null, p10: f.p10, N: f.N, range: f.range } }));
 }
 function streak(ctx, ruleId, wetSide) {
   const R = SR[ruleId];
@@ -251,7 +269,7 @@ function streak(ctx, ruleId, wetSide) {
   if (!f || f.N < MIN_SAMPLES_RANK) return res(false, "표본 부족");
   if (!(f.p >= R.p)) return res(false, "조건 밖");
   const facts = { ...f, n: run.n, lastWord: dayWord(L, ctx.ymd), lastDate: L };
-  const c = make(ctx, ruleId, `${ctx.sid}|${ruleId}|${dnToYmd(lastDn - run.n + 1)}`, facts, { topic: "precipitation", path: "stat", kind: "관측", U: f.U, A: LV.info, T: timeValue({ endW: `${L} 23:59`, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { week: Math.floor(run.n / 7) }, basis: "ASOS 공식 일자료", exclude: !wetSide && raining ? "오늘 비가 와 연속 무강수가 끊겼을 수 있음" : null });
+  const c = make(ctx, ruleId, `${ctx.sid}|${ruleId}|${dnToYmd(lastDn - run.n + 1)}`, facts, { topic: "precipitation", path: "stat", kind: "관측", U: f.U, A: LV.info, T: timeValue({ endW: `${L} 23:59`, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { week: Math.floor(run.n / 7) }, basis: "ASOS 공식 일자료", chart: { type: "calendar", days: rainCalendar(ctx.store, ctx.ymd), from: dnToYmd(lastDn - run.n + 1), to: L, side: wetSide ? "wet" : "dry" }, exclude: !wetSide && raining ? "오늘 비가 와 연속 무강수가 끊겼을 수 있음" : null });
   return res(true, "long", c);
 }
 const R01 = (ctx) => streak(ctx, "R01", false);
@@ -272,7 +290,7 @@ function R03(ctx) {
   if (!(f.p >= R.p)) return res(false, "조건 밖");
   const dr = describeDifference("rain", null, { percentile: f.pct, samplesOk: true, mean: f.mean });
   const facts = { ...f, sum, lastWord: dayWord(L, ctx.ymd), fromWord: md(dnToYmd(ymdToDn(L) - 6)), phrase: dr?.phrase ? `${dr.phrase}(높은 쪽 ${f.hiPct}%)` : `높은 쪽 ${f.hiPct}%`, rangeNote: rangeNote(f, "mm") };
-  return res(true, "wet", make(ctx, "R03", `${ctx.sid}|R03|${L}`, facts, { topic: "precipitation", path: "stat", kind: "관측", U: f.U, A: LV.info, T: timeValue({ endW: `${L} 23:59`, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { sum: roundTo(sum, 5) }, basis: "ASOS 공식 일자료 7일 합" }));
+  return res(true, "wet", make(ctx, "R03", `${ctx.sid}|R03|${L}`, facts, { topic: "precipitation", path: "stat", kind: "관측", U: f.U, A: LV.info, T: timeValue({ endW: `${L} 23:59`, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { sum: roundTo(sum, 5) }, basis: "ASOS 공식 일자료 7일 합", chart: distChart(f, { metric: "rain7", unit: "mm", value: sum, label: "최근 7일 강수량" }) }));
 }
 function R04(ctx) {
   const R = SR.R04;
@@ -301,7 +319,7 @@ function R04(ctx) {
   }
   const dr = f ? describeDifference("rain", null, { percentile: f.pct, samplesOk: true, mean: f.mean }) : null;
   const facts = { ...(f || {}), state, rn: rainNow ? c.rn1 : null, hour: c.hour, pty: c.pty || null, ptyWord: c.pty && /눈/.test(c.pty) ? "눈" : "비", shareText, amountText: fin(c.rn1) ? ` 1시간 강수량 ${c.rn1}mm.` : " 강수량 자료 없음.", noteText: f ? "" : " 같은 시기 비 온 시간 표본이 적어 많고 적음은 말하지 않아요.", phrase: dr?.phrase ? `${dr.phrase}(높은 쪽 ${f.hiPct}%)` : f ? `높은 쪽 ${f.hiPct}%` : null, rangeNote: f ? rangeNote(f, "mm") : "" };
-  const cand = make(ctx, "R04", `${ctx.sid}|rain|${ctx.ymd}|now`, facts, { topic: "precipitation", lifeDecision: "umbrella", mergeGroup: "rain", path: state === "rare" ? "stat" : "life", kind: "관측", U: state === "rare" ? U : null, A: LV.decision, T: timeValue({ startW: c.time, nowW: ctx.nowW }), samples: f?.N ?? 0, minSamples: R.minWetSamples, material: { state, rn: roundTo(c.rn1 ?? 0, 1), pty: c.pty || "" }, basis: `초단기실황 ${c.time.slice(0, 16)}${f ? " vs ASOS 같은 시기 비 온 시간" : ""}`, asOf: c.time.slice(0, 16), lifeSlot: true });
+  const cand = make(ctx, "R04", `${ctx.sid}|rain|${ctx.ymd}|now`, facts, { topic: "precipitation", lifeDecision: "umbrella", mergeGroup: "rain", path: state === "rare" ? "stat" : "life", kind: "관측", U: state === "rare" ? U : null, A: LV.decision, T: timeValue({ startW: c.time, nowW: ctx.nowW }), samples: f?.N ?? 0, minSamples: R.minWetSamples, material: { state, rn: roundTo(c.rn1 ?? 0, 1), pty: c.pty || "" }, basis: `초단기실황 ${c.time.slice(0, 16)}${f ? " vs ASOS 같은 시기 비 온 시간" : ""}`, asOf: c.time.slice(0, 16), lifeSlot: true, chart: f ? distChart(f, { metric: "rn", unit: "mm", value: c.rn1, label: `${c.hour}시 1시간 강수(비 온 시간끼리)` }) : null, scene: { kind: c.pty && /눈/.test(c.pty) ? "snow" : "rain", source: "obs", time: c.time } });
   return res(true, state, cand);
 }
 function S01(ctx) {
@@ -317,7 +335,7 @@ function S01(ctx) {
   const f = okRare ? distFacts(pos, { side: "hi" }) : null;
   const rareText = f ? ` 같은 시기 눈이 쌓인 날 ${f.N}개 중 이보다 많았던 날은 ${f.hiPct}%예요.` : " 같은 시기 눈 쌓인 날 표본이 적어 많고 적음은 말하지 않아요.";
   const facts = { cm: v, lastWord: dayWord(L, ctx.ymd), lastDate: L, rareText };
-  return res(true, "snow", make(ctx, "S01", `${ctx.sid}|S01|${L}`, facts, { topic: "precipitation", lifeDecision: "snow", path: f && f.U >= 0.3 ? "stat" : "life", kind: "관측", U: f?.U ?? null, A: LV.day, T: timeValue({ endW: `${L} 23:59`, nowW: ctx.nowW }), samples: f?.N ?? 0, minSamples: R.minPosSamples, material: { cm: roundTo(v, 1) }, basis: "ASOS 공식 일자료 최심신적설" }));
+  return res(true, "snow", make(ctx, "S01", `${ctx.sid}|S01|${L}`, facts, { topic: "precipitation", lifeDecision: "snow", path: f && f.U >= 0.3 ? "stat" : "life", kind: "관측", U: f?.U ?? null, A: LV.day, T: timeValue({ endW: `${L} 23:59`, nowW: ctx.nowW }), samples: f?.N ?? 0, minSamples: R.minPosSamples, material: { cm: roundTo(v, 1) }, basis: "ASOS 공식 일자료 최심신적설", scene: { kind: "snow", source: "obs", time: `${L} 23:59` } }));
 }
 const SKY_CLASS = (s) => (s === "맑음" ? "clear" : s === "흐림" ? "cloudy" : null);
 function C01(ctx) {
@@ -335,7 +353,7 @@ function C01(ctx) {
     const toSky = w[2].sky, fromSky = w[0].sky;
     const src = w[2].items?.sky || { source: w[2].source, base: w[2].base };
     const facts = { fromSky, toSky, fromHour: +w[0].time.slice(11, 13), toHour: th + 1, hourWord: `${th}시`, toWord: toSky === "흐림" ? "흐려져요" : "맑아져요", dayWord: dayWord(w[2].time.slice(0, 10), ctx.ymd), source: src.source, base: String(src.base || "").slice(5, 16) };
-    return res(true, toSky, make(ctx, "C01", `${ctx.sid}|C01|${w[2].time.slice(0, 13)}`, facts, { topic: "sky", path: "life", kind: "예보", U: null, A: LV.info, T: timeValue({ startW: w[2].time, nowW: ctx.nowW }), samples: 0, minSamples: 0, material: { to: toSky, at: slot2h(w[2].time) }, basis: `${src.source} ${String(src.base || "").slice(0, 16)} 발표 하늘상태` }));
+    return res(true, toSky, make(ctx, "C01", `${ctx.sid}|C01|${w[2].time.slice(0, 13)}`, facts, { topic: "sky", path: "life", kind: "예보", U: null, A: LV.info, T: timeValue({ startW: w[2].time, nowW: ctx.nowW }), samples: 0, minSamples: 0, material: { to: toSky, at: slot2h(w[2].time) }, basis: `${src.source} ${String(src.base || "").slice(0, 16)} 발표 하늘상태`, chart: { type: "sky", at: w[2].time, hours: fc.slice(Math.max(0, i - 2), i + 6).map((x) => ({ time: x.time, sky: x.sky ?? null, pty: x.pty ?? null })) }, scene: { kind: toSky === "흐림" ? "cloud" : "clear", source: "fcst", time: w[2].time } }));
   }
   return res(false, "전환 없음");
 }
@@ -346,13 +364,14 @@ function N01(ctx) {
   const by = new Map((ctx.series || []).map((h) => [h.time, h]));
   const vals = [];
   let t = start, kinds = new Set();
-  for (let i = 0; i < R.hours; i++) { const h = by.get(t); if (!h || !fin(h.ta)) return res(false, "밤 시간 자료 부족"); vals.push(h.ta); kinds.add(h.kind); t = wallAdd(t, 1); }
+  const nightPts = [];
+  for (let i = 0; i < R.hours; i++) { const h = by.get(t); if (!h || !fin(h.ta)) return res(false, "밤 시간 자료 부족"); vals.push(h.ta); kinds.add(h.kind); nightPts.push(pt(h)); t = wallAdd(t, 1); }
   const low = Math.min(...vals);
   if (!(low >= R.min)) return res(false, "조건 밖");
   const cmp = derivedCompare((dn) => { let m = Infinity; for (let k = 0; k < R.hours; k++) { const hh = R.fromHour + k; const v = hAt(ctx.hs, "ta", dn + Math.floor(hh / 24), hh % 24); if (!Number.isFinite(v)) return [NaN]; m = Math.min(m, v); } return [m]; }, ctx.ymd, low, { digits: 1 })[0];
   const f = cmp.p != null && cmp.samples >= MIN_SAMPLES_RANK ? distFacts(cmp, { side: "hi", observed: false }) : null;
   const facts = { th: R.min, low: r1(low), count: R.hours, fromWord: "오늘", toWord: "내일", rareText: f ? ` 같은 시기 밤 최저기온 ${f.N}개 중 이보다 높았던 밤은 ${f.hiPct}%예요.` : "" };
-  return res(true, "warm", make(ctx, "N01", `${ctx.sid}|N01|${ctx.ymd}`, facts, { topic: "temperature", lifeDecision: "sleep", path: "life", kind: kinds.has("obs") ? "혼합" : "예보", U: f?.U ?? null, A: LV.decision, T: timeValue({ startW: start, nowW: ctx.nowW }), samples: f?.N ?? 0, minSamples: 0, material: { low: roundTo(low, 1) }, basis: "실황·초단기·단기예보 정시 기온(추정)", lifeSlot: true }));
+  return res(true, "warm", make(ctx, "N01", `${ctx.sid}|N01|${ctx.ymd}`, facts, { topic: "temperature", lifeDecision: "sleep", path: "life", kind: kinds.has("obs") ? "혼합" : "예보", U: f?.U ?? null, A: LV.decision, T: timeValue({ startW: start, nowW: ctx.nowW }), samples: f?.N ?? 0, minSamples: 0, material: { low: roundTo(low, 1) }, basis: "실황·초단기·단기예보 정시 기온(추정)", lifeSlot: true, chart: { type: "night", threshold: R.min, unit: "℃", points: nightPts } }));
 }
 function T03(ctx) {
   const R = SR.T03;
@@ -383,7 +402,7 @@ function T03(ctx) {
   const up = dlt > 0;
   const kindText = h.kind === "obs" && e.kind === "obs" ? "실황" : h.kind === "obs" ? "실황→예보" : "예보";
   const facts = { ...f, from: h.ta, to: e.ta, fromHour: sh, toHour: +e.time.slice(11, 13), sd: `${up ? "+" : ""}${dlt}`, abs: Math.abs(dlt), dirWord: up ? "올라" : "내려가", dirShort: up ? "오름" : "내림", dirAdvice: up ? "겉옷 벗기 좋게" : "겉옷 챙기세요", whenWord: `${dayWord(sDate, ctx.ymd)} ${sh}시부터`, kindText, sideText: up ? "더 크게 오른 경우" : "더 크게 내린 경우", sidePct: up ? f.hiPct : f.loPct, rangeNote: "" };
-  return res(true, up ? "up" : "down", make(ctx, "T03", `${ctx.sid}|T03|${h.time.slice(0, 13)}|${up ? "up" : "down"}`, facts, { topic: "temperature", lifeDecision: "sudden-change", path: "stat", minU: R.minU, kind: kindText === "실황" ? "관측" : kindText === "예보" ? "예보" : "혼합", U: f.U, A: LV.decision, T: timeValue({ startW: h.time, endW: e.time, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { at: slot2h(h.time), d: roundTo(dlt, 1) }, basis: "정시 기온(실황·예보) vs ASOS 같은 시기 같은 시작 시각 3시간 변화", lifeSlot: true }));
+  return res(true, up ? "up" : "down", make(ctx, "T03", `${ctx.sid}|T03|${h.time.slice(0, 13)}|${up ? "up" : "down"}`, facts, { topic: "temperature", lifeDecision: "sudden-change", path: "stat", minU: R.minU, kind: kindText === "실황" ? "관측" : kindText === "예보" ? "예보" : "혼합", U: f.U, A: LV.decision, T: timeValue({ startW: h.time, endW: e.time, nowW: ctx.nowW }), samples: f.N, minSamples: MIN_SAMPLES_RANK, material: { at: slot2h(h.time), d: roundTo(dlt, 1) }, basis: "정시 기온(실황·예보) vs ASOS 같은 시기 같은 시작 시각 3시간 변화", lifeSlot: true, chart: { type: "line", unit: "℃", hl: [h.time, e.time], d: dlt, usual: f.mean, points: s.filter((x) => x.time >= from && x.time <= to).map(pt) } }));
 }
 // 다음 출퇴근 구간(끝나지 않은 가장 가까운 것). 구간 [a시, b시] 와 예보 항목 구간(intervalStart~End)이 겹치는 정시
 export function nextCommute(nowW, R = SR.L01) {
@@ -418,7 +437,7 @@ function L01(ctx) {
   const hourRange = (h) => { const iv = elementInterval(h.time, "pty"); return `${+iv.intervalStart.slice(11, 13)}~${+iv.intervalEnd.slice(11, 13)}시`; };
   const ptys = [...new Set(ptyH.map((h) => h.pty))];
   const facts = { state, legWord: win.leg === "am" ? "출근길" : "퇴근길", whenWord: dayWord(win.date, ctx.ymd), span: `${win.a}~${win.b}시`, hoursText: ptyH.map(hourRange).join("·"), ptyList: ptys.join("·"), ptyWord: ptys.some((p) => /눈/.test(p)) ? "눈·비" : "비", popMax, popHigh: R.popHigh, popText: popMax != null ? ` 강수확률 최고 ${popMax}%.` : "", source: src.source, base: String(src.base || "").slice(5, 16) };
-  return res(true, state, make(ctx, "L01", `${ctx.sid}|rain|${win.date}|${win.leg}`, facts, { key: `L01-${win.leg}`, topic: "precipitation", lifeDecision: "umbrella", mergeGroup: "rain", path: "life", kind: "예보", U: null, A: LV.decision, T: timeValue({ startW: win.startW, endW: win.endW, nowW: ctx.nowW }), samples: 0, minSamples: 0, material: { leg: win.leg, date: win.date, state, pop: roundTo(popMax, 20), pty: ptys.join("") }, basis: `${src.source} ${String(src.base || "").slice(0, 16)} 발표`, lifeSlot: true, window: win }));
+  return res(true, state, make(ctx, "L01", `${ctx.sid}|rain|${win.date}|${win.leg}`, facts, { key: `L01-${win.leg}`, topic: "precipitation", lifeDecision: "umbrella", mergeGroup: "rain", path: "life", kind: "예보", U: null, A: LV.decision, T: timeValue({ startW: win.startW, endW: win.endW, nowW: ctx.nowW }), samples: 0, minSamples: 0, material: { leg: win.leg, date: win.date, state, pop: roundTo(popMax, 20), pty: ptys.join("") }, basis: `${src.source} ${String(src.base || "").slice(0, 16)} 발표`, lifeSlot: true, window: win, chart: { type: "commute", leg: win.leg, date: win.date, a: win.a, b: win.b, startW: win.startW, endW: win.endW, popHigh: R.popHigh, hours: fc.filter((h) => h.time >= wallAdd(win.startW, -2) && h.time <= wallAdd(win.endW, 3)).map((h) => ({ time: h.time, ...elementInterval(h.time, "pty"), pty: h.pty ?? null, pop: fin(h.pop) ? h.pop : null, overlap: overlapsCommute(h.time, "pty", win) })) }, scene: { kind: state === "pty" ? (ptys.some((p) => /눈/.test(p)) ? "snow" : "rain") : "cloud", source: "fcst", time: ref.time } }));
 }
 
 export const CATALOG = { H01, W01, T01, T02, R01, R02, R03, R04, S01, C01, N01, T03, L01 };

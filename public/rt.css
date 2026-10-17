@@ -239,3 +239,35 @@
 .rts-how { margin-top:6px; } .rts-how summary { font-size:12.5px; color:var(--muted, #667); cursor:pointer; }
 .rts-rel { margin:6px 0 0; padding-left:18px; font-size:13px; } .rts-rel small { color:var(--muted, #667); }
 .rts-explore { border:1px dashed var(--line); border-radius:14px; padding:12px 14px !important; margin-top:8px; background:#fbfcff; }
+/* astra 3단계: 작은 그래프(rt-story-visuals.js)·공용 날씨 그림(rt-weather-art.js) */
+.vz { margin:8px 0 0; } .vz-svg { display:block; width:100%; height:auto; max-width:520px; overflow:visible; font-variant-numeric:tabular-nums; }
+.vz-cap { display:flex; flex-wrap:wrap; gap:2px 10px; margin-top:4px; font-size:11.5px; color:var(--muted); line-height:1.45; }
+.vz-key, .vz-lg { display:inline-flex; align-items:center; gap:4px; } .vz-lgs { display:contents; }
+.vz-key i { display:inline-block; width:12px; height:10px; border-radius:2px; }
+.vz-key i.k-band { background:rgba(156,196,255,.55); border:1px solid #4d79b8; } .vz-key i.k-mean { width:2px; height:12px; background:#5e7090; border-radius:0; }
+.vz-key i.k-dot { width:10px; height:10px; border-radius:50%; background:#0d1b3d; } .vz-key i.k-dot.fc { background:#fff; border:2px dashed #026ef8; }
+.vz-key i.k-mean2 { background:#b9c6d8; height:8px; border-radius:4px; } .vz-key i.k-wet { background:#2f6fd6; } .vz-key i.k-wind { background:#5e7090; } .vz-key i.k-seg { background:#fff4d6; border:1px solid #ecd393; }
+.vz-run { color:#c0262d; font-weight:700; font-size:10px; }
+.rts-viz { min-height:64px; margin-top:6px; }
+.rt-story.is-lead { box-shadow:inset 3px 0 0 var(--pri,#026ef8); }
+.vz-skyrow { display:flex; gap:4px; overflow-x:auto; padding-bottom:2px; }
+.vz-skyc { flex:0 0 auto; min-width:44px; display:flex; flex-direction:column; align-items:center; gap:1px; padding:4px 2px; border-radius:10px; background:var(--soft,#f3f6fb); border:2px solid transparent; font-size:11px; }
+.vz-skyc.at { border-color:#c98a00; } .vz-skyc small { font-size:10px; color:var(--muted); } .vz-skyc.miss { background:repeating-linear-gradient(45deg,#fff 0 3px,#dfe5ee 3px 5px); }
+.vz-hx { display:block; width:24px; height:24px; }
+.vz-picks { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.vz-pick { font:inherit; font-size:12.5px; padding:5px 10px; border-radius:999px; border:1px solid var(--line,#d5deea); background:#fff; color:var(--fg); cursor:pointer; min-height:32px; }
+.vz-pick[aria-pressed="true"] { background:#0d1b3d; border-color:#0d1b3d; color:#fff; font-weight:700; }
+.rh-meter2 { margin-top:10px; } .rh-meter2 .vz { margin-top:0; } .rh-ends2 { justify-content:center; margin:2px 0 0; }
+.rh-meter2.is-lead, .rh-storyviz.is-lead { border-left:3px solid var(--pri,#026ef8); padding-left:8px; }
+.rh-lk { display:inline-block; font-size:11.5px; color:var(--pri,#026ef8); font-weight:600; margin:2px 0 0; }
+.rh-storyviz { margin-top:4px; } .rh-sky svg { vertical-align:middle; margin-right:2px; } .rh-sky { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
+.rh-chip i svg { display:block; }
+.rh-day { margin-top:8px; }
+.vz-segz { cursor:pointer; }
+.vz-segs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin-top:8px; }
+@media (min-width:700px) { .vz-segs { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+.vz-seg { font:inherit; text-align:left; display:flex; flex-direction:column; gap:2px; padding:8px 10px; border-radius:12px; border:1px solid var(--line,#d5deea); background:#fff; color:var(--fg); cursor:pointer; min-height:44px; }
+.vz-seg.on { border:2px solid #c98a00; background:#fffaf0; } .vz-segh small { color:var(--muted); font-size:11px; } .vz-segw { font-weight:700; font-size:13.5px; line-height:1.3; }
+.vz-seg small { font-size:11.5px; color:var(--muted); } .vz-seg .vz-segi { color:#8a4b00; font-weight:600; }
+.vz-segp { margin-top:8px; padding:8px 10px; border-radius:10px; background:var(--soft,#f3f6fb); font-size:13px; } .vz-segp ul { margin:4px 0; padding-left:18px; } .vz-segp li { margin:2px 0; }
+@media (prefers-reduced-motion: reduce) { .vz *, .fv-art *, .wa-art * { animation:none !important; transition:none !important; } }

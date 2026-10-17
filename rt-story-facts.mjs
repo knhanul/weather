@@ -110,8 +110,8 @@ export function toStory(c, { station, asOf }) {
     },
     templateId: c.templateId || `${ruleId}.base.v1`,
     body: c.text,
-    scene: null,
-    chart: null,
+    scene: c.scene ?? null,
+    chart: c.chart ?? null,
     selection: { score: c.score ?? null, reasons: c.reasons || [] },
   };
 }

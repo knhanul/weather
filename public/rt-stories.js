@@ -19,7 +19,7 @@
   // 평범한 날(emptyReason=normal)의 탐색 카드 하나: 오늘과 닮은 날 / 이맘때의 하루(서버가 고름 — 숫자는 서버 값 그대로)
   const exploreHtml = (x) => (x ? `<article class="rt-story rts-explore" data-explore="${esc(x.type)}"><h3><span class="rt-badge ok">${x.type === "similar" ? "과거" : "이맘때"}</span> ${esc(x.title)}</h3><p>${esc(x.text)}</p><p class="rt-note">${x.more ? `${esc(x.more)} · ` : ""}${esc(x.basis || "")}</p></article>` : "");
   // 이야기 카드: 제목(쉬운 말) → 본문(숫자) → 묶인 강수 항목 → 접힘(방법·근거)
-  const storyCard = (s, i, n) => `<article class="rt-story" data-rule="${esc(s.ruleId || "")}"><small class="rts-n">${i + 1}/${n}</small><h3><span class="rt-badge ${s.kind === "관측" ? "ok" : "fc"}">${esc(s.kind)}</span> ${esc(s.title)}</h3><p>${esc(s.text)}</p>${(s.related || []).length ? `<ul class="rts-rel">${s.related.map((r) => `<li>${esc(r.title)}<small> — ${esc(r.text)}</small></li>`).join("")}</ul>` : ""}<details class="rts-how"><summary>어떻게 계산했나요</summary>${s.method ? `<p class="rt-note">${esc(s.method)}</p>` : ""}<p class="rt-note">근거: ${esc(s.basis)}</p></details></article>`;
+  const storyCard = (s, i, n) => `<article class="rt-story${i === 0 ? " is-lead" : ""}" data-rule="${esc(s.ruleId || "")}"><small class="rts-n">${i + 1}/${n}</small><h3><span class="rt-badge ${s.kind === "관측" ? "ok" : "fc"}">${esc(s.kind)}</span> ${esc(s.title)}</h3><p>${esc(s.text)}</p>${window.RTViz && s.chart ? window.RTViz.slot(s.chart) : ""}${(s.related || []).length ? `<ul class="rts-rel">${s.related.map((r) => `<li>${esc(r.title)}<small> — ${esc(r.text)}</small></li>`).join("")}</ul>` : ""}<details class="rts-how"><summary>어떻게 계산했나요</summary>${s.method ? `<p class="rt-note">${esc(s.method)}</p>` : ""}<p class="rt-note">근거: ${esc(s.basis)}</p></details></article>`;
   function storiesHtml(d) {
     // 예전 응답(emptyReason 없음)은 예전처럼 normal 로 봄
     if (!d.stories.length) {
@@ -35,7 +35,7 @@
     return `<p class="rts-lead">${r.day === "yesterday" ? "어제" : "오늘"}의 기온 변화와 가장 비슷했던 과거의 날은 <b>${ymdK(b.date)}</b>입니다.</p><ol class="rts-sim">${r.top.map((x) => `<li><b>${esc(x.date)}</b> 점수 ${x.score} <small>RMSE ${x.rmse}℃${x.dMax != null ? ` · 최고 ${x.max}℃(${x.dMax > 0 ? "+" : ""}${x.dMax}) · 최저 ${x.min}℃(${x.dMin > 0 ? "+" : ""}${x.dMin})${x.rain != null ? ` · 강수 ${x.rain}mm${x.rainMismatch ? "(강수 여부 다름)" : ""}` : ""}${x.dHm != null ? ` · 습도 ${x.dHm > 0 ? "+" : ""}${x.dHm}%` : ""}` : ""}</small></li>`).join("")}</ol>`;
   }
   function simHtml(t, y) {
-    const part = (r, title) => r.unavailable ? `<div class="rts-col"><h3>${title} <span class="rt-badge fc">자료 부족</span></h3><p class="rt-ins">아직 관측 자료 없음 — ${esc(r.message)}</p></div>` : `<div class="rts-col"><h3>${title} <span class="rt-badge ${r.partial ? "fc" : "ok"}">${esc(r.kind || "")}</span></h3>${r.stale ? `<p class="rt-ins">실황이 늦어지고 있어 최신 시각이 빠졌을 수 있습니다</p>` : ""}${simList(r)}${r.termsNote ? `<p class="rt-ins">${esc(r.termsNote)}</p>` : ""}<p class="rt-note">${esc(r.formula)}. 후보: 1990년~, 해마다 같은 월일 ±${r.window}일 ${r.considered ?? 0}일 중 자료 부족 ${r.excluded ?? 0}일 제외. ${esc(r.source || "")}</p></div>`;
+    const part = (r, title) => r.unavailable ? `<div class="rts-col"><h3>${title} <span class="rt-badge fc">자료 부족</span></h3><p class="rt-ins">아직 관측 자료 없음 — ${esc(r.message)}</p></div>` : `<div class="rts-col"><h3>${title} <span class="rt-badge ${r.partial ? "fc" : "ok"}">${esc(r.kind || "")}</span></h3>${r.stale ? `<p class="rt-ins">실황이 늦어지고 있어 최신 시각이 빠졌을 수 있습니다</p>` : ""}${simList(r)}${window.RTViz ? window.RTViz.simSlot(r) : ""}${r.termsNote ? `<p class="rt-ins">${esc(r.termsNote)}</p>` : ""}<p class="rt-note">${esc(r.formula)}. 후보: 1990년~, 해마다 같은 월일 ±${r.window}일 ${r.considered ?? 0}일 중 자료 부족 ${r.excluded ?? 0}일 제외. ${esc(r.source || "")}</p></div>`;
     return `<section class="card rts-simcard" aria-label="과거 유사일"><h2>과거 유사일</h2><div class="rts-2">${part(t, "오늘(진행 중)")}${part(y, "어제(하루 전체)")}</div></section>`;
   }
   async function fill() {
@@ -47,7 +47,7 @@
     const G = window.RTGet || get;
     // 이야기: 히어로 한 줄에 쓰므로 바로. 과거 유사일(오늘·어제): 그 칸이 보일 때
     if (!box.innerHTML.trim()) box.innerHTML = emptyHtml("loading");
-    G(`/api/rt/stories?station=${st}`).then((v) => { if ($("rtsBox") !== box) return; box.innerHTML = storiesHtml(v); document.dispatchEvent(new CustomEvent("rt:stories", { detail: v })); }).catch((e) => { if ($("rtsBox") === box) box.innerHTML = emptyHtml("error", { failedParts: [String(e?.message || "응답 없음").slice(0, 60)] }); });
+    G(`/api/rt/stories?station=${st}`).then((v) => { if ($("rtsBox") !== box) return; box.innerHTML = storiesHtml(v); if (window.RTViz) window.RTViz.mount(box); document.dispatchEvent(new CustomEvent("rt:stories", { detail: v })); }).catch((e) => { if ($("rtsBox") === box) box.innerHTML = emptyHtml("error", { failedParts: [String(e?.message || "응답 없음").slice(0, 60)] }); });
     sim.innerHTML = `<section class="card"><p class="rt-load">과거 유사일 찾는 중…</p></section>`;
     const run = async () => {
       const [t, y] = await Promise.allSettled([G(`/api/rt/similar?station=${st}&day=today`), G(`/api/rt/similar?station=${st}&day=yesterday`)]);

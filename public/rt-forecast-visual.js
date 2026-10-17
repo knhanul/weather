@@ -10,40 +10,8 @@
   const hh = (t) => +t.slice(11, 13);
   const night = (h) => h < 6 || h >= 18;
   const dayWord = (ymd, today) => { const n = Math.round((Date.parse(ymd) - Date.parse(today)) / 864e5); return n === 0 ? "오늘" : n === 1 ? "내일" : n === 2 ? "모레" : dlab(ymd); };
-  // 날씨 종류: 강수형태 > 하늘상태(단기) / 중기 wf 글자
-  function kind(sky, pty) {
-    const t = pty && pty !== "없음" ? pty : sky || "";
-    if (!t) return null;
-    if (/비\/눈|눈\/비|진눈/.test(t)) return "sleet";
-    if (/눈/.test(t)) return "snow";
-    if (/소나기/.test(t)) return "shower";
-    if (/비|빗방울/.test(t)) return "rain";
-    if (/흐/.test(t)) return "cloud";
-    if (/구름/.test(t)) return "partly";
-    if (/맑/.test(t)) return "clear";
-    return null;
-  }
-  const wfKind = (x) => kind(x.sky || (x.wf || "").split(" / ").pop(), x.wf && /비|눈|소나기/.test(x.wf) ? x.wf.split(" / ").find((s) => /비|눈|소나기/.test(s)) : null);
-  // SVG 날씨 그림(크기 s, 중심 0,0 기준 그룹)
-  const SUN = (r) => `<circle r="${r}" fill="#ffc531"/>${[...Array(8)].map((_, i) => { const a = (i * Math.PI) / 4; return `<line x1="${(Math.cos(a) * r * 1.35).toFixed(1)}" y1="${(Math.sin(a) * r * 1.35).toFixed(1)}" x2="${(Math.cos(a) * r * 1.75).toFixed(1)}" y2="${(Math.sin(a) * r * 1.75).toFixed(1)}" stroke="#ffb100" stroke-width="${(r / 4).toFixed(1)}" stroke-linecap="round"/>`; }).join("")}`;
-  const MOON = (r) => `<path d="M${r * 0.3},${-r} a${r},${r} 0 1,0 ${r * 0.7},${r * 1.55} a${r * 0.85},${r * 0.85} 0 1,1 ${-r * 0.7},${-r * 1.55}z" fill="#f4e7a1"/>`;
-  const CLOUD = (s, c = "#fff", o = 1) => `<path d="M${-s},${s * 0.45} h${s * 2} a${s * 0.5},${s * 0.5} 0 0,0 0,${-s} a${s * 0.6},${s * 0.6} 0 0,0 ${-s * 0.75},${-s * 0.45} a${s * 0.75},${s * 0.75} 0 0,0 ${-s * 1.3},${s * 0.2} a${s * 0.55},${s * 0.55} 0 0,0 ${s * 0.05},${s * 1.25}z" fill="${c}" opacity="${o}" stroke="#9fb3cc" stroke-width="${(s / 14).toFixed(2)}"/>`;
-  const DROPS = (s, n = 3, c = "#2f7cf6") => [...Array(n)].map((_, i) => `<line x1="${(-s * 0.6 + i * s * 0.6).toFixed(1)}" y1="${s * 0.7}" x2="${(-s * 0.75 + i * s * 0.6).toFixed(1)}" y2="${s * 1.1}" stroke="${c}" stroke-width="${(s / 7).toFixed(1)}" stroke-linecap="round"/>`).join("");
-  const FLAKES = (s, n = 3) => [...Array(n)].map((_, i) => `<text x="${(-s * 0.6 + i * s * 0.6).toFixed(1)}" y="${s * 1.15}" font-size="${(s * 0.55).toFixed(1)}" text-anchor="middle" fill="#6aa6ff">✱</text>`).join("");
-  function icon(k, isNight, s = 12) {
-    const body = isNight ? MOON(s * 0.75) : SUN(s * 0.62);
-    switch (k) {
-      case "clear": return body;
-      case "partly": return `<g transform="translate(${-s * 0.35},${-s * 0.35})">${body}</g><g transform="translate(${s * 0.25},${s * 0.2}) scale(.8)">${CLOUD(s)}</g>`;
-      case "cloud": return `<g transform="translate(${s * 0.25},${-s * 0.3}) scale(.7)">${CLOUD(s, "#dfe7f2")}</g>${CLOUD(s, "#eef2f7")}`;
-      case "rain": return `${CLOUD(s, "#d6dee9")}${DROPS(s)}`;
-      case "shower": return `<g transform="translate(${-s * 0.4},${-s * 0.4}) scale(.7)">${body}</g>${CLOUD(s, "#e3e9f1")}${DROPS(s, 2)}`;
-      case "snow": return `${CLOUD(s, "#e6ecf4")}${FLAKES(s)}`;
-      case "sleet": return `${CLOUD(s, "#d6dee9")}${DROPS(s, 2)}<text x="${s * 0.55}" y="${s * 1.15}" font-size="${(s * 0.55).toFixed(1)}" text-anchor="middle" fill="#6aa6ff">✱</text>`;
-      default: return `<text y="${s * 0.35}" font-size="${s}" text-anchor="middle" fill="#8a9bb5">–</text>`;
-    }
-  }
-  const iconSvg = (k, n, px = 28, label = "") => `<svg viewBox="-16 -16 32 34" width="${px}" height="${px}" style="width:${px}px;height:${px}px" role="img" aria-label="${esc(label || "자료 없음")}">${icon(k, n, 12)}</svg>`;
+  // 날씨 그림은 공용 모듈(rt-weather-art.js)에서 — 오늘 날씨 화면과 같은 그림
+  const { kind, wfKind, icon, iconSvg } = window.RTArt;
 
   // 1) 히어로: 지금부터 오늘 밤까지
   function hero(d) {
@@ -58,11 +26,8 @@
     const mm = span.reduce((s, x) => s + (x.pcpMm > 0 ? x.pcpMm : 0), 0), lt1 = span.filter((x) => x.pcpMm == null && x.pcp && x.pcp !== "강수 없음").length;
     const noPcp = span.filter((x) => x.pcp == null).length; // 강수량 칸이 아예 없는 시각(없음 ≠ 0)
     const k = kind(h0.sky, h0.pty), n = night(h0h);
-    const bg = k === "rain" || k === "shower" || k === "sleet" ? ["#5b6f8c", "#9aaac0"] : k === "snow" ? ["#8ea4c4", "#dbe5f2"] : k === "cloud" ? (n ? ["#2b3954", "#56688a"] : ["#8fa3bf", "#cfdaea"]) : n ? ["#0d1b3d", "#2c4a86"] : ["#3d8cff", "#a9d2ff"];
-    const dark = n || k === "rain" || k === "shower" || k === "sleet" || (k === "cloud" && n);
-    const stars = n && (k === "clear" || k === "partly") ? [...Array(14)].map((_, i) => `<circle cx="${(i * 53) % 360 + 10}" cy="${(i * 37) % 70 + 8}" r="${i % 3 ? 0.9 : 1.4}" fill="#fff" opacity=".8"/>`).join("") : "";
-    const rainBg = k === "rain" || k === "shower" || k === "sleet" ? [...Array(26)].map((_, i) => `<line x1="${(i * 29) % 380}" y1="${(i * 17) % 120}" x2="${(i * 29) % 380 - 5}" y2="${(i * 17) % 120 + 14}" stroke="#dbe7ff" stroke-width="1.2" opacity=".55"/>`).join("") : "";
-    const art = `<svg class="fv-art" viewBox="0 0 360 160" preserveAspectRatio="xMaxYMin slice" aria-hidden="true"><defs><linearGradient id="fvSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${bg[0]}"/><stop offset="1" stop-color="${bg[1]}"/></linearGradient></defs><rect width="360" height="160" fill="url(#fvSky)"/>${stars}${rainBg}<g transform="translate(285,62) scale(3.1)">${icon(k, n, 12)}</g></svg>`;
+    const { dark } = window.RTArt.sceneBg(k, n);
+    const art = window.RTArt.sceneSvg(k, n, { cls: "fv-art", id: "fvSky" });
     const strip = span.filter((x, i) => i % (span.length > 10 ? 2 : 1) === 0).slice(0, 9).map((x) => `<div class="fv-hc"><span>${hh(x.time)}시</span>${iconSvg(kind(x.sky, x.pty), night(hh(x.time)), 26, x.pty && x.pty !== "없음" ? x.pty : x.sky)}<b>${x.ta ?? "–"}°</b><small>${x.pop == null ? "" : `☂${x.pop}%`}</small></div>`).join("");
     const rel = d.releases || {};
     return `<section class="card fv-hero${dark ? " dark" : ""}" aria-label="지금부터 오늘 밤까지">${art}<div class="fv-hin">

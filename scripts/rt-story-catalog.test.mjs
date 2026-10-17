@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHourlyStore, addHourlyRows, buildDailyStore } from "../stats-engine.mjs";
-import { CATALOG, runCatalog, nextCommute, overlapsCommute, rainRuns, TPL, METHOD, Uhi, Ulo, U2 } from "../rt-story-catalog.mjs";
+import { CATALOG, runCatalog, nextCommute, overlapsCommute, rainRuns, rainCalendar, TPL, METHOD, Uhi, Ulo, U2 } from "../rt-story-catalog.mjs";
 import { selectV2, createMemoryHistory, materialHash, timeValue, freshAndRepeat } from "../rt-story-select.mjs";
 import { derivedCompare, firstHotSeasons, firstHotDay } from "../rt-baseline.mjs";
 import { hourlyForecast, elementInterval, ELEMENT_TIME } from "../rt-forecast.mjs";
@@ -279,4 +279,31 @@ test("되돌려 보기 ctx: 저장된 예보가 없으면 ASOS 대체(하늘상�
   assert.ok(ctx.series.some((h) => h.kind === "fcst" && h.sky === null));
   const r = runCatalog(ctx);
   assert.equal(Object.keys(r.diag).length, 13);
+});
+
+test("3단계 그래프 자료(story.chart): 계산값만 싣고, 결측·아직 안 온 날을 따로 표시", () => {
+  const w = world({ dmod: (y, d, row) => { if (y === 2026 && d >= 5) row.precipitation = 0; if (y === 2026 && d === 2) { row.max_temperature = null; row.min_temperature = null; row.avg_temperature = null; row.precipitation = null; } } });
+  const h = CATALOG.H01(base(w, { current: cur({ hm: 20 }) })).cand.chart;
+  assert.equal(h.type, "dist"); assert.equal(h.value, 20); assert.ok(h.p10 <= h.mean && h.mean <= h.p90); assert.ok(h.N >= 60);
+  const r = CATALOG.R01(base(w)).cand.chart;
+  assert.equal(r.type, "calendar"); assert.equal(r.days.length, 30);
+  assert.equal(r.days.at(-1).state, "pending"); // 오늘(10/17)
+  assert.equal(r.days.find((d) => d.date === "2026-10-02").state, "missing");
+  assert.equal(r.days.find((d) => d.date === "2026-10-10").state, "dry");
+  assert.ok(r.days.some((d) => d.state === "wet"));
+  assert.equal(r.from, "2026-10-04"); assert.equal(r.to, "2026-10-16");
+  const cal = rainCalendar(w.store, "2026-10-17", 3);
+  assert.deepEqual(cal.map((d) => d.state), ["dry", "dry", "pending"]);
+  const t01 = CATALOG.T01(base(w, { days: [{ date: "2026-10-18", max: 25, min: 5 }] })).cand.chart;
+  assert.equal(t01.type, "range"); assert.equal(t01.max, 25); assert.equal(t01.min, 5); assert.ok(Number.isFinite(t01.meanMax) && Number.isFinite(t01.meanMin));
+  const n = CATALOG.N01(base(w, { series: hoursFrom("2026-10-17 15:00:00", 20, () => ({ ta: 26 })) })).cand.chart;
+  assert.equal(n.type, "night"); assert.equal(n.threshold, 25); assert.ok(n.points.every((p) => p.ta === 26 && p.kind));
+  const l = CATALOG.L01(base(w, { nowW: "2026-10-17 21:10", hour: 21, series: hoursFrom("2026-10-17 22:00:00", 14, (t) => (t === "2026-10-18 09:00:00" ? { pty: "비", pop: 70 } : {})) })).cand;
+  assert.equal(l.chart.type, "commute"); assert.ok(l.chart.hours.some((x) => x.overlap && x.pty === "비")); assert.equal(l.scene.kind, "rain");
+  const sky = CATALOG.C01(base(w, { nowW: "2026-10-17 07:10", hour: 7, series: hoursFrom("2026-10-17 08:00:00", 10, (t, i) => ({ sky: i < 3 ? "맑음" : "흐림" })) })).cand;
+  assert.equal(sky.chart.type, "sky"); assert.equal(sky.chart.at, "2026-10-17 11:00:00");
+  const drop = CATALOG.T03(base(w, { series: hoursFrom("2026-10-18 08:00:00", 6, (t, i) => ({ ta: i < 1 ? 18 : 10 })) })).cand.chart;
+  assert.equal(drop.type, "line"); assert.deepEqual(drop.hl, ["2026-10-18 08:00:00", "2026-10-18 11:00:00"]);
+  // 표본 없는 R04(비 온 시간 분포 없음)는 그래프 없음 — 0으로 그리지 않음
+  assert.equal(CATALOG.R04(base(world({ mod: (y, d, h, row) => { row.precipitation = 0; } }), { current: cur({ rn1: 2 }) })).cand.chart, null);
 });
