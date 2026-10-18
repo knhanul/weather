@@ -33,6 +33,7 @@
     metric: "avg_temp",
     period: null,
     from: 1990,
+    yFrom: null, // 연도별 비교 시작 연도(일자료 첫 온전한 해 — 기본) · 다른 화면(지역별·생활·기록)은 from(1990) 그대로
     to: null,
     mode: "trend",
     years: null,
@@ -79,6 +80,15 @@
     return s ? `${s.station_id} ${s.station_name}` : String(id);
   };
   const asOfYear = () => (meta && meta.asOf ? +meta.asOf.slice(0, 4) : new Date().getFullYear());
+  // 연도별 비교에서 고를 수 있는 첫해 = 그 지점 공식 일자료의 첫 '온전한' 해(1월 1일부터 있는 해). 모르면 1990.
+  // 연도별 비교의 지표는 모두 일자료라 시간자료(1990~) 제약이 없다.
+  function dailyFirstYear(id) {
+    const s = stationOf(id || state.station);
+    const fd = s && s.firstDate;
+    if (!fd || !/^\d{4}-\d{2}-\d{2}$/.test(fd)) return 1990;
+    const y = +fd.slice(0, 4);
+    return fd.slice(5) === "01-01" ? y : y + 1;
+  }
   // 기본 달 = 지금 달(Asia/Seoul). 진행 중인 달은 올해 값을 '진행 중'으로 따로 두고, 비교는 다 끝난 해끼리(엔진 규칙 그대로)
   const curMonth = () => (window.NWDefaults ? NWDefaults.seoulMonth() : new Date().getMonth() + 1);
   const lastDay = (m) => [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
@@ -104,10 +114,17 @@
     if (!state.period) state.period = defaultPeriod();
     const f = Number(q.get("from"));
     const t = Number(q.get("to"));
-    if (Number.isInteger(f) && f >= 1900 && f <= asOfYear()) state.from = f;
+    const fOk = q.has("from") && Number.isInteger(f) && f >= 1900 && f <= asOfYear();
     if (Number.isInteger(t) && t >= 1900 && t <= asOfYear()) state.to = t;
     if (!state.to) state.to = asOfYear();
-    if (state.from > state.to) state.from = state.to;
+    if (tab === "yearly") {
+      if (fOk) state.yFrom = f;
+      if (!state.yFrom) state.yFrom = dailyFirstYear();
+      if (state.yFrom > state.to) state.yFrom = state.to;
+    } else {
+      if (fOk) state.from = f;
+      if (state.from > state.to) state.from = state.to;
+    }
     if (tab === "yearly") {
       state.mode = q.get("mode") === "overlay" ? "overlay" : "trend";
       const ys = (q.get("years") || "").split(",").map(Number).filter((y) => Number.isInteger(y) && y >= 1900 && y <= asOfYear());
@@ -126,7 +143,7 @@
     }
   }
   function yearlyQuery(extra = {}) {
-    const q = new URLSearchParams({ station: state.station, metric: state.metric, period: state.period, from: String(state.from), to: String(state.to) });
+    const q = new URLSearchParams({ station: state.station, metric: state.metric, period: state.period, from: String(state.yFrom || dailyFirstYear()), to: String(state.to) });
     for (const [k, v] of Object.entries(extra)) q.set(k, v);
     return q;
   }
@@ -160,7 +177,7 @@
       else a.removeAttribute("aria-current");
       if (!st) return;
       if (t === "overview") a.href = `#/stats/overview?station=${encodeURIComponent(st)}`;
-      if (t === "yearly") a.href = `#/stats/yearly?${new URLSearchParams({ station: st, metric: state.metric, period: state.period || defaultPeriod(), from: String(state.from), to: String(state.to || asOfYear()) })}`;
+      if (t === "yearly") a.href = `#/stats/yearly?${new URLSearchParams({ station: st, metric: state.metric, period: state.period || defaultPeriod(), from: String(state.yFrom || dailyFirstYear(st)), to: String(state.to || asOfYear()) })}`;
       if (t === "life") a.href = `#/stats/life?${new URLSearchParams({ view: life.view === "cards" ? "heat" : life.view, station: st })}`;
       if (t === "records") a.href = `#/stats/records?${new URLSearchParams({ view: "records", station: st })}`;
       if (t === "region" && state.rStations) a.href = `#/stats/region?${new URLSearchParams({ stations: state.rStations.join(","), view: state.rView })}`;
@@ -233,10 +250,11 @@
       .map(([g, label]) => `<optgroup label="${label}">${(meta?.metrics || []).filter((m) => m.group === g).map((m) => `<option value="${m.id}"${m.id === cur ? " selected" : ""}>${E(m.label)} (${E(m.unit)})</option>`).join("")}</optgroup>`)
       .join("")}</select>`;
   }
-  function yearSelects(prefix) {
+  // minYear: 연도별 비교 = 일자료 첫해(1970~), 그 밖(지역별·생활·기록) = 1990 그대로
+  function yearSelects(prefix, cur = state.from, minYear = 1990) {
     const ys = [];
-    for (let y = asOfYear(); y >= 1990; y--) ys.push([y, `${y}년`]);
-    return `<div><label>비교 연도</label><span class="sx-inline"><select id="${prefix}From" aria-label="시작 연도">${opts(ys.slice().reverse(), state.from)}</select><span class="tilde">~</span><select id="${prefix}To" aria-label="종료 연도">${opts(ys, state.to)}</select></span></div>`;
+    for (let y = asOfYear(); y >= minYear; y--) ys.push([y, `${y}년`]);
+    return `<div><label>비교 연도</label><span class="sx-inline"><select id="${prefix}From" aria-label="시작 연도">${opts(ys.slice().reverse(), cur)}</select><span class="tilde">~</span><select id="${prefix}To" aria-label="종료 연도">${opts(ys, state.to)}</select></span></div>`;
   }
   function rulesHtml(m, extra = []) {
     const lines = [...(m ? [`${m.label}: ${m.def}`] : []), ...extra, ...(meta?.rules || [])];
@@ -448,7 +466,7 @@
     const card = (c) => {
       const d = c.delta;
       const m = c.metricInfo;
-      const href = `#/stats/yearly?${new URLSearchParams({ station: st, metric: c.metric, period: c.period, from: "1990", to: String(+r.asOf.slice(0, 4)) })}`;
+      const href = `#/stats/yearly?${new URLSearchParams({ station: st, metric: c.metric, period: c.period, from: String(dailyFirstYear(st)), to: String(+r.asOf.slice(0, 4)) })}`;
       const val = d.available
         ? `<span class="v ${d.delta > 0 ? "up" : d.delta < 0 ? "down" : ""}">${signed(d.delta, m.unit)}</span><small>${E(c.periodLabel)} ${E(m.label)} · ${d.baseline.from}~${d.baseline.to}년 ${num(d.baseline.mean, 1)}${E(m.unit)} → ${d.recent.from}~${d.recent.to}년 ${num(d.recent.mean, 1)}${E(m.unit)}</small>`
         : `<span class="v na">비교할 자료가 부족합니다</span><small>${E(d.reason || "")}</small>`;
@@ -507,8 +525,8 @@
       state.mode === "overlay"
         ? `<div><label>겹쳐 볼 연도 (최대 4개)</label><span class="sx-yrs">${state.years
             .map((y, i) => `<span class="sx-yr" style="background:${COLORS[i % 4]}">${y}년<button type="button" data-rmyear="${y}" aria-label="${y}년 빼기">×</button></span>`)
-            .join("")}${state.years.length < 4 ? `<select id="yxYearPick" aria-label="추가할 연도">${opts(Array.from({ length: asOfYear() - 1989 }, (_, i) => asOfYear() - i).filter((y) => !state.years.includes(y)).map((y) => [y, `${y}년`]), "")}</select><button type="button" class="sec sm-btn" id="yxAddYear">추가</button>` : ""}</span></div>`
-        : yearSelects("yx");
+            .join("")}${state.years.length < 4 ? `<select id="yxYearPick" aria-label="추가할 연도">${opts(Array.from({ length: asOfYear() - dailyFirstYear() + 1 }, (_, i) => asOfYear() - i).filter((y) => !state.years.includes(y)).map((y) => [y, `${y}년`]), "")}</select><button type="button" class="sec sm-btn" id="yxAddYear">추가</button>` : ""}</span></div>`
+        : yearSelects("yx", state.yFrom, dailyFirstYear());
     $id("yxCtl").innerHTML = `
       <div><label for="yxSt">관측지점</label><select id="yxSt">${opts(st, state.station)}</select></div>
       <div><label for="yxMetric">통계 항목</label>${metricSelectHtml("yxMetric", state.metric)}</div>
@@ -517,12 +535,16 @@
       <div><label>보기</label><div class="seg"><button type="button" data-mode="trend" class="${state.mode === "trend" ? "on" : ""}">연도별 추이</button><button type="button" data-mode="overlay" class="${state.mode === "overlay" ? "on" : ""}">날짜별 겹쳐보기</button></div></div>`;
   }
   function onYearlyCtl(t) {
-    if (t.id === "yxSt") { state.station = t.value; if (window.NWStation) NWStation.manual(t.value); }
+    if (t.id === "yxSt") {
+      state.station = t.value;
+      if (window.NWStation) NWStation.manual(t.value);
+      if (state.yFrom < dailyFirstYear()) state.yFrom = dailyFirstYear();
+    }
     else if (t.id === "yxMetric") state.metric = t.value;
     else if (t.id === "yxFrom" || t.id === "yxTo") {
-      state.from = +$id("yxFrom").value;
+      state.yFrom = +$id("yxFrom").value;
       state.to = +$id("yxTo").value;
-      if (state.from > state.to) [state.from, state.to] = [state.to, state.from];
+      if (state.yFrom > state.to) [state.yFrom, state.to] = [state.to, state.yFrom];
     } else if (t.id === "yxYearPick") return;
     else if (t.dataset.pk) state.period = readPeriodPicker($id("yxCtl"));
     renderYearlyCtl();
@@ -1097,7 +1119,7 @@
     const card = (c) => {
       const d = c.delta;
       const m = c.metricInfo;
-      const href = `#/stats/yearly?${new URLSearchParams({ station: st, metric: c.metric, period: c.period, from: "1990", to: String(asOfYear()) })}`;
+      const href = `#/stats/yearly?${new URLSearchParams({ station: st, metric: c.metric, period: c.period, from: String(dailyFirstYear(st)), to: String(asOfYear()) })}`;
       const val = d.available
         ? `<span class="v ${d.delta > 0 ? "up" : d.delta < 0 ? "down" : ""}">${signed(d.delta, m.unit)}</span><small>${E(c.periodLabel)} · ${d.baseline.from}~${d.baseline.to}년 ${num(d.baseline.mean, 1)}${E(m.unit)} → ${d.recent.from}~${d.recent.to}년 ${num(d.recent.mean, 1)}${E(m.unit)}</small>`
         : `<span class="v na">비교할 자료가 부족합니다</span><small>${E(d.reason || "")}</small>`;

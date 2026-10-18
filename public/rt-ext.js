@@ -78,7 +78,7 @@
     const nowA = c?.values && c.freshness.state === "fresh" ? `${c.values.ta}℃ — 1990년 이후 같은 시기 평균보다 ${sg(c.compare.ta[0].diff)}` : "최신 실황이 없습니다";
     const wk = f.week?.anomaly?.[0]?.diff;
     return wrap(head("지금과 앞으로에 대한 질문") + `<div class="rtx-qs">
-      <a class="rtx-q" href="#/stats/yearly?station=${st}"><span class="rt-badge ok">과거</span><h3>예전보다 더워졌을까?</h3><p>연도별 비교에서 1990년부터의 변화를 봅니다 ›</p></a>
+      <a class="rtx-q" href="#/stats/yearly?station=${st}"><span class="rt-badge ok">과거</span><h3>예전보다 더워졌을까?</h3><p>연도별 비교에서 1970년부터 해마다의 변화를 봅니다 ›</p></a>
       <a class="rtx-q" href="#/today?station=${st}"><span class="rt-badge fc">현재</span><h3>지금은 평소보다 얼마나 더울까?</h3><p class="rtx-a"><b>${esc(nowA)}</b></p>${c?.compare?.ta ? cmpRow(c.compare.ta) : ""}</a>
       <a class="rtx-q" href="#/forecast?station=${st}"><span class="rt-badge fc">미래</span><h3>이번 주는 이맘때보다 더울까?</h3><p class="rtx-a"><b>${wk == null ? "비교 데이터 부족" : Math.abs(wk) < 1 ? "이맘때 평균과 비슷할 전망" : wk > 0 ? `이맘때 평균보다 ${sg(wk)} 더울 전망` : `이맘때 평균보다 ${sg(wk)} 쌀쌀할 전망`}</b></p>${f.week ? cmpRow(f.week.anomaly) : ""}<p class="rt-note">관측 ${f.week?.obsDays ?? 0}일 + 예보 ${f.week?.fcDays ?? 0}일</p></a></div>`);
   }
