@@ -1,5 +1,6 @@
 /* 날씨 이야기(날짜로 보는 날씨 · 날씨 배틀) — date-viz / date-weather / date-battle 전용 */
-#sday, #sbattle { display:grid; gap:14px; }
+/* 화면 보이기는 .page.on 이 정함(여기서 display 를 주면 다른 메뉴에서도 늘 보임) */
+#sday.on, #sbattle.on { display:grid; gap:14px; }
 #sday > .card, #sbattle > .card { min-width:0; }
 .ds-head-t { display:flex; gap:14px; align-items:center; }
 .ds-art { width:96px; height:52px; flex:none; }

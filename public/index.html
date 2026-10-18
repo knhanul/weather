@@ -178,6 +178,7 @@
     .muted { color:var(--muted); font-size:13px; }
     .ok { color:var(--ok); } .bad { color:var(--bad); }
     .page { display:none; } .page.on { display:grid; gap:16px; }
+    main > .page:not(.on) { display:none !important; } /* 한 번에 한 화면만: 화면별 CSS(#id{display:…})가 이 규칙을 덮지 못하게 */
     svg { width:100%; height:160px; }
     /* 대시보드 */
     .geo-banner, .geo-note { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin:0 0 12px; padding:9px 12px; border-radius:12px; background:var(--soft); color:var(--fg); font-size:13.5px; line-height:1.45; }
@@ -526,7 +527,7 @@
   <link rel="stylesheet" href="/drawer.css?v=2" />
   <link rel="stylesheet" href="/fold.css?v=1" />
   <link rel="stylesheet" href="/rt.css?v=32" />
-  <link rel="stylesheet" href="/date-stories.css?v=4" />
+  <link rel="stylesheet" href="/date-stories.css?v=5" />
 </head>
 <body>
   <div class="appbar" id="appbar">
@@ -2195,6 +2196,7 @@
     // 예전 주소(#/hourly, #/daily, #/download)는 새 주소로 바꿔 계속 쓸 수 있게(뒤에 붙은 ?조건은 그대로)
     const ROUTE_ALIAS = { "/hourly": "/hourly-weather", "/daily": "/daily-weather", "/download": "/view-settings" };
     const ROUTE_KNOWN = new Set(["/stats/overview", "/questions", "/today", "/forecast", "/stats/yearly", "/stats/region", "/stats/life", "/stats/records", "/hourly-weather", "/daily-weather", "/view-settings", "/collect", "/gaps", "/jobs", "/stations", "/provider", "/users", "/stories/day", "/stories/battle", "/my", ...Object.keys(ROUTE_ALIAS)]);
+    let lastRoutePath = null;
     function route() {
       {
         const [p0, q0] = location.hash.replace("#", "").split("?");
@@ -2239,6 +2241,9 @@
       let name = map[h] || "dash";
       if (name === "users" && !me.authEnabled) name = "dash";
       show(name);
+      // 다른 메뉴(주소의 화면 부분이 바뀜)로 가면 맨 위에서 시작. 같은 화면 안에서 조건(?station= 등)만 바뀔 때는 그대로
+      if (lastRoutePath !== null && lastRoutePath !== h) window.scrollTo(0, 0);
+      lastRoutePath = h;
       if (isLockedPage(name)) return;
       if (name === "collect" && dashCache) {
         // #/collect?station=156&kind=hourly 로 지점·종류를 미리 고를 수 있음
@@ -2869,6 +2874,11 @@
     // views.js(시간별·일별 날씨)가 읽기만 하는 연결점
     window.NW = { me: () => me, stations: () => (dashCache && dashCache.stations) || [], loginHref: () => loginHref(), fromPicker, toPicker };
     window.addEventListener("hashchange", route);
+    // 화면 위치는 route() 가 정함(다른 메뉴 = 맨 위). 브라우저가 뒤로 가기 때 예전 위치를 늦게 되돌려 놓으면
+    // 서랍 메뉴(☰)를 닫으며 한 칸 뒤로 간 뒤 새 화면이 아래쪽에서 열리므로 자동 되돌림은 끔
+    try { history.scrollRestoration = "manual"; } catch (e) {}
+    // 메뉴를 누르면(지금 화면 메뉴를 다시 눌러도) 맨 위에서 시작
+    document.querySelector("aside nav").addEventListener("click", (e) => { if (e.target.closest('a[href^="#/"]')) window.scrollTo(0, 0); }, true);
     setPageHead(({ "/today": "today", "/forecast": "forecast", "/questions": "questions", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/stories/day": "sday", "/stories/battle": "sbattle", "/my": "mysettings" })[location.hash.replace("#", "").split("?")[0]] || "dash");
     showLoginNote();
     // 대시보드 자료가 늦거나 실패해도 다른 화면은 그대로 뜨게
