@@ -71,7 +71,7 @@
   }
   function memoHtml(st) {
     const v = memoDate();
-    return `<section class="card rhc-memo" aria-label="내가 기억하는 이날"><h2>내가 기억하는 이날 <small class="rh-sub">기념일·생일의 그날 날씨</small></h2><div class="rhc-pick"><label for="rhcDate">날짜</label><input type="date" id="rhcDate" min="1990-01-01" value="${esc(v)}"></div><div id="rhcMemoBody">${v ? `<p class="rt-load">불러오는 중…</p>` : `<p class="rt-note">기억하는 날짜를 고르면 그날과 매년 같은 날의 날씨를 보여 줘요(ASOS 공식 일자료).</p>`}</div></section>`;
+    return `<section class="card rhc-memo" aria-label="내가 기억하는 이날"><h2>내가 기억하는 이날 <small class="rh-sub">기념일·생일의 그날 날씨</small></h2><div class="rhc-pick"><label for="rhcDate">날짜</label><input type="date" id="rhcDate" min="1970-01-01" value="${esc(v)}"></div><div id="rhcMemoBody">${v ? `<p class="rt-load">불러오는 중…</p>` : `<p class="rt-note">기억하는 날짜를 고르면 그날과 매년 같은 날의 날씨를 보여 줘요(ASOS 공식 일자료).</p>`}</div></section>`;
   }
   async function memoLoad(st) {
     const el = $("rhcDate"), body = $("rhcMemoBody"); if (!el || !body) return;
@@ -79,7 +79,7 @@
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
     try { localStorage.setItem(MEMO_KEY, v); } catch {}
     body.innerHTML = `<p class="rt-load">불러오는 중…</p>`;
-    try { const r = await get(`/api/stats/life/day?station=${encodeURIComponent(st)}&date=${v.slice(5)}`); if ($("rhcDate")?.value === v) body.innerHTML = memoBody(r, v, st); } catch (e) { body.innerHTML = `<p class="rt-ins">불러오지 못했습니다 — ${esc(e.message)}</p>`; }
+    try { const r = await get(`/api/stats/life/day?station=${encodeURIComponent(st)}&date=${v.slice(5)}&from=1970`); if ($("rhcDate")?.value === v) body.innerHTML = memoBody(r, v, st); } catch (e) { body.innerHTML = `<p class="rt-ins">불러오지 못했습니다 — ${esc(e.message)}</p>`; }
   }
   // ---------------------------------------------------------------- 채우기
   let last = null;

@@ -590,7 +590,7 @@
         <div class="ph-main">
           <p class="ph-group" id="phGroup">조회</p>
           <h1 id="phTitle">지난 날씨</h1>
-          <p class="ph-desc" id="phDesc">1990년부터 쌓인 관측 자료로 보는 우리 동네 날씨</p>
+          <p class="ph-desc" id="phDesc">1970년부터 쌓인 관측 자료로 보는 우리 동네 날씨</p>
         </div>
         <div class="ph-auth" id="phAuth" hidden></div>
         <ul class="ph-chips" id="phChips" aria-label="시스템 상태"></ul>
@@ -635,7 +635,7 @@
           <div class="st-panel" id="tabLife" hidden></div>
           <div class="st-panel" id="tabRecords" hidden></div>
           <div class="st-panel" id="tabQuestions" hidden>
-            <div class="card"><h2 class="sx-q">질문으로 보는 날씨<small>일상적인 질문을 1990년부터의 관측으로 답합니다. 앞으로의 예보·확률이 아닙니다.</small></h2><div class="sx-ctl" id="qxCtl"></div></div>
+            <div class="card"><h2 class="sx-q">질문으로 보는 날씨<small>일상적인 질문을 기상청 관측(일자료 1970년~, 시간자료 1990년~)으로 답합니다. 앞으로의 예보·확률이 아닙니다.</small></h2><div class="sx-ctl" id="qxCtl"></div></div>
             <div class="card q-wrap">
               <div class="chart-head"><div><h2>우리 동네는 어떻게 달라졌을까</h2><p class="muted" id="qCardsNote">선택한 지점의 1990~1999년 평균과 최근 완료된 10개 연도 평균을 비교합니다.</p></div></div>
               <div class="q-cards" id="qCards"></div>
@@ -845,7 +845,7 @@
               <li><a href="#/stories/day">날씨 이야기</a> — 날짜로 보는 날씨(양력·음력 아무 날짜나 해마다), 날씨 배틀(날짜끼리 비교), 질문으로 보는 날씨</li>
               <li><a href="#/hourly-weather">날씨 자료실</a> — 시간별·일별 관측 원자료 보기와 CSV 내려받기</li>
             </ul>
-            <p><b>자료</b> 기상청 ASOS 시간·일 관측(1990년~), 초단기실황, 단기예보·중기예보. 관측소 8곳: 서울·인천·수원·대전·대구·광주·부산·제주.</p>
+            <p><b>자료</b> 기상청 ASOS 일 관측(1970년~)·시간 관측(1990년~), 초단기실황, 단기예보·중기예보. 관측소 8곳: 서울·인천·수원·대전·대구·광주·부산·제주.</p>
             <p><b>비교 기준</b> 1990년 이후·최근 10년·최근 5년 평균을 그날그날 관측으로 직접 계산합니다. 기상청 공식 30년 평년값이 아닙니다.</p>
             <p><b>이야기와 숫자</b> 실제 관측·예보 값에 정해 둔 규칙을 적용해 계산합니다. AI가 만든 숫자는 없습니다. 값이 없으면 ‘자료 없음’으로 두고 0으로 바꾸지 않습니다.</p>
             <p><b>갱신</b> 초단기실황 매시, 단기예보 하루 8번, 중기예보 하루 2번, ASOS 관측은 매일 11:30에 전날까지. 시각은 모두 한국 시간(Asia/Seoul).</p>
@@ -1955,7 +1955,7 @@
     const PAGE_HEAD = {
       today: ["조회", "오늘 날씨", "지금 날씨가 1990년 이후·최근 10년·최근 5년 같은 시기와 비교해 얼마나 다른지"],
       forecast: ["조회", "내일 날씨", "앞으로의 날씨가 과거 같은 시기와 얼마나 다를지 — 단기·중기예보와 1990년 이후·최근 10년·최근 5년 평균"],
-      dash: ["조회", "지난 날씨", "1990년부터 쌓인 관측 자료로 보는 우리 동네 날씨"],
+      dash: ["조회", "지난 날씨", "1970년부터 쌓인 관측 자료로 보는 우리 동네 날씨"],
       sday: ["날씨 이야기", "날짜로 보는 날씨", "양력·음력 아무 날짜나 — 해마다 그날의 날씨를 1970년부터의 관측으로"],
       mysettings: ["조회", "내 설정", "로그인 없이 이 기기에만 — 하루 구간·산책·러닝 조건·관심 카드·기본 지점"],
       sbattle: ["날씨 이야기", "날씨 배틀", "두 날짜 이상을 같은 기간·같은 연도끼리 맞대어 보기"],

@@ -32,8 +32,8 @@
     station: null,
     metric: "avg_temp",
     period: null,
-    from: 1990,
-    yFrom: null, // 연도별 비교 시작 연도(일자료 첫 온전한 해 — 기본) · 다른 화면(지역별·생활·기록)은 from(1990) 그대로
+    from: null, // 지역별·생활·기록 시작 연도(기본 = 일자료 첫 온전한 해, 예전 주소 from=1990 은 그대로) · 시간자료 화면은 HOURLY_FROM_Y 로 올려 씀
+    yFrom: null, // 연도별 비교 시작 연도(일자료 첫 온전한 해 — 기본)
     to: null,
     mode: "trend",
     years: null,
@@ -89,6 +89,10 @@
     const y = +fd.slice(0, 4);
     return fd.slice(5) === "01-01" ? y : y + 1;
   }
+  // 지역별 비교: 고를 수 있는 첫해 = 지점들 중 가장 이른 첫해(공통 연도는 엔진이 따로 구함)
+  const anyFirstYear = () => Math.min(...(meta?.stations || []).map((s) => dailyFirstYear(s.station_id)), 1990);
+  // 시간자료(정시 관측) 저장소는 1990-01-01 부터(stats-engine HOURLY_FROM) — 산책·출퇴근·열대야는 이 해부터
+  const HOURLY_FROM_Y = 1990;
   // 기본 달 = 지금 달(Asia/Seoul). 진행 중인 달은 올해 값을 '진행 중'으로 따로 두고, 비교는 다 끝난 해끼리(엔진 규칙 그대로)
   const curMonth = () => (window.NWDefaults ? NWDefaults.seoulMonth() : new Date().getMonth() + 1);
   const lastDay = (m) => [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
@@ -123,6 +127,7 @@
       if (state.yFrom > state.to) state.yFrom = state.to;
     } else {
       if (fOk) state.from = f;
+      if (!state.from) state.from = tab === "region" ? anyFirstYear() : dailyFirstYear();
       if (state.from > state.to) state.from = state.to;
     }
     if (tab === "yearly") {
@@ -250,11 +255,12 @@
       .map(([g, label]) => `<optgroup label="${label}">${(meta?.metrics || []).filter((m) => m.group === g).map((m) => `<option value="${m.id}"${m.id === cur ? " selected" : ""}>${E(m.label)} (${E(m.unit)})</option>`).join("")}</optgroup>`)
       .join("")}</select>`;
   }
-  // minYear: 연도별 비교 = 일자료 첫해(1970~), 그 밖(지역별·생활·기록) = 1990 그대로
-  function yearSelects(prefix, cur = state.from, minYear = 1990) {
+  // minYear: 일자료 화면 = 지점 일자료 첫해(1970~), 시간자료 화면(산책·출퇴근·열대야) = 1990(note 로 밝힘)
+  function yearSelects(prefix, cur = state.from, minYear = dailyFirstYear(), note = "") {
     const ys = [];
     for (let y = asOfYear(); y >= minYear; y--) ys.push([y, `${y}년`]);
-    return `<div><label>비교 연도</label><span class="sx-inline"><select id="${prefix}From" aria-label="시작 연도">${opts(ys.slice().reverse(), cur)}</select><span class="tilde">~</span><select id="${prefix}To" aria-label="종료 연도">${opts(ys, state.to)}</select></span></div>`;
+    if (cur < minYear) cur = minYear;
+    return `<div><label>비교 연도${note ? ` <small class="muted">${E(note)}</small>` : ""}</label><span class="sx-inline"><select id="${prefix}From" aria-label="시작 연도">${opts(ys.slice().reverse(), cur)}</select><span class="tilde">~</span><select id="${prefix}To" aria-label="종료 연도">${opts(ys, state.to)}</select></span></div>`;
   }
   function rulesHtml(m, extra = []) {
     const lines = [...(m ? [`${m.label}: ${m.def}`] : []), ...extra, ...(meta?.rules || [])];
@@ -745,7 +751,7 @@
       <div><label>보기</label><div class="seg">${views.map(([v, l]) => `<button type="button" data-rview="${v}" class="${state.rView === v ? "on" : ""}">${l}</button>`).join("")}</div></div>
       ${state.rView !== "period" ? `<div><label for="rxMetric">통계 항목</label>${metricSelectHtml("rxMetric", state.metric)}</div>` : ""}
       ${state.rView !== "monthly" ? periodPickerHtml("rx") : ""}
-      ${yearSelects("rx")}`;
+      ${yearSelects("rx", state.from, anyFirstYear())}`;
     $id("rxHint").textContent = "관측지점 한 곳의 값이며, 그 시·도 전체의 평균이 아닙니다. 지점끼리는 모두 자료가 온전한 공통 연도만 비교합니다.";
   }
   async function loadRegion() {
@@ -932,8 +938,11 @@
   const DAILY_RULES = () => (meta?.rules || []).slice(0, 3);
   const HOURLY_NOTE = "자료: 기상청 ASOS 시간자료(정시 관측) — '시간자료 집계'이며 공식 일자료 통계와 다릅니다. 시각은 한국 시간(Asia/Seoul) 정시입니다.";
   const csvLink = (url) => `<div class="sx-tools"><span class="muted">그래프·요약표·CSV 는 같은 계산 결과입니다. 원자료 CSV 는 <a href="#/view-settings">보기 설정</a>.</span><a class="dl-chip-btn" href="${E(url)}${url.includes("?") ? "&" : "?"}format=csv" download>통계 결과 CSV 내려받기</a></div>`;
+  const lifeHourly = () => ["outdoor", "commute", "tropical"].includes(life.view);
+  // 시간자료 화면은 시작 연도를 1990(시간자료 첫해) 아래로 보내지 않는다 — state.from 은 그대로 둬서 일자료 화면으로 돌아가면 1970~ 유지
+  const lifeFrom = () => (lifeHourly() ? Math.min(Math.max(state.from, HOURLY_FROM_Y), Math.max(state.to, HOURLY_FROM_Y)) : state.from);
   function lifeQuery(extra = {}) {
-    const q = new URLSearchParams({ station: state.station, from: String(state.from), to: String(state.to) });
+    const q = new URLSearchParams({ station: state.station, from: String(lifeFrom()), to: String(Math.max(state.to, lifeHourly() ? HOURLY_FROM_Y : 0)) });
     for (const [k, v] of Object.entries(extra)) if (v !== null && v !== undefined) q.set(k, String(v));
     return q;
   }
@@ -1062,7 +1071,7 @@
     return `<div><label>월·일</label><span class="sx-inline"><select id="${idM}" aria-label="월">${opts(MONTHS, m)}</select><select id="${idD}" aria-label="일">${opts(dayList(m), d)}</select></span></div>`;
   }
   function renderLifeCtl() {
-    $id("lxCtl").innerHTML = `${stSelect("lxSt")}${yearSelects("lx")}`;
+    $id("lxCtl").innerHTML = `${stSelect("lxSt")}${lifeHourly() ? yearSelects("lx", lifeFrom(), HOURLY_FROM_Y, `시간자료 ${HOURLY_FROM_Y}년~`) : yearSelects("lx")}`;
     $id("lxNav").innerHTML = subNav(LIFE_VIEWS, life.view, lifeHref);
     const v = life.view;
     let c2 = "";
@@ -1093,7 +1102,7 @@
     syncLifeHash();
     const out = $id("lxOut");
     const my = ++reqL.n;
-    const hourly = ["outdoor", "commute", "tropical"].includes(life.view);
+    const hourly = lifeHourly();
     out.innerHTML = stateHtml(hourly ? "시간자료로 계산하는 중… (서버가 막 켜진 직후에는 처음 한 번 10초쯤 걸릴 수 있습니다)" : "계산하는 중…");
     const url = lifeApi();
     let r;
@@ -1295,7 +1304,7 @@
     const p = $id("tabRecords");
     if (p.dataset.ready) return;
     p.dataset.ready = "1";
-    p.innerHTML = `<div class="card"><h2 class="sx-q">날씨 기록<small>보유 관측기간(1990년~)의 최고·최저 기록과, 특정 날짜의 과거 날씨 · 관측지점 한 곳의 공식 일자료</small></h2><div class="sx-ctl" id="rcCtl"></div><div id="rcNav"></div></div><div class="card" id="rcOut"></div>`;
+    p.innerHTML = `<div class="card"><h2 class="sx-q">날씨 기록<small><span id="rcRange">보유 관측기간</span>의 최고·최저 기록과, 특정 날짜의 과거 날씨 · 관측지점 한 곳의 공식 일자료</small></h2><div class="sx-ctl" id="rcCtl"></div><div id="rcNav"></div></div><div class="card" id="rcOut"></div>`;
     p.addEventListener("change", (e) => {
       const t = e.target;
       if (t.id === "rcSt") { state.station = t.value; if (window.NWStation) NWStation.manual(t.value); }
@@ -1328,10 +1337,13 @@
     });
   }
   function renderRecCtl() {
+    const fdRec = stationOf(state.station)?.firstDate || "";
+    const rg = $id("rcRange");
+    if (rg) rg.textContent = fdRec ? `보유 관측기간(${+fdRec.slice(0, 4)}년~)` : "보유 관측기간";
     let c = stSelect("rcSt");
     if (rec.view === "records") c += `<div><label for="rcPeriod">기간</label><select id="rcPeriod">${opts([["all", "보유 기간 전체"], ...MONTHS.map(([m, l]) => [`month:${m}`, `매년 ${l}`]), ...(meta.seasons || []).map((s) => [`season:${s.id}`, `매년 ${s.label}(${s.months})`])], rec.period)}</select></div>`;
     if (rec.view === "day") c += `${mdPicker(life.md, "rcM", "rcD")}${yearSelects("rc")}<div><label>바로 고르기</label><div class="sx-presets">${PRESET_DAYS.map(([md, l]) => `<button type="button" data-md="${md}">${E(l)}</button>`).join("")}</div></div>`;
-    if (rec.view === "date") c += `<div><label for="rcDate">날짜</label><input type="date" id="rcDate" min="1990-01-01" max="${E(meta.asOf || "")}" value="${E(rec.date || "")}"></div>`;
+    if (rec.view === "date") c += `<div><label for="rcDate">날짜</label><input type="date" id="rcDate" min="${E(fdRec || "1970-01-01")}" max="${E(meta.asOf || "")}" value="${E(rec.date || "")}"></div>`;
     $id("rcCtl").innerHTML = c;
     $id("rcNav").innerHTML = subNav(REC_VIEWS, rec.view, (v) => recHref(v, v === "date" ? { date: rec.date } : v === "day" ? { date: life.md } : {}));
   }
@@ -1371,7 +1383,7 @@
     const mdOfDate = r.date.slice(5);
     out.innerHTML = `<h2 class="sx-q">${E(stName(state.station))} · ${ymdDot(r.date)} (${E(r.weekday)})의 날씨<small>기상청 ASOS 공식 일자료 한 행 그대로</small></h2>
       ${r.found ? `<div class="sx-key"><div><span>최고 / 최저기온</span><b>${g("max_temperature").value ?? "—"}℃ / ${g("min_temperature").value ?? "—"}℃</b><small>평균 ${g("avg_temperature").value ?? "—"}℃</small></div><div><span>일강수량</span><b>${g("precipitation").value === null ? "0mm" : `${num(g("precipitation").value, 1)}mm`}</b><small>${E(g("precipitation").value === null ? "공란 = 무강수" : "")}</small></div><div><span>평균 습도 · 풍속</span><b>${g("avg_humidity").value ?? "—"}% · ${g("avg_wind_speed").value ?? "—"}m/s</b></div></div>
-      <div class="sx-table-wrap" style="max-height:none"><table><tbody>${r.fields.map((f) => `<tr><th scope="row">${E(f.label)}</th><td>${val(f)}</td></tr>`).join("")}</tbody></table></div>` : stateHtml("이 날짜의 공식 일자료가 없습니다(보유 기간 1990-01-01~ 또는 아직 들어오지 않은 날).")}
+      <div class="sx-table-wrap" style="max-height:none"><table><tbody>${r.fields.map((f) => `<tr><th scope="row">${E(f.label)}</th><td>${val(f)}</td></tr>`).join("")}</tbody></table></div>` : stateHtml(`이 날짜의 공식 일자료가 없습니다(보유 기간 ${E(stationOf(state.station)?.firstDate || "")}~${E(meta?.asOf || "")} 밖이거나 아직 들어오지 않은 날).`)}
       <p><a href="${recHref("day", { date: mdOfDate })}" data-md-link="1">매년 ${+mdOfDate.slice(0, 2)}월 ${+mdOfDate.slice(3)}일의 날씨 보기 ›</a></p>
       ${csvLink(url)}${rulesList(r.rules)}`;
   }

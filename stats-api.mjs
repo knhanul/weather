@@ -4,7 +4,7 @@ import {
   StatsError, parsePeriod, periodLabel, getMetric, metricInfo, METRIC_ORDER, SEASONS, WEEKS, RULES, BASELINE, RECENT,
   yearlyCompare, overlay, regionYearly, regionPeriod, regionMonthly, REGION_PERIOD_METRICS, toCsv, deltaText, yearRows, decadeDelta, daysInMonth,
   thresholdDates, streaks, RUN_KINDS, weekdayShare, sameDayHistory, records, RECORDS, parseOutdoor, outdoorShare, OUTDOOR_DEFAULT, parseHours,
-  commuteShare, tropicalNights, LIFE_RULES, posToMd, isLeap, missingLabel, missingText,
+  commuteShare, tropicalNights, LIFE_RULES, posToMd, isLeap, missingLabel, missingText, HOURLY_FROM,
 } from "./stats-engine.mjs";
 
 // 지금 달(Asia/Seoul) — now 를 넘기면 그 시각 기준(테스트용)
@@ -259,7 +259,12 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
     const hs = await statsHourly.get(st.station_id);
     if (!hs || hs.lastIdx < 0) throw new StatsError("이 지점에는 시간자료가 없습니다", 404);
     const asOf = officialDate();
-    const { fromYear, toYear } = yearsParam(url, +asOf.slice(0, 4));
+    const yp = yearsParam(url, +asOf.slice(0, 4));
+    // 시간자료 저장소는 HOURLY_FROM(1990-01-01)부터 — 그 앞 연도를 달라고 해도 시간자료 첫해로 올린다(없는 해를 '자료 없음' 연도로 늘어놓지 않음)
+    const hFrom = +HOURLY_FROM.slice(0, 4);
+    if (yp.toYear < hFrom) throw new StatsError(`시간자료는 ${hFrom}년부터 있습니다`);
+    const fromYear = Math.max(yp.fromYear, hFrom);
+    const toYear = yp.toYear;
     return { st, hs, asOf, fromYear, toYear, station: { station_id: st.station_id, station_name: st.station_name, region: st.region || null } };
   }
   const head = (kind, st, extra) => [`이날 날씨 통계 · ${kind} (원자료 다운로드가 아닌 집계 결과)`, `지점 ${stationLabel(st)} · ${extra} · 출처 ${SOURCE} · 시간대 Asia/Seoul`];
