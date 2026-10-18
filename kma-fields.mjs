@@ -385,6 +385,20 @@ export const EXPORT_PRESETS = [
     isPreset: true,
   },
   {
+    id: "preset_hourly_kma_original",
+    name: "기상청 원본 레이아웃 (시간)",
+    kind: "hourly",
+    columns: HOURLY_EXPORT_CATALOG.map((c) => c.col),
+    isPreset: true,
+  },
+  {
+    id: "preset_daily_kma_original",
+    name: "기상청 원본 레이아웃 (일)",
+    kind: "daily",
+    columns: DAILY_EXPORT_CATALOG.map((c) => c.col),
+    isPreset: true,
+  },
+  {
     id: "preset_hourly_temp",
     name: "기온·체감 심화 (시간)",
     kind: "hourly",
