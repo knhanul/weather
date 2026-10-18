@@ -13,6 +13,7 @@
     { id: "h", page: "hourly", els: ["#hourly .card > .row", "#hBar"], kind: "in-card", collapseOn: "#hQuery" },
     { id: "d", page: "daily", els: ["#daily .card > .row", "#dBar"], kind: "in-card", collapseOn: "#dQuery" },
     { id: "x", page: "download", els: ["#download > .card:first-of-type"], kind: "card" },
+    { id: "sd", page: "sday", els: ["#dsCtl"], kind: "in-card", collapseOn: "#dsGo" },
     { id: "g", page: "gaps", els: ["#gaps .card:first-child > p.muted:first-of-type", "#gaps .card:first-child > .controls", "#gaps .g-range"], kind: "in-card", collapseOn: "#gApply" },
   ];
   const open = new Map(); // id → 펼침 여부(이번 방문 동안)
@@ -70,6 +71,17 @@
   };
   SUM.h = viewSum("h");
   SUM.d = viewSum("d");
+  // 날짜로 보는 날씨: '서울(108) · 양력 2025-10-18 · 최근 10년'
+  SUM.sd = () => {
+    const $ = (id) => document.getElementById(id);
+    const stS = $("dsSt"), per = $("dsPer"), dt = $("dsDate");
+    const cal = document.querySelector("#dsCtl [data-cal].on");
+    const leap = $("dsLeap");
+    const stT = stS && stS.selectedOptions[0] ? short(stS.selectedOptions[0].textContent).replace(/^(.+?) \((\d+)\).*$/, "$1($2)") : "";
+    const dT = [cal ? short(cal.textContent) : "", dt ? dt.value : "", leap && leap.checked ? "(윤달)" : ""].filter(Boolean).join(" ");
+    const pT = per && per.value === "custom" ? `${($("dsFrom") || {}).value || ""}–${($("dsTo") || {}).value || ""}` : per && per.selectedOptions[0] ? short(per.selectedOptions[0].textContent) : "";
+    return [stT, dT, pT].filter(Boolean).map((t) => t.replace(/ /g, "\u00a0")); // 조각 안에서는 줄을 바꾸지 않음
+  };
   const BTN = { x: "레이아웃 바꾸기", g: "범위 변경" };
   // 한 번 감싼 뒤에는 막대가 첫 자식이 되어 ':first-child' 선택자가 빗나가므로 잡아 둔 요소를 씀(패널을 새로 그려 떨어져 나가면 다시 찾음)
   const held = new Map();
@@ -94,7 +106,8 @@
     bar.innerHTML = `<span class="fold-sum" id="foldSum-${r.id}"></span><button type="button" class="fold-btn sec" aria-expanded="false" aria-controls="${els.map((e) => e.id).join(" ")}" aria-describedby="foldSum-${r.id}"><span class="fold-lbl">${BTN[r.id] || "조건 변경"}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>`;
     els[0].before(bar);
     bar.querySelector("button").addEventListener("click", () => setOpen(r, !open.get(r.id)));
-    if (r.collapseOn) document.querySelector(r.collapseOn)?.addEventListener("click", () => { if (mq.matches) setTimeout(() => setOpen(r, false, true), 0); });
+    // 조건 칸을 다시 그리는 화면(날짜로 보는 날씨)도 있어 버튼에 직접 달지 않고 문서에서 위임
+    if (r.collapseOn && !r.bound) { r.bound = true; document.addEventListener("click", (e) => { if (mq.matches && e.target.closest && e.target.closest(r.collapseOn)) setTimeout(() => setOpen(r, false, true), 0); }); }
     const mo = new MutationObserver(() => schedule(r));
     for (const el of els) {
       mo.observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "hidden"] });

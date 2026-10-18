@@ -13,7 +13,7 @@
   // 빠른 선택 칩 HTML. label(item) → 글자, href(item) → 주소
   function chips(kind, { label, href, current }) {
     const list = read(kind);
-    if (!list.length) return `<span class="muted fav-empty">${kind === "day" ? "☆ 를 누르면 자주 보는 날짜가 여기에 모입니다" : "☆ 를 누르면 이 배틀 조합이 여기에 모입니다"} (이 브라우저에만 저장)</span>`;
+    if (!list.length) return ""; // 빈 안내 문구는 두지 않음(☆ 버튼 title 에 설명)
     return list.map((x) => `<span class="fav-chip${x.key === current ? " on" : ""}"><a href="${E(href(x))}">${E(label(x))}</a><button type="button" class="fav-del" data-favdel="${E(x.key)}" data-favkind="${kind}" aria-label="${E(label(x))} 저장 지우기">×</button></span>`).join("");
   }
   window.StoryFavs = { read, add, remove, toggle, has, chips, MAX };

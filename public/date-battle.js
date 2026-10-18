@@ -116,7 +116,7 @@
     }).join("") + (st.cases.length < 4 ? `<button type="button" class="sec db-add" id="dbAdd">+ 날짜 추가 (${st.cases.length}/4)</button>` : "");
     const toYears = []; for (let y = THIS_YEAR; y >= 1971; y--) toYears.push([y, `${y}년`]);
     renderFav();
-    $("dbCtl").innerHTML = `<div class="ds-wide"><label>공통 기간(모든 카드) <small class="muted">· 해마다 결과·앞뒤 15일에 쓸 해 · 날짜 칸의 연도는 강조·시간별 맞대결용</small></label>${seg("period", PERIODS, st.period)}</div>${st.period === "custom" ? `<div><label for="dbFrom">시작 기준연도</label><input id="dbFrom" type="number" class="sx-num" min="1900" max="${st.to}" value="${st.from}"></div>` : ""}<div><label for="dbTo">끝 기준연도</label><select id="dbTo">${opt(toYears, st.to)}</select></div>${st.diff ? "" : `<div><label for="dbSt">관측지점(공통)</label><select id="dbSt">${opt(stations, st.cases[0].station)}</select></div>`}<div><label class="sx-check"><input type="checkbox" id="dbDiff"${st.diff ? " checked" : ""}> 지점도 다르게</label></div><div class="ds-acts"><button type="button" class="sec" id="dbCardImg">카드 이미지</button><button type="button" class="sec" id="dbCopy">공유 링크 복사</button></div>`;
+    $("dbCtl").innerHTML = `<div class="ds-wide"><label title="모든 카드에 같은 기간을 씁니다(해마다 결과·앞뒤 15일). 날짜 칸의 연도는 강조·시간별 맞대결용">공통 기간</label>${seg("period", PERIODS, st.period)}</div>${st.period === "custom" ? `<div><label for="dbFrom">시작 기준연도</label><input id="dbFrom" type="number" class="sx-num" min="1900" max="${st.to}" value="${st.from}"></div>` : ""}<div><label for="dbTo">끝 기준연도</label><select id="dbTo">${opt(toYears, st.to)}</select></div>${st.diff ? "" : `<div><label for="dbSt">관측지점(공통)</label><select id="dbSt">${opt(stations, st.cases[0].station)}</select></div>`}<div><label class="sx-check"><input type="checkbox" id="dbDiff"${st.diff ? " checked" : ""}> 지점도 다르게</label></div><div class="ds-acts"><button type="button" class="sec" id="dbCardImg">카드 이미지</button><button type="button" class="sec" id="dbCopy">공유 링크 복사</button></div>`;
   }
   // ---- 자주 보는 배틀 조합(이 브라우저에만) — v2 는 카드마다 연도 포함(예전 저장은 끝 기준연도로 열림)
   const favKey = () => casesParam();
@@ -126,7 +126,7 @@
     const el = $("dbFav");
     if (!el || !window.StoryFavs) return;
     const on = StoryFavs.has("battle", favKey());
-    el.innerHTML = `<button type="button" class="sec fav-star${on ? " on" : ""}" id="dbFavBtn" aria-pressed="${on}" title="이 브라우저에 저장">${on ? "★ 저장됨" : "☆ 이 조합 저장"}</button><span class="fav-list" aria-label="자주 보는 배틀 조합">${StoryFavs.chips("battle", { label: favLabel, href: favHref, current: favKey() })}</span>`;
+    el.innerHTML = `<button type="button" class="sec fav-star${on ? " on" : ""}" id="dbFavBtn" aria-pressed="${on}" title="자주 보는 배틀 조합으로 이 브라우저에 저장">${on ? "★ 저장됨" : "☆ 이 조합 저장"}</button><span class="fav-list" aria-label="자주 보는 배틀 조합">${StoryFavs.chips("battle", { label: favLabel, href: favHref, current: favKey() })}</span>`;
   }
   function toast(msg) { const t = $("dbToast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 6000); }
   const labelsParam = () => (st.cases.some((c) => c.label) ? st.cases.map((c) => encodeURIComponent(c.label || "")).join(",") : "");

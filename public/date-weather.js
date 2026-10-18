@@ -99,15 +99,22 @@
   };
 
   // ---------------------------------------------------------------- 뼈대
-  const ART = `<svg class="ds-art" viewBox="0 0 120 64" aria-hidden="true"><rect x="6" y="10" width="40" height="44" rx="6" fill="#fff" stroke="#9cc4ff" stroke-width="2"/><rect x="6" y="10" width="40" height="12" rx="6" fill="#026ef8"/><rect x="6" y="16" width="40" height="6" fill="#026ef8"/><circle cx="16" cy="9" r="2.5" fill="#0050e0"/><circle cx="36" cy="9" r="2.5" fill="#0050e0"/><text x="26" y="46" text-anchor="middle" font-size="18" font-weight="800" fill="#0d1b3d" id="dsArtDay"></text><rect x="58" y="12" width="7" height="30" rx="3.5" fill="#fff" stroke="#e8590c" stroke-width="2"/><circle cx="61.5" cy="46" r="6" fill="#e8590c"/><rect x="60" y="24" width="3" height="20" fill="#e8590c"/><path d="M84 14c0 0-7 9-7 13a7 7 0 0 0 14 0c0-4-7-13-7-13z" fill="#2f6fd6"/><path d="M78 44h26M82 50h30M76 56h20" stroke="#0f766e" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+  const ICON = {
+    pick: `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>`,
+    battle: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 14 10M14 4h6v6M4 4l6 6M14 14l6 6M17 20h3v-3"/></svg>`,
+    link: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>`,
+    img: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>`,
+  };
   function shell() {
     const p = $("sday");
-    if (p.dataset.ready === "2") return;
-    p.dataset.ready = "2";
+    if (p.dataset.ready === "3") return;
+    p.dataset.ready = "3";
+    // 조회 조건: 한 줄(좁은 화면은 fold.js 가 '서울(108) · 양력 2025-10-18 · 최근 10년' 막대로 접음) + 작은 보조 버튼 줄 + 저장한 날짜 칩
     p.innerHTML = `
-      <div class="card ds-head"><div class="ds-head-t">${ART}<div><h2 class="sx-q">날짜로 보는 날씨<small>날짜 하나를 넣으면 해마다 그날 날씨가 어땠는지 실제 관측으로 보여 줍니다. 예보·확률이 아닙니다.</small></h2></div></div>
+      <div class="card ds-head">
         <div class="sx-ctl ds-ctl" id="dsCtl"></div>
-        <p class="ds-banner" id="dsBanner" role="status"></p><div class="fav-row" id="dsFav"></div><p class="ds-toast" id="dsToast" role="status" hidden></p></div>
+        <div class="ds-sub"><span class="ds-tools2" id="dsActs"></span></div>
+        <div class="fav-row ds-favs" id="dsFav"></div><p class="ds-toast" id="dsToast" role="status" hidden></p></div>
       <div class="card" id="dsCard"></div>
       <div class="card" id="dsYears" data-sec="yearly"></div>
       <div class="card" id="dsAround" data-sec="around"></div>
@@ -128,17 +135,17 @@
     const stations = (meta?.stations || []).map((s) => [s.station_id, `${s.station_name} (${s.station_id})${s.region ? ` · ${s.region}` : ""}`]);
     const toYears = []; for (let y = THIS_YEAR; y >= 1971; y--) toYears.push([y, `${y}년`]);
     const pickVal = st.cal === "solar" && !(st.m === 2 && st.d === 29 && !isLeapY(st.y)) ? dateStr() : "";
+    const custom = st.period === "custom";
+    const toSel = (id) => `<select id="${id}" aria-label="끝 연도">${opt(toYears, st.to)}</select>`;
     $("dsCtl").innerHTML = `
-      <div><label for="dsSt">관측지점</label><select id="dsSt">${opt(stations, st.station)}</select></div>
-      <div><label>날짜 기준</label>${seg("cal", [["solar", "양력"], ["lunar", "음력"]], st.cal)}</div>
-      <div class="ds-datef"><label for="dsDate">${st.cal === "lunar" ? "음력 날짜" : "날짜"}</label><span class="sx-inline ds-dateline"><input id="dsDate" class="ds-date" inputmode="numeric" autocomplete="off" maxlength="14" placeholder="YYYY-MM-DD" value="${dateStr()}" aria-describedby="dsDateHelp">${st.cal === "solar" ? `<span class="ds-pick" title="달력에서 고르기"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><input type="date" id="dsPick" aria-label="달력에서 날짜 고르기" min="1900-01-01" max="2050-12-31" value="${pickVal}"></span>` : `<label class="sx-check ds-leapchk"><input type="checkbox" id="dsLeap"${st.leap ? " checked" : ""}> 윤달</label>`}</span><small class="ds-help" id="dsDateHelp">${st.cal === "lunar" ? "음력 연-월-일 · 그해 음력 날짜를 양력으로 바꿔 찾습니다" : "연-월-일 · 연도 = 자세히 볼 해, 월·일 = 해마다 비교할 날"}</small></div>
-      <div class="ds-wide"><label>통계 기간 <small class="muted">· 몇 해를 볼지(해마다 이날·앞뒤 15일 공통)</small></label>${seg("period", PERIODS, st.period)}</div>
-      ${st.period === "custom" ? `<div><label for="dsFrom">시작 연도</label><input id="dsFrom" type="number" class="sx-num" min="1900" max="${st.to}" value="${st.from}"></div>` : ""}
-      <details class="ds-more ds-wide"${st.to !== THIS_YEAR - 1 || st.alias ? " open" : ""}><summary>자세히</summary><div class="sx-ctl"><div><label for="dsTo">끝 연도</label><select id="dsTo">${opt(toYears, st.to)}</select></div><div><label for="dsAlias">별칭(선택)</label><input id="dsAlias" maxlength="30" placeholder="예: 우리 집 기념일" value="${E(st.alias)}"></div></div></details>
-      <div class="ds-acts"><button type="button" id="dsGo">날씨 보기</button><button type="button" class="sec" id="dsBattle">이 날짜로 배틀</button><button type="button" class="sec" id="dsCardImg">카드 이미지</button></div>`;
-    $("dsBanner").innerHTML = `<b>해마다 ${E(specLabel())}</b> · ${E(periodText())} · 자세히 볼 해 ${st.y}년${st.cmp.length ? ` · 시간 겹쳐 보기 ${st.cmp.join("·")}년` : ""} <span class="muted">· 일자료 1970~ / 시간자료 1990~</span>`;
-    const art = document.getElementById("dsArtDay");
-    if (art) art.textContent = String(st.d);
+      <div class="ds-f-st"><label for="dsSt">관측지점</label><select id="dsSt">${opt(stations, st.station)}</select></div>
+      <div class="ds-f-cal"><label>기준</label>${seg("cal", [["solar", "양력"], ["lunar", "음력"]], st.cal)}</div>
+      <div class="ds-datef"><label for="dsDate">${st.cal === "lunar" ? "음력 날짜" : "날짜"}</label><span class="sx-inline ds-dateline"><input id="dsDate" class="ds-date" inputmode="numeric" autocomplete="off" maxlength="14" placeholder="YYYY-MM-DD" value="${dateStr()}" title="연-월-일 (2025-10-18 · 2025.10.18 · 20251018)">${st.cal === "solar" ? `<span class="ds-pick" title="달력에서 고르기">${ICON.pick}<input type="date" id="dsPick" aria-label="달력에서 날짜 고르기" min="1900-01-01" max="2050-12-31" value="${pickVal}"></span>` : `<label class="sx-check ds-leapchk"><input type="checkbox" id="dsLeap"${st.leap ? " checked" : ""}> 윤달</label>`}</span></div>
+      <div class="ds-f-per"><label for="dsPer">통계 기간</label><select id="dsPer">${opt(PERIODS, st.period)}</select></div>
+      ${custom ? `<div class="ds-f-rng"><label for="dsFrom">기간 (연도)</label><span class="sx-inline"><input id="dsFrom" type="number" class="sx-num" min="1900" max="${st.to}" value="${st.from}" aria-label="시작 연도"><span class="tilde">~</span>${toSel("dsTo")}</span></div>` : ""}
+      <div class="ds-f-go"><button type="button" id="dsGo">날씨 보기</button></div>
+      <details class="ds-more ds-wide"${(!custom && st.to !== THIS_YEAR - 1) || st.alias ? " open" : ""}><summary>자세히</summary><div class="sx-ctl">${custom ? "" : `<div><label for="dsTo">끝 연도</label>${toSel("dsTo")}</div>`}<div><label for="dsAlias">별칭</label><input id="dsAlias" maxlength="30" placeholder="예: 우리 집 기념일" value="${E(st.alias)}"></div></div></details>`;
+    $("dsActs").innerHTML = `<button type="button" class="sec ds-mini" id="dsBattle" title="이 날짜로 날씨 배틀 열기">${ICON.battle}<span>배틀</span></button><button type="button" class="sec ds-mini" id="dsCopyTop" title="공유 링크 복사">${ICON.link}<span>링크 복사</span></button><button type="button" class="sec ds-mini" id="dsCardImg" title="이날의 날씨 카드 이미지">${ICON.img}<span>카드 이미지</span></button>`;
     renderFav();
   }
   // ---- 자주 보는 날짜(이 브라우저에만) — v2: 연-월-일 그대로 저장(예전 저장은 월·일만 → 올해로 열림)
@@ -150,9 +157,13 @@
     const el = $("dsFav");
     if (!el || !window.StoryFavs) return;
     const on = StoryFavs.has("day", favKey());
-    el.innerHTML = `<button type="button" class="sec fav-star${on ? " on" : ""}" id="dsFavBtn" aria-pressed="${on}" title="이 브라우저에 저장">${on ? "★ 저장됨" : "☆ 이 날짜 저장"}</button><span class="fav-list" aria-label="자주 보는 날짜">${StoryFavs.chips("day", { label: favLabel, href: favHref, current: favKey() })}</span>`;
+    const acts = $("dsActs");
+    if (acts) {
+      acts.querySelector("#dsFavBtn")?.remove();
+      acts.insertAdjacentHTML("afterbegin", `<button type="button" class="sec ds-mini fav-star${on ? " on" : ""}" id="dsFavBtn" aria-pressed="${on}" title="자주 보는 날짜로 이 브라우저에 저장"><b aria-hidden="true">${on ? "★" : "☆"}</b><span>${on ? "저장됨" : "저장"}</span></button>`);
+    }
+    el.innerHTML = StoryFavs.read("day").length ? `<span class="fav-list" aria-label="자주 보는 날짜">${StoryFavs.chips("day", { label: favLabel, href: favHref, current: favKey() })}</span>` : "";
   }
-  const periodText = () => { const p = PERIODS.find(([x]) => x === st.period)[1]; if (st.period === "custom") return `${st.from}~${st.to}년`; if (st.period === "all") return `전체(~${st.to}년)`; const n = +st.period.slice(6); return `${p}(${st.to - n + 1}~${st.to})`; };
   function toast(msg) { const t = $("dsToast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 6000); }
 
   async function switchCal(to) {
@@ -184,6 +195,7 @@
     else if (t.id === "dsDate") { applyDate(false); return; }
     else if (t.id === "dsPick") { if (!/^\d{4}-\d{2}-\d{2}$/.test(t.value)) return; $("dsDate").value = t.value; applyDate(); return; }
     else if (t.id === "dsLeap") st.leap = t.checked;
+    else if (t.id === "dsPer") { if (!PERIODS.some(([p]) => p === t.value)) return; st.period = t.value; }
     else if (t.id === "dsTo") { st.to = +t.value; if (st.from > st.to) st.from = st.to; }
     else if (t.id === "dsFrom") { const v = +t.value; if (!Number.isInteger(v) || v < 1900 || v > st.to) return; st.from = v; }
     else if (t.id === "dsAliasSave") { try { if (t.checked && st.alias) localStorage.setItem(aliasKey(), st.alias); else localStorage.removeItem(aliasKey()); } catch {} return; }
@@ -207,7 +219,7 @@
     if (b.id === "dsAll") { st.all = !st.all; return renderYears(); }
     if (b.id === "dsGo") { applyDate(); return; }
     if (b.id === "dsBattle" || b.id === "dsSelBattle") { location.hash = battleHref(); return; }
-    if (b.id === "dsCopy") return copyLink();
+    if (b.id === "dsCopy" || b.id === "dsCopyTop") return copyLink();
     if (b.id === "dsCardImg" || b.id === "dsCardImg2") return openCard();
     if (b.id === "dsFavBtn") { const on = StoryFavs.toggle("day", { key: favKey(), station: st.station, cal: st.cal, y: st.y, m: st.m, d: st.d, leap: st.leap, alias: st.alias }); toast(on ? "이 날짜를 이 브라우저에 저장했습니다(위 목록에서 바로 열기)" : "저장을 지웠습니다"); return renderFav(); }
     if (ds.favdel) { StoryFavs.remove("day", ds.favdel); return renderFav(); }
@@ -287,7 +299,7 @@
     if (s.dateStatus === "ok" && st.cal === "solar" && cal?.lunar) when += ` · ${E(cal.lunar.text)}`;
     const warn = s.dateStatus === "future" ? `<p class="sx-warn">${E(STATUS("future"))} — 그해 칸만 비워 두고, 지난 해들은 그대로 보여 줍니다.</p>` : s.dateStatus === "ongoing" ? `<p class="sx-warn">${E(STATUS("ongoing"))} — 오늘 하루 자료는 내일 공식 일자료가 들어오면 채워집니다.</p>` : s.dateStatus === "pending" ? `<p class="sx-warn">${E(STATUS("pending"))} — 지난 날이지만 아직 공식 일자료가 들어오지 않았습니다(최신 ${dot(stn.dailyLast)}).</p>` : "";
     $("dsCard").innerHTML = `<div class="ds-card"><div><p class="ds-k">고른 날짜</p><h3 class="ds-title">${title}</h3><p>${when}</p>${warn}</div>
-      <dl class="ds-dl"><div><dt>관측지점</dt><dd>${E(stn.station_name)} (${E(stn.station_id)})${stn.region ? ` · ${E(stn.region)}` : ""} <small>지점 한 곳의 관측</small></dd></div><div><dt>해마다 볼 날</dt><dd>${E(specLabel())} <small>· ${E(D.window.label)} ${D.dateCounts.requested}개 해${D.dateCounts.nodate ? ` (그 날짜가 있는 해 ${D.dateCounts.exists}개)` : ""}</small></dd></div><div><dt>자료 범위</dt><dd>일자료 ${D.dailyFrom.slice(0, 4)}~${dot(stn.dailyLast)} / 시간자료 ${D.hourlyFrom.slice(0, 4)}~ <small>'전체'는 이 서비스가 가진 범위이며 기상청 전체 역사가 아닙니다</small></dd></div></dl></div>`;
+      <dl class="ds-dl"><div><dt>관측지점</dt><dd>${E(stn.station_name)} (${E(stn.station_id)})${stn.region ? ` · ${E(stn.region)}` : ""} <small>지점 한 곳의 관측</small></dd></div><div><dt>해마다 볼 날</dt><dd>${E(specLabel())} <small>· ${E(D.window.label)} ${D.dateCounts.requested}개 해${D.dateCounts.nodate ? ` (그 날짜가 있는 해 ${D.dateCounts.exists}개)` : ""}</small></dd></div><div><dt>자료 범위</dt><dd>일자료 ${D.dailyFrom.slice(0, 4)}~${dot(stn.dailyLast)} / 시간자료 ${D.hourlyFrom.slice(0, 4)}~ <span class="ds-i" tabindex="0" role="img" aria-label="'전체'는 이 서비스가 가진 범위이며 기상청 전체 역사가 아닙니다" title="'전체'는 이 서비스가 가진 범위이며 기상청 전체 역사가 아닙니다">ⓘ</span></dd></div></dl></div>`;
   }
 
   // ---- 관측값만으로 고른 작은 그림(하늘 상태는 추정하지 않음): 신적설 > 0 → 눈 결정, 강수 0.1mm 이상 → 물방울, 그 밖 → 온도계(30℃↑ 빨강·영하 파랑)
