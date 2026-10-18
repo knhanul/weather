@@ -1,7 +1,7 @@
 // 날씨 이야기 API: /api/stats/date-weather · /api/stats/date-battle · /api/stats/calendar-map (GET, 공개 조회 — stats-api 와 같은 정책)
 // 기존 API 응답은 바꾸지 않는다(새 경로만). 계산은 date-weather-engine / date-battle-engine, 저장소는 statsData·statsHourly 메모리 그대로.
 // 캐시: 응답 JSON 을 키(지점·날짜 기준·윤달·기간·부분·선택 연도·달력/정책 버전·일/시간자료 판 번호·오늘 날짜)로 기억. 자료 저장 시 판 번호가 올라 자동 무효화.
-import { StatsError, toCsv, hourlyLastDay } from "./stats-engine.mjs";
+import { StatsError, unknownStationMsg, toCsv, hourlyLastDay } from "./stats-engine.mjs";
 import { parseDateSpec, specKey, specLabel, resolveYears, CALENDAR_VERSION, LUNAR_RANGE, switchBasis, solarToLunar } from "./calendar-resolver.mjs";
 import { dateWeather, withSelected, windowYears, windowKey, windowLabel, allFromYear, DAILY_FROM, HOURLY_FROM, POLICY_VERSION, STORY_VERSION, DAY_VERSION, SAMPLE_POLICY, DAILY_METRICS, HOURLY_METRICS, STATUS_TEXT, WINDOW_YEARS, bothCalendars, COUNT_RULES, AROUND, AROUND_METRICS } from "./date-weather-engine.mjs";
 import { battleYear, battleV2, battleChosen, CASE_IDS, BATTLE_V2, BATTLE_VERSION, TALLY_RULES } from "./date-battle-engine.mjs";
@@ -44,7 +44,7 @@ export function createDateApi({ statsData, statsHourly = null, dayRow = null, st
   async function stationById(id) {
     const list = await stations();
     const st = list.find((s) => String(s.station_id) === String(id ?? "").trim());
-    if (!st) throw new StatsError(`알 수 없는 관측지점입니다: ${String(id ?? "").slice(0, 20)}`);
+    if (!st) throw new StatsError(unknownStationMsg(id));
     return st;
   }
   const stOut = (st, store) => ({ station_id: st.station_id, station_name: st.station_name, region: st.region || null, dailyFirst: store?.firstDate || null, dailyLast: store?.lastDate || null });

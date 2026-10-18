@@ -9,6 +9,11 @@ export class StatsError extends Error {
     this.status = status;
   }
 }
+// 모르는 관측지점 문구: 지점 번호처럼 생긴 값만 되풀이(객체가 글자로 바뀐 '[object Object]' 같은 값은 보여 주지 않음)
+export function unknownStationMsg(id) {
+  const t = String(id ?? "").trim();
+  return /^\d{1,6}$/.test(t) ? `알 수 없는 관측지점입니다: ${t}` : "알 수 없는 관측지점입니다. 관측지점을 다시 골라 주세요";
+}
 
 const DAY_MS = 86400000;
 const p2 = (n) => String(n).padStart(2, "0");

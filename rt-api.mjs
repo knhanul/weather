@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 //            fcst(예보) = 초단기예보·단기예보(격자, 발표시각 base ≠ 대상시각 fcst). 강수확률(POP)은 더하지 않고 비교 엔진에도 넣지 않는다.
 // 같은 시각에 여러 값이 있으면: 실황 > 초단기예보(최신 발표) > 단기예보(최신 발표).
 import { ytdCompare, cumulativeYear, firstHotDay, firstHotSeasons, derivedCompare, outdoorWindow, basePeriods, hourlyCompare, dailyCompare, kst, createBaselineCache, HOURLY_FIELDS, DAILY_FIELDS, diffWord, WINDOW_DAYS, MIN_YEAR_SHARE, MIN_IN_YEAR_SHARE, MIN_SAMPLES_RANK } from "./rt-baseline.mjs";
-import { StatsError, hourlyLastDay, ymdToDn, OUTDOOR_DEFAULT, outdoorLabel } from "./stats-engine.mjs";
+import { StatsError, unknownStationMsg, hourlyLastDay, ymdToDn, OUTDOOR_DEFAULT, outdoorLabel } from "./stats-engine.mjs";
 import { windHours } from "./rt-forecast-wind.mjs";
 import { hourlyForecast, shortDaySummary, extremesByDate, midByDate, stitchDays, forecastChanges, addDays } from "./rt-forecast.mjs";
 
@@ -67,7 +67,7 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
   async function stationParam(url) {
     const id = String(url.searchParams.get("station") || "108").trim();
     const st = (await stations()).find((s) => String(s.station_id) === id);
-    if (!st) throw new StatsError(`알 수 없는 관측지점입니다: ${id.slice(0, 20)}`);
+    if (!st) throw new StatsError(unknownStationMsg(id));
     return st;
   }
   // ---- 5단계(12-2) 참조 분포: 지점·날짜·지표마다 세 기준기간의 도수표를 한 번 만들고(현재값과 무관) 값마다 evaluateValue.

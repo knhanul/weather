@@ -53,8 +53,10 @@
   function readHash() {
     const q = new URLSearchParams(location.hash.split("?")[1] || "");
     const n = (k, lo, hi) => { const v = Number(q.get(k)); return q.get(k) != null && Number.isInteger(v) && v >= lo && v <= hi ? v : null; };
-    if (q.get("station")) st.station = q.get("station");
-    else if (window.NWStation && NWStation.stored && NWStation.stored()) st.station = NWStation.stored();
+    const idOf = (v) => (window.NWDefaults?.stationIdOf ? NWDefaults.stationIdOf(v) : /^\d{1,6}$/.test(String(v ?? "")) ? String(v) : null);
+    const fromUrl = idOf(q.get("station")), savedSt = idOf(window.NWStation?.stored?.()); // stored() = { id, why, at }
+    if (fromUrl) st.station = fromUrl;
+    else if (savedSt) st.station = savedSt;
     st.cal = q.get("cal") === "lunar" ? "lunar" : "solar";
     const t = kst();
     const pd = q.get("date") ? parseDate(q.get("date"), st.cal) : null;
@@ -150,7 +152,7 @@
   }
   // ---- 자주 보는 날짜(이 브라우저에만) — v2: 연-월-일 그대로 저장(예전 저장은 월·일만 → 올해로 열림)
   const favKey = () => `${st.station}|${st.cal}|${dateStr()}|${st.leap ? 1 : 0}`;
-  const stName = (id) => (meta?.stations || []).find((s) => String(s.station_id) === String(id))?.station_name || id;
+  const stName = (id) => (meta?.stations || []).find((s) => String(s.station_id) === String(id))?.station_name || (/^\d{1,6}$/.test(String(id ?? "")) ? String(id) : "서울(기본)");
   function favLabel(x) { const sl = x.y ? `${x.cal === "lunar" ? "음력 " : ""}${x.y}.${x.m}.${x.d}${x.leap ? "(윤)" : ""}` : x.cal === "lunar" ? `음력 ${x.m}/${x.d}${x.leap ? "(윤)" : ""}` : `${x.m}월 ${x.d}일`; return `${x.alias ? `${x.alias} · ` : ""}${sl} · ${stName(x.station)}`; }
   function favHref(x) { const q = new URLSearchParams({ station: x.station, cal: x.cal }); if (x.y) q.set("date", `${x.y}-${p2(x.m)}-${p2(x.d)}`); else { q.set("m", String(x.m)); q.set("d", String(x.d)); } if (x.cal === "lunar") q.set("leap", x.leap ? "1" : "0"); q.set("period", st.period); if (st.period === "custom") { q.set("from", String(st.from)); q.set("to", String(st.to)); } if (x.alias) q.set("alias", x.alias); return `#/stories/day?${q}`; }
   function renderFav() {

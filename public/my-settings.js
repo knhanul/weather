@@ -14,7 +14,7 @@
   }
   function html() {
     const act = A(), c = act.loadCond(), it = act.loadInterests(), segs = readSegs();
-    const cur = window.NWStation?.stored?.() || "";
+    const cur = window.NWStation?.storedId?.() || window.NWStation?.stored?.()?.id || ""; // stored() = { id, why, at }
     const favN = (k) => { try { return (JSON.parse(localStorage.getItem(k) || "[]") || []).length; } catch { return 0; } };
     return `<div class="ms-wrap">
       <section class="card ms-card"><h2>이 기기에만 저장돼요</h2><p class="rt-note">로그인 없이 이 브라우저(localStorage)에 저장하고 서버로 보내지 않아요. 다른 기기·브라우저에는 따로 설정해야 합니다. 바꾸면 바로 저장돼요.</p><p class="ms-msg" id="msMsg" role="status" aria-live="polite"></p></section>

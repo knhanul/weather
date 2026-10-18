@@ -149,8 +149,33 @@ for (const v of VIEWS) {
   for (const path of shuffled(paths, 99).slice(0, 8)) { await p.evaluate((x) => { location.hash = x; }, path); await settle(p); hist.push(path); }
   for (let i = hist.length - 2; i >= 0; i--) { await p.goBack(); await settle(p); await check(p, v, "뒤로", hist[i], false); }
   for (let i = 1; i < hist.length; i++) { await p.goForward(); await settle(p); await check(p, v, "앞으로", hist[i], false); }
-  if (errs.length) fails.push(`${v} 스크립트 오류: ${[...new Set(errs)].slice(0, 5).join(" | ")}`);
   await ctx.close();
+  // 5) 날짜·배틀 기본 열기: 저장한 지점(nw.station = {id,why,at}) 있음/없음, 옛 주소·옛 저장값 → '조회 실패'·'[object Object]'가 없어야 함
+  const LOADS = [
+    [null, "/stories/battle", null], [{ id: "159", why: "manual" }, "/stories/battle", "159"], [{ id: "108", why: "geo" }, "/stories/battle", "108"],
+    [null, "/stories/day", null], [{ id: "159", why: "manual" }, "/stories/day", "159"],
+    [null, "/stories/battle?cases=A.108.S.5.5.0,B.108.S.1.1.0", "108"], [null, "/stories/battle?cases=A.[object Object].S.5.5.0.2025,B.[object Object].S.1.1.0.2025", "108"],
+    [null, "/stories/day?station=[object Object]&date=2025-10-18", "108"],
+  ];
+  for (const [saved, path, wantSt] of LOADS) {
+    const c2 = await browser.newContext({ viewport: { width: w, height: h }, isMobile: mob, hasTouch: mob, locale: "ko-KR", timezoneId: "Asia/Seoul" });
+    if (saved) await c2.addInitScript((x) => localStorage.setItem("nw.station", JSON.stringify({ ...x, at: Date.now() })), saved);
+    const p2 = await c2.newPage();
+    const bad = [];
+    p2.on("pageerror", (e) => bad.push(`스크립트 오류 ${e.message}`));
+    p2.on("request", (r) => { if (r.url().includes("/api/") && /object/i.test(decodeURIComponent(r.url()))) bad.push(`잘못된 요청 ${r.url().slice(0, 120)}`); });
+    await p2.goto(`${BASE}/#${path}`, { waitUntil: "networkidle" }).catch(() => {});
+    await p2.waitForTimeout(2500);
+    const pg = path.startsWith("/stories/battle") ? "#sbattle" : "#sday";
+    const txt = await p2.locator(pg).innerText().catch(() => "");
+    checks++;
+    if (/조회 실패/.test(txt)) bad.push(`'조회 실패' ${(txt.match(/조회 실패[^\n]*/) || [""])[0]}`);
+    if (/object Object/.test(txt)) bad.push("'[object Object]' 표시");
+    if (wantSt) { const got = await p2.evaluate(() => (document.querySelector("#dbSt,#dsSt") || {}).value || ""); if (got !== wantSt) bad.push(`지점 ${got} ≠ ${wantSt}`); }
+    if (bad.length) fails.push(`${v} 기본 열기 ${path}${saved ? ` (저장 ${saved.id}/${saved.why})` : ""}: ${bad.join("; ")}`);
+    await c2.close();
+  }
+  if (errs.length) fails.push(`${v} 스크립트 오류: ${[...new Set(errs)].slice(0, 5).join(" | ")}`);
 }
 await browser.close();
 console.log(`ROUTE-ISOLATION ${BASE} views=${VIEWS} checks=${checks} fails=${fails.length}`);

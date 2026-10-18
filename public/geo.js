@@ -34,8 +34,14 @@
     const first = known && [...known][0];
     return first ? { id: first, source: "default" } : null;
   }
+  // 지점 값 → 번호 문자열. '108', 108, {id:'108'}, {station_id:'108'} 모두 받고, 그 밖('[object Object]' 등)은 null
+  function stationIdOf(v) {
+    const x = v && typeof v === "object" ? (v.id ?? v.station_id) : v;
+    const t = x == null ? "" : String(x).trim();
+    return /^\d{1,6}$/.test(t) ? t : null;
+  }
   const kmText = (km) => (km < 10 ? `${Math.max(0.1, Math.round(km * 10) / 10)}km` : `${Math.round(km)}km`);
-  G.NWDefaults = { seoulParts, seoulMonth, seoulMd, distanceKm, nearestStation, pickStation, kmText };
+  G.NWDefaults = { stationIdOf, seoulParts, seoulMonth, seoulMd, distanceKm, nearestStation, pickStation, kmText };
   if (typeof document === "undefined") return; // node 테스트
 
   // ---------------------------------------------------------------- 저장(지점 번호만)
@@ -54,7 +60,9 @@
     if (serverOn()) fetch("/api/station-pref", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ station: String(id) }) }).catch(() => {});
   }
   const NWStation = {
-    stored: readStored,
+    stored: readStored, // { id, why, at } | null — 번호만 필요하면 storedId()
+    storedId: () => readStored()?.id || null,
+    idOf: stationIdOf,
     isLocked: () => locked,
     // 사용자가 지점을 직접 바꿈 → 저장하고 이번 방문 동안 위치로 바꾸지 않음
     manual(id) {

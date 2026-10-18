@@ -1,7 +1,7 @@
 // 날씨 통계 API (/api/stats/*). 공개 조회 API(/api/series·/api/daily)와 같은 접근 정책: GET 만, 로그인 없이 조회 가능
 // (auth.guard 가 관리자 전용으로 막는 경로는 /api/gaps·/api/jobs·/api/admin/* 뿐). 계산은 모두 stats-engine.mjs.
 import {
-  StatsError, parsePeriod, periodLabel, getMetric, metricInfo, METRIC_ORDER, SEASONS, WEEKS, RULES, BASELINE, RECENT,
+  StatsError, unknownStationMsg, parsePeriod, periodLabel, getMetric, metricInfo, METRIC_ORDER, SEASONS, WEEKS, RULES, BASELINE, RECENT,
   yearlyCompare, overlay, regionYearly, regionPeriod, regionMonthly, REGION_PERIOD_METRICS, toCsv, deltaText, yearRows, decadeDelta, daysInMonth,
   thresholdDates, streaks, RUN_KINDS, weekdayShare, sameDayHistory, records, RECORDS, parseOutdoor, outdoorShare, OUTDOOR_DEFAULT, parseHours,
   commuteShare, tropicalNights, LIFE_RULES, posToMd, isLeap, missingLabel, missingText, HOURLY_FROM,
@@ -39,7 +39,7 @@ export function createStatsApi({ statsData, statsHourly = null, dayRow = null, s
   async function stationById(id) {
     const list = await stations();
     const st = list.find((s) => String(s.station_id) === String(id ?? "").trim());
-    if (!st) throw new StatsError(`알 수 없는 관측지점입니다: ${String(id ?? "").slice(0, 20)}`);
+    if (!st) throw new StatsError(unknownStationMsg(id));
     return st;
   }
   function periodParam(url, asOf) {

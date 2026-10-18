@@ -35,7 +35,7 @@
   const dateOf = (c) => `${c.y}-${p2(c.m)}-${p2(c.d)}`;
   const caseText = (c) => (c.cal === "L" ? `음력 ${c.y}.${c.m}.${c.d}${c.leap ? "(윤)" : ""}` : `${c.y}.${c.m}.${c.d}`);
   const tag = (id) => `<span class="db-tag" style="background:${V.CASE[id].color}" aria-label="${id}">${V.CASE[id].shape} ${id}</span>`;
-  const stationName = (id) => (meta?.stations || []).find((s) => String(s.station_id) === String(id))?.station_name || id;
+  const stationName = (id) => (meta?.stations || []).find((s) => String(s.station_id) === String(id))?.station_name || (/^\d{1,6}$/.test(String(id ?? "")) ? String(id) : "서울(기본)"); // 옛 저장값 '[object Object]' 는 열 때 108 로 바뀜
   const nameOf = (id) => { const c = st.cases.find((x) => x.id === id); return c ? c.label || caseText(c) : id; };
   // 해마다 비교할 날(연도 없이) — 해마다 결과 문장용
   const dayName = (id) => { const c = st.cases.find((x) => x.id === id); if (!c) return id; return c.label || (c.cal === "L" ? `음력 ${c.m}/${c.d}${c.leap ? "(윤)" : ""}` : `${c.m}월 ${c.d}일`); };
@@ -55,11 +55,12 @@
   function readHash() {
     const q = new URLSearchParams(location.hash.split("?")[1] || "");
     const labels = String(q.get("labels") || "").split(",").map((s) => { try { return decodeURIComponent(s).slice(0, 30); } catch { return ""; } });
-    const def = (window.NWStation && NWStation.stored && NWStation.stored()) || "108";
+    const idOf = (v) => (window.NWDefaults?.stationIdOf ? NWDefaults.stationIdOf(v) : /^\d{1,6}$/.test(String(v ?? "")) ? String(v) : null);
+    const def = idOf(window.NWStation?.stored?.()) || "108"; // stored() = { id, why, at } — 번호만 꺼냄
     const to = Number(q.get("to"));
     st.to = Number.isInteger(to) && to >= 1971 && to <= THIS_YEAR ? to : THIS_YEAR - 1;
     const list = String(q.get("cases") || "").split(",").map((s) => s.split(".")).filter((p) => p.length >= 5 && IDS.includes(p[0]));
-    st.cases = list.slice(0, 4).map((p, i) => { const y = Number(p[6]); return { id: IDS[i], station: p[1] || def, cal: p[2] === "L" ? "L" : "S", y: Number.isInteger(y) && y >= 1900 && y <= 2050 ? y : st.to, m: Math.min(12, Math.max(1, +p[3] || 1)), d: Math.max(1, +p[4] || 1), leap: p[2] === "L" && p[5] === "1", label: labels[i] || "" }; });
+    st.cases = list.slice(0, 4).map((p, i) => { const y = Number(p[6]); return { id: IDS[i], station: idOf(p[1]) || def, cal: p[2] === "L" ? "L" : "S", y: Number.isInteger(y) && y >= 1900 && y <= 2050 ? y : st.to, m: Math.min(12, Math.max(1, +p[3] || 1)), d: Math.max(1, +p[4] || 1), leap: p[2] === "L" && p[5] === "1", label: labels[i] || "" }; });
     for (const c of st.cases) c.d = Math.min(c.d, c.cal === "S" ? solarDim(c.m) : 30);
     if (st.cases.length === 0) st.cases = [{ id: "A", station: def, cal: "S", y: st.to, m: 5, d: 5, leap: false, label: "" }];
     if (st.cases.length === 1) { const a = st.cases[0]; st.cases.push(a.cal === "S" && a.m === 1 && a.d === 1 ? { id: "B", station: a.station, cal: "S", y: a.y, m: 5, d: 5, leap: false, label: "" } : { id: "B", station: a.station, cal: "S", y: a.y, m: 1, d: 1, leap: false, label: "" }); }
@@ -335,6 +336,9 @@
     shell();
     readHash();
     if (!meta) { try { meta = await getJson("/api/stats/meta"); } catch { meta = { stations: [] }; } }
+    // 모르는 지점(옛 저장값·잘못된 주소)은 서울(108)로 — 서버에 이상한 값을 보내지 않음
+    const known = new Set((meta.stations || []).map((s) => String(s.station_id)));
+    if (known.size) for (const c of st.cases) if (!known.has(String(c.station))) c.station = known.has("108") ? "108" : [...known][0];
     load();
   }
   window.DateBattle = { show };
