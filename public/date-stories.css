@@ -320,3 +320,5 @@ button.ds-mini b { font-size:14px; line-height:1; }
   button.ds-mini { padding:0 9px; }
 }
 @media (max-width:370px) { button.ds-mini { padding:0 8px; gap:3px; font-size:12px; } }
+/* 달력 아이콘: 전역 svg{height:160px} 를 받아 위 칸(양력·음력 버튼)까지 덮던 문제 */
+.ds-pick svg { width:20px; height:20px; flex:none; pointer-events:none; }
