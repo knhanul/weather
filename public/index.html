@@ -528,6 +528,7 @@
   <link rel="stylesheet" href="/fold.css?v=1" />
   <link rel="stylesheet" href="/rt.css?v=32" />
   <link rel="stylesheet" href="/date-stories.css?v=5" />
+  <link rel="stylesheet" href="/info-tip.css?v=1" />
 </head>
 <body>
   <div class="appbar" id="appbar">
@@ -635,7 +636,7 @@
           <div class="st-panel" id="tabLife" hidden></div>
           <div class="st-panel" id="tabRecords" hidden></div>
           <div class="st-panel" id="tabQuestions" hidden>
-            <div class="card"><h2 class="sx-q">질문으로 보는 날씨<small>일상적인 질문을 기상청 관측(일자료 1970년~, 시간자료 1990년~)으로 답합니다. 앞으로의 예보·확률이 아닙니다.</small></h2><div class="sx-ctl" id="qxCtl"></div></div>
+            <div class="card"><h2 class="sx-q">질문으로 보는 날씨<small data-it-tag="일자료 1970년~ · 시간자료 1990년~" data-it-label="기준">일상적인 질문을 기상청 관측(일자료 1970년~, 시간자료 1990년~)으로 답합니다. 앞으로의 예보·확률이 아닙니다.</small></h2><div class="sx-ctl" id="qxCtl"></div></div>
             <div class="card q-wrap">
               <div class="chart-head"><div><h2>우리 동네는 어떻게 달라졌을까</h2><p class="muted" id="qCardsNote">선택한 지점의 1990~1999년 평균과 최근 완료된 10개 연도 평균을 비교합니다.</p></div></div>
               <div class="q-cards" id="qCards"></div>
@@ -667,7 +668,7 @@
         </section>
         <section class="page" id="daily">
           <div class="card">
-            <p class="muted">기상청 공식 일자료를 보여 주고, 공식 일자료가 없는 날은 시간자료로 집계한 값(표시: 시간자료 집계)을 보여 줍니다. 둘은 다를 수 있습니다.</p>
+            <p class="muted" data-it-tag="공식 일자료 · 없는 날은 시간자료 집계" data-it-label="자료 기준">기상청 공식 일자료를 보여 주고, 공식 일자료가 없는 날은 시간자료로 집계한 값(표시: 시간자료 집계)을 보여 줍니다. 둘은 다를 수 있습니다.</p>
             <div class="row">
               <div><label>지점</label><select id="dStation"></select></div>
               <div><label>시작</label><input id="dFrom" type="date" /></div>
@@ -691,7 +692,7 @@
               <h2>레이아웃(보기 구성) 관리</h2>
               <span class="muted" style="font-size:12px;" id="xLayoutWhere">선택한 자료 종류와 컬럼·순서를 브라우저에 저장</span>
             </div>
-            <p class="muted" style="margin-top:2px;">자주 쓰는 컬럼 조합과 순서를 이름 붙여 저장해 두면 <a href="#/hourly-weather">시간별 날씨</a>·<a href="#/daily-weather">일별 날씨</a> 화면의 레이아웃 목록에 나오고, 그 화면에서 같은 컬럼 순서로 CSV 를 내려받을 수 있습니다. 지점과 기간은 그 화면에서 고릅니다.</p>
+            <p class="muted" style="margin-top:2px;" data-it-tag="레이아웃 = 컬럼 조합·순서 저장" data-it-label="레이아웃 안내">자주 쓰는 컬럼 조합과 순서를 이름 붙여 저장해 두면 <a href="#/hourly-weather">시간별 날씨</a>·<a href="#/daily-weather">일별 날씨</a> 화면의 레이아웃 목록에 나오고, 그 화면에서 같은 컬럼 순서로 CSV 를 내려받을 수 있습니다. 지점과 기간은 그 화면에서 고릅니다.</p>
             <div class="dl-layout-row" style="margin-top:8px;">
               <div>
                 <label for="xKind" style="display:block; font-size:12px; margin-bottom:4px; font-weight:600;">자료 종류</label>
@@ -733,7 +734,7 @@
                 <input id="xColFilter" type="text" placeholder="컬럼명·한글 검색…" style="height:30px; font-size:12px; width:150px; padding:0 8px; border:1px solid var(--line); border-radius:6px;" />
               </div>
             </div>
-            <p class="muted" style="margin-top:4px;">
+            <p class="muted" style="margin-top:4px;" data-it-tag="관측일시·지점번호는 필수" data-it-label="컬럼 안내">
               DB에 실제 존재하는 필드만 선택할 수 있습니다. <b>관측일시/일자</b>와 <b>지점번호</b>는 관측값 식별을 위한 필수 컬럼입니다.
               <br>• <b>신적설</b>: 새로 쌓인 눈(일정 시간 동안 새로 내린 눈) / <b>적설</b>: 관측 지표면에 이미 쌓여 있는 눈의 깊이
             </p>
@@ -746,7 +747,7 @@
               <h2>컬럼 순서 (화면·CSV 공통)</h2>
               <span class="muted" style="font-size:12px;">마우스 드래그 또는 [▲][▼] 버튼으로 순서 이동</span>
             </div>
-            <p class="muted" style="margin-top:2px;">시간별·일별 날씨 그리드의 열 순서이자 카드의 항목 순서, 그리고 내려받는 CSV 의 열 순서입니다. 키보드로도 [▲]/[▼]를 눌러 좌우 순서를 자유롭게 조정할 수 있습니다.</p>
+            <p class="muted" style="margin-top:2px;" data-it-tag="그리드·카드·CSV 열 순서" data-it-label="순서 안내">시간별·일별 날씨 그리드의 열 순서이자 카드의 항목 순서, 그리고 내려받는 CSV 의 열 순서입니다. 키보드로도 [▲]/[▼]를 눌러 좌우 순서를 자유롭게 조정할 수 있습니다.</p>
             <div id="xOrderWrap" class="dl-order-wrap" role="list" aria-label="선택된 컬럼 순서 목록"></div>
           </div>
         </section>
@@ -2914,26 +2915,27 @@
       setTimeout(go, 4000);
     } else Promise.allSettled([loadMe(), loadDash()]).then(route).then(after);
   </script>
-  <script src="/views.js?v=4"></script>
-  <script src="/stats.js?v=12"></script>
+  <script src="/info-tip.js?v=1"></script>
+  <script src="/views.js?v=5"></script>
+  <script src="/stats.js?v=13"></script>
   <script src="/drawer.js?v=2"></script>
   <script src="/fold.js?v=2"></script>
   <script src="/rt-weather-art.js?v=1"></script>
-  <script src="/rt-story-visuals.js?v=3"></script>
-  <script src="/rt-activity.js?v=2"></script>
-  <script src="/rt-home.js?v=16"></script>
-  <script src="/rt.js?v=12"></script>
-  <script src="/rt-forecast-visual.js?v=6"></script>
-  <script src="/rt-forecast.js?v=10"></script>
-  <script src="/rt-stories.js?v=11"></script>
-  <script src="/rt-home-cards.js?v=2"></script>
-  <script src="/rt-ext.js?v=7"></script>
+  <script src="/rt-story-visuals.js?v=4"></script>
+  <script src="/rt-activity.js?v=3"></script>
+  <script src="/rt-home.js?v=17"></script>
+  <script src="/rt.js?v=13"></script>
+  <script src="/rt-forecast-visual.js?v=7"></script>
+  <script src="/rt-forecast.js?v=11"></script>
+  <script src="/rt-stories.js?v=12"></script>
+  <script src="/rt-home-cards.js?v=3"></script>
+  <script src="/rt-ext.js?v=8"></script>
   <script src="/rt-admin.js?v=2"></script>
   <script src="/date-viz.js?v=1"></script>
   <script src="/story-favs.js?v=1"></script>
   <script src="/story-share.js?v=3"></script>
-  <script src="/date-weather.js?v=4"></script>
-  <script src="/date-battle.js?v=3"></script>
-  <script src="/my-settings.js?v=1"></script>
+  <script src="/date-weather.js?v=5"></script>
+  <script src="/date-battle.js?v=4"></script>
+  <script src="/my-settings.js?v=2"></script>
 </body>
 </html>

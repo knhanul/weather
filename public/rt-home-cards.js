@@ -25,7 +25,7 @@
     if (!SEL.id || !ev.some((e) => e.id === SEL.id)) SEL.id = (ev.find((e) => e.home?.home) || ev.find((e) => e.current?.date && e.id !== "last-hot-day") || ev[0]).id;
     const e = ev.find((x) => x.id === SEL.id);
     const viz = window.RTViz && e.chart ? window.RTViz.season(e.chart) : "";
-    return `<section class="card rhc-season" aria-label="계절 신호"><h2>계절 신호 <small class="rh-sub">끝난 시즌과 비교 · ${esc(d.basisName || "")} 기준</small></h2><div class="rhc-sevs" role="group" aria-label="계절 신호 고르기">${ev.map(seasonLine).join("")}</div>${viz}<p class="rt-note">${esc(NOTE[e.id] || "")} 시즌 ${esc(e.chart?.startMd?.replace("-", "/") || "")}부터. 평균은 처음~사건 사이 결측 1일 이내인 끝난 시즌 중 사건이 있었던 시즌만(${4}개 이상일 때), 사건 없던 시즌은 날짜로 넣지 않고 따로 셉니다.</p></section>`;
+    return `<section class="card rhc-season" aria-label="계절 신호"><h2>계절 신호 <small class="rh-sub">끝난 시즌과 비교 · ${esc(d.basisName || "")} 기준</small></h2><div class="rhc-sevs" role="group" aria-label="계절 신호 고르기">${ev.map(seasonLine).join("")}</div>${viz}${window.InfoTip.note(`시즌 ${esc(e.chart?.startMd?.replace("-", "/") || "")}부터 · 끝난 시즌과 비교`, `${esc(NOTE[e.id] || "")} 시즌 ${esc(e.chart?.startMd?.replace("-", "/") || "")}부터. 평균은 처음~사건 사이 결측 1일 이내인 끝난 시즌 중 사건이 있었던 시즌만(${4}개 이상일 때), 사건 없던 시즌은 날짜로 넣지 않고 따로 셉니다.`, { cls: "rt-note", label: "계산 기준" })}</section>`;
   }
   // ---------------------------------------------------------------- 30일 비 달력
   function rainHtml(d) {
@@ -36,7 +36,7 @@
     let run = 0; for (let i = days.length - 2; i >= 0 && days[i].state === "dry"; i--) run++;
     const last = [...days].reverse().find((x) => x.state === "wet");
     const viz = window.RTViz ? window.RTViz.calendar({ type: "calendar", days }) : "";
-    return `<section class="card rhc-rain" aria-label="최근 30일 비 달력"><h2>최근 30일 비 달력 <small class="rh-sub">${esc(d.station?.name || "")} ASOS 공식 일자료</small></h2><p class="rhc-sum">비 온 날 <b>${wet.length}일</b>${wet.length ? ` · 합계 ${sum}mm` : ""}${last ? ` · 마지막 비 ${mdK(last.date)}(${last.mm}mm)` : ""}${run ? ` · 어제까지 ${run}일째 비 없음` : ""}${miss ? ` · <span class="rt-ins">자료 없는 날 ${miss}일(0으로 보지 않음)</span>` : ""}</p>${viz}<p class="rt-note">${esc(d.rainCalendar.note || "")}</p></section>`;
+    return `<section class="card rhc-rain" aria-label="최근 30일 비 달력"><h2>최근 30일 비 달력 <small class="rh-sub">${esc(d.station?.name || "")} ASOS 공식 일자료</small></h2><p class="rhc-sum">비 온 날 <b>${wet.length}일</b>${wet.length ? ` · 합계 ${sum}mm` : ""}${last ? ` · 마지막 비 ${mdK(last.date)}(${last.mm}mm)` : ""}${run ? ` · 어제까지 ${run}일째 비 없음` : ""}${miss ? ` · <span class="rt-ins">자료 없는 날 ${miss}일(0으로 보지 않음)</span>` : ""}</p>${viz}${window.InfoTip.note(`ASOS 공식 일자료`, `${esc(d.rainCalendar.note || "")}`, { cls: "rt-note", label: "자료 기준" })}</section>`;
   }
   // ---------------------------------------------------------------- 내가 기억하는 이날
   const MEMO_KEY = "nw.memoDate";
@@ -67,7 +67,7 @@
     const one = !row ? `<p class="rt-ins">${ymd.slice(0, 4)}년은 이 지점 보유 자료 범위(${r.fromYear}~${r.toYear}년) 밖이에요.</p>` : row.status === "future" ? `<p class="rt-ins">아직 오지 않은 날이에요.</p>` : row.status !== "ok" ? `<p class="rt-ins">${ymdK(ymd)}: 자료 부족(관측 자료 없음)</p>` : `<p class="rhc-memo1"><b>${ymdK(ymd)}(${esc(row.weekday || "")})</b> 최고 <b>${row.max ?? "–"}℃</b> · 최저 <b>${row.min ?? "–"}℃</b> · ${row.rain == null ? `<span class="rt-ins">강수 자료 없음</span>` : row.rainy ? `강수 ${row.rain}mm` : "강수 없음(0.1mm 미만)"}</p>`;
     const share = `${location.origin}${location.pathname}#/today?${new URLSearchParams({ station: st, memo: ymd })}`;
     const stats = `#/stories/day?${new URLSearchParams({ station: st, cal: "solar", m: String(+ymd.slice(5, 7)), d: String(+ymd.slice(8, 10)), year: ymd.slice(0, 4) })}`;
-    return `${one}${memoChart(r, ymd)}<p class="rt-note">매년 ${mdK(ymd)}: 자료가 있는 ${S.validYears ?? 0}개 해 중 강수가 있었던 해 ${S.rainyYears ?? 0}개${S.share != null ? `(${S.share}%)` : ""}, 평균 최고 ${S.meanMax ?? "–"}℃ · 최저 ${S.meanMin ?? "–"}℃. 과거 관측이며 예보가 아닙니다.</p><p class="rhc-links"><button type="button" class="rhc-share" data-share="${esc(share)}">이날 링크 복사</button> <a href="${esc(stats)}">매년 같은 날 날씨 보기 ›</a></p>`;
+    return `${one}${memoChart(r, ymd)}${window.InfoTip.note(`매년 ${mdK(ymd)} · 자료가 있는 ${S.validYears ?? 0}개 해 · 과거 관측`, `매년 ${mdK(ymd)}: 자료가 있는 ${S.validYears ?? 0}개 해 중 강수가 있었던 해 ${S.rainyYears ?? 0}개${S.share != null ? `(${S.share}%)` : ""}, 평균 최고 ${S.meanMax ?? "–"}℃ · 최저 ${S.meanMin ?? "–"}℃. 과거 관측이며 예보가 아닙니다.`, { cls: "rt-note", label: "자세히" })}<p class="rhc-links"><button type="button" class="rhc-share" data-share="${esc(share)}">이날 링크 복사</button> <a href="${esc(stats)}">매년 같은 날 날씨 보기 ›</a></p>`;
   }
   function memoHtml(st) {
     const v = memoDate();

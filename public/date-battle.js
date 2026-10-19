@@ -91,7 +91,7 @@
     const p = $("sbattle");
     if (p.dataset.ready === "2") return;
     p.dataset.ready = "2";
-    p.innerHTML = `<div class="card ds-head"><h2 class="sx-q">날씨 배틀<small>날짜 2~4개를 넣으면, 같은 기간 해마다 그날 실제 날씨가 어땠는지 나란히 셉니다. 같은 날 평균·종합 승자는 만들지 않습니다.</small></h2>
+    p.innerHTML = `<div class="card ds-head"><h2 class="sx-q">날씨 배틀${window.InfoTip.sub(`해마다 그날 실제 날씨 나란히`, `날짜 2~4개를 넣으면, 같은 기간 해마다 그날 실제 날씨가 어땠는지 나란히 셉니다. 같은 날 평균·종합 승자는 만들지 않습니다.`, { label: "기준" })}</h2>
         <div class="db-ex"><span class="muted">예시:</span>${EXAMPLES.map(([l], i) => `<button type="button" class="sec" data-ex="${i}">${E(l)}</button>`).join("")}</div>
         <div id="dbCases" class="db-cases"></div>
         <div class="sx-ctl" id="dbCtl"></div><p class="ds-banner" id="dbBanner" role="status"></p><div class="fav-row" id="dbFav"></div><p class="ds-toast" id="dbToast" role="status" hidden></p></div>
@@ -227,7 +227,7 @@
   const STATUS = (s) => B?.statusText?.[s] || HB?.statusText?.[s] || { partial: "자료 부족" }[s] || s;
   function renderBanner() {
     const dup = B.duplicates.length ? ` · <b class="db-dup">같은 조건입니다: ${B.duplicates.map((d) => d.join("·")).join(", ")} (지점·날짜·연도가 모두 같음)</b>` : "";
-    $("dbBanner").innerHTML = `<b>해마다 그날 실제 날씨를 셈 · 서로 자료가 있는 같은 해만</b> · ${E(B.window.label)}${B.mixedCalendars ? " · 양력·음력 혼합: 각 달력의 같은 기준연도끼리" : ""}${B.differentStations ? " · 카드마다 다른 관측지점" : ""} <span class="muted">· 같은 날 평균·종합 승자 없음 · 일자료 1970~ / 시간자료 1990~</span>${dup}`;
+    $("dbBanner").innerHTML = `<b>${E(B.window.label)}</b>${B.mixedCalendars ? " · 양력·음력 혼합" : ""}${B.differentStations ? " · 카드마다 다른 관측지점" : ""} <span class="muted">· 일자료 1970~ / 시간자료 1990~</span>${window.InfoTip.btn(`해마다 그날 실제 날씨를 셈 · 서로 자료가 있는 같은 해만 · ${E(B.window.label)}${B.mixedCalendars ? " · 양력·음력 혼합: 각 달력의 같은 기준연도끼리" : ""}${B.differentStations ? " · 카드마다 다른 관측지점" : ""} · 같은 날 평균·종합 승자 없음 · 일자료 1970~ / 시간자료 1990~`, { label: "배틀 기준" })}${dup}`;
   }
   // ---- 그날 한 칸(최고/최저 · 강수 · 바람)
   const tv = (v, d = 1) => (fin(v) ? fmt(v, d) : "–");
@@ -269,14 +269,14 @@
     const rows = B.yearly.slice().reverse();
     const LIM = 10;
     const shown = st.all ? rows : rows.slice(0, LIM);
-    $("dbYears").innerHTML = `<h3 class="ds-h">해마다 결과 <small>${E(per)} 해마다 각 카드 날짜 하루의 실제 관측 · 같은 날 평균을 내지 않습니다</small></h3>
+    $("dbYears").innerHTML = `<h3 class="ds-h">해마다 결과 ${window.InfoTip.sub(`${E(per)} · 하루 실제 관측`, `${E(per)} 해마다 각 카드 날짜 하루의 실제 관측 · 같은 날 평균을 내지 않습니다`, { label: "기준" })}</h3>
       <div class="db-cnts">${cntHtml}</div>
-      <h4 class="db-sub">해마다 누가 더? <small>소수 1자리로 같으면 '같음' · 한 카드라도 자료가 없는 해는 빼고 셈 · 종합 승자 없음</small></h4><ul class="db-tl">${tl}</ul>
+      <h4 class="db-sub">해마다 누가 더? ${window.InfoTip.sub(`종합 승자 없음`, `소수 1자리로 같으면 '같음' · 한 카드라도 자료가 없는 해는 빼고 셈 · 종합 승자 없음`, { label: "기준" })}</h4><ul class="db-tl">${tl}</ul>
       <div class="sx-table-wrap db-ytab"><table><thead><tr><th>기준연도</th>${B.cases.map((c) => `<th>${tag(c.id)} <small>최고/최저 · 강수</small></th>`).join("")}</tr></thead><tbody>${shown.map((r) => `<tr data-year="${r.referenceYear}" tabindex="0" class="${r.referenceYear === st.year ? "ds-tr-sel" : ""}"><td><button type="button" class="linkish" data-year="${r.referenceYear}">${r.referenceYear}</button></td>${r.cells.map((x) => { const mine = B.cases.find((c) => c.id === x.case)?.year === r.referenceYear; return `<td class="db-yc${mine ? " mine" : ""}"${mine ? ` title="입력한 해"` : ""}>${cellBody(x)}<small class="muted db-yd8">${x.solarDate ? md(x.solarDate) : ""}${mine ? " · 입력한 해" : ""}</small></td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
       ${rows.length > LIM ? `<button type="button" class="sec dy-all" id="dbAll">${st.all ? "접기" : `${rows.length}개 해 모두 보기`}</button>` : ""}
-      <p class="ds-note">연도를 누르면 그해 카드별 실제 시간별 값을 봅니다 · 💧 강수 0.1mm 이상, ❄ 눈이 새로 쌓임 · 횟수 기준은 날짜로 보는 날씨와 같습니다(계절에 맞는 것만, 계절 밖이라도 한 번이라도 있었으면 보여 줌).</p>
+      ${window.InfoTip.note(`연도 = 그해 시간별 값 · 💧 강수 · ❄ 새로 쌓인 눈`, `연도를 누르면 그해 카드별 실제 시간별 값을 봅니다 · 💧 강수 0.1mm 이상, ❄ 눈이 새로 쌓임 · 횟수 기준은 날짜로 보는 날씨와 같습니다(계절에 맞는 것만, 계절 밖이라도 한 번이라도 있었으면 보여 줌).`, { cls: "ds-note", label: "보는 법" })}
       <div id="dbYearDetail"></div>
-      <div class="sx-tools"><span class="muted">횟수·표·CSV 는 같은 서버 계산 결과입니다.</span><a class="dl-chip-btn" href="${api("summary")}&format=csv${labelsParam() ? `&labels=${labelsParam()}` : ""}" download>배틀 결과 CSV</a></div>`;
+      <div class="sx-tools"><span class="muted">같은 계산 결과${window.InfoTip.btn("횟수·표·CSV 는 같은 서버 계산 결과입니다.", { label: "CSV 안내" })}</span><a class="dl-chip-btn" href="${api("summary")}&format=csv${labelsParam() ? `&labels=${labelsParam()}` : ""}" download>배틀 결과 CSV</a></div>`;
     if (st.year && YB && YB.year === st.year) renderYearDetail();
     else if (st.year) $("dbYearDetail").innerHTML = `<div class="sx-state">${st.year}년 시간별 값 불러오는 중…</div>`;
   }
@@ -310,11 +310,11 @@
     const ex = Object.entries(M.avg.excludedYears || {}).map(([y, rs]) => `${y}(${rs.map((x) => `${x.case} ${STATUS(x.reason)}`).join(", ")})`);
     // 입력한 해의 31일 창(카드마다 자기 해)
     const cw = B.chosen.map((x) => { const a = x.around; if (!a || !(a.status === "ok" || a.sofarEnd)) return `${tag(x.case)} ${x.year}년: ${E(STATUS(a ? a.status : x.dateStatus))}`; const g = (k) => a.metrics[k]; const av = g("avg"); const rd = g("rainDays"); return `${tag(x.case)} ${x.year}년 ${md(a.start)}~${md(a.sofarEnd || a.end)}${a.sofarEnd ? "(진행 중)" : ""}: 평균 ${av && av.obs ? `${fmt(av.raw)}℃` : "–"} · 강수일 ${rd && rd.obs ? `${fmt(rd.raw, 0)}/${rd.obs}일` : "–"}${(!a.sofarEnd && (av?.status !== "ok" || rd?.status !== "ok")) ? " (자료 부족)" : ""}`; });
-    $("dbAround").innerHTML = `<h3 class="ds-h">앞뒤 15일 비교 <small>해마다 각 카드 날짜 앞뒤 15일(31일) · ${E(per)} · 하루가 아니라 '이 무렵'의 날씨</small></h3>
+    $("dbAround").innerHTML = `<h3 class="ds-h">앞뒤 15일 비교 ${window.InfoTip.sub(`${E(per)} · 앞뒤 15일(31일)`, `해마다 각 카드 날짜 앞뒤 15일(31일) · ${E(per)} · 하루가 아니라 '이 무렵'의 날씨`, { label: "기준" })}</h3>
       <div class="da-wrap"><table class="da-tbl db-atbl"><thead><tr><th>지표</th>${B.cases.map((c) => `<th>${tag(c.id)}</th>`).join("")}<th>차이</th></tr></thead><tbody>
       ${rows.map(([k, label, kind]) => { const m = M[k]; return `<tr><th scope="row">${E(label)}${tagT(m)}<small>${m.n ? `공통 ${m.n}개 해` : ""}</small></th>${m.results.map((r) => `<td class="num">${val(m, r, kind)}</td>`).join("")}<td class="num db-dfs">${diffs(m, kind)}</td></tr>`; }).join("")}</tbody></table></div>
       <p class="ds-note"><b>입력한 해의 31일</b>: ${cw.join(" · ")}</p>
-      <p class="ds-note">해 수: 요청 ${M.avg.requested}개 · 모든 카드에 창이 있고 끝난 해 ${M.avg.eligible}개 · 쓴 해 ${M.avg.n}개(기온) / ${M.rainDays.n}개(강수)${ex.length ? ` · 뺀 해: ${E(ex.join(" / "))}` : ""}. 지표마다 모든 카드가 유효한 같은 해만 씁니다. 31일 중 자료 없는 날이 1일 이하인 해만 넣고(남은 날로만 집계, 채우지 않음), 2일 이상 빠지면 '자료 부족'으로 뺍니다. 강수일 비율 = 강수일(0.1mm 이상) ÷ 유효한 날, 하루 평균 강수량 = 강수량 합 ÷ 유효한 날(무강수 0 포함). 차이 = 각 카드 − A (기온 ℃, 강수일 비율 %p, 하루 강수량 mm, 일수는 해마다 평균의 차이). 공통 3개 해 미만이면 차이를 보이지 않습니다.</p>`;
+      ${window.InfoTip.note(`쓴 해 ${M.avg.n}개(기온) / ${M.rainDays.n}개(강수) · 공통 해만`, `해 수: 요청 ${M.avg.requested}개 · 모든 카드에 창이 있고 끝난 해 ${M.avg.eligible}개 · 쓴 해 ${M.avg.n}개(기온) / ${M.rainDays.n}개(강수)${ex.length ? ` · 뺀 해: ${E(ex.join(" / "))}` : ""}. 지표마다 모든 카드가 유효한 같은 해만 씁니다. 31일 중 자료 없는 날이 1일 이하인 해만 넣고(남은 날로만 집계, 채우지 않음), 2일 이상 빠지면 '자료 부족'으로 뺍니다. 강수일 비율 = 강수일(0.1mm 이상) ÷ 유효한 날, 하루 평균 강수량 = 강수량 합 ÷ 유효한 날(무강수 0 포함). 차이 = 각 카드 − A (기온 ℃, 강수일 비율 %p, 하루 강수량 mm, 일수는 해마다 평균의 차이). 공통 3개 해 미만이면 차이를 보이지 않습니다.`, { cls: "ds-note", label: "계산 방법" })}`;
   }
   // ---- ③ 시간별 맞대결(카드마다 입력한 날짜 하루의 실제 정시 관측, 평균 없음)
   function renderHour() {
@@ -325,9 +325,9 @@
     const series = C.map((x) => ({ label: x.case, color: V.CASE[x.case].color, dash: V.CASE[x.case].dash, mark: V.CASE[x.case].shape + x.case, values: x.series[k], status: x.cellStatus[k] }));
     const anyOk = C.some((x) => x.hourlyStatus === "ok");
     const hl = (h) => (k === "rn" ? `${h}~${h + 1}시` : `${h}시`);
-    $("dbHour").innerHTML = `<h3 class="ds-h">시간별 맞대결 <small>카드마다 입력한 날짜 하루의 실제 정시 관측 · 평균 없음 · 시간자료(1990~)</small></h3><div class="ds-tools">${seg("hm", Object.entries(HM).map(([v, x]) => [v, x[0]]), k)}</div>
+    $("dbHour").innerHTML = `<h3 class="ds-h">시간별 맞대결 ${window.InfoTip.sub(`시간자료 1990년~ · 평균 없음`, `카드마다 입력한 날짜 하루의 실제 정시 관측 · 평균 없음 · 시간자료(1990~)`, { label: "기준" })}</h3><div class="ds-tools">${seg("hm", Object.entries(HM).map(([v, x]) => [v, x[0]]), k)}</div>
       ${anyOk ? `<div class="sx-chart" id="dbHourChart"></div>` : `<div class="sx-state">${E(C.map((x) => `${x.case} ${x.year}년: ${STATUS(x.hourlyStatus)}`).join(" · "))}</div>`}
-      <div class="sx-legend">${C.map((x) => `<span style="color:${V.CASE[x.case].color}"><i style="background:${V.CASE[x.case].color}"></i>${V.CASE[x.case].shape} ${x.case} ${x.solarDate ? dot(x.solarDate) : x.year + "년"}${x.hourlyStatus !== "ok" ? ` — ${E(STATUS(x.hourlyStatus))}` : ""}</span>`).join("")}<span>선이 끊긴 곳 = 자료 없음(잇지 않음)</span><span>단위 ${unit}</span></div>${k === "rn" ? `<p class="ds-note">강수 막대 = h~h+1시 1시간 강수량(기상청 정시값 = 앞 1시간 누적), 카드별 묶음 막대.</p>` : ""}
+      <div class="sx-legend">${C.map((x) => `<span style="color:${V.CASE[x.case].color}"><i style="background:${V.CASE[x.case].color}"></i>${V.CASE[x.case].shape} ${x.case} ${x.solarDate ? dot(x.solarDate) : x.year + "년"}${x.hourlyStatus !== "ok" ? ` — ${E(STATUS(x.hourlyStatus))}` : ""}</span>`).join("")}<span>선이 끊긴 곳 = 자료 없음(잇지 않음)</span><span>단위 ${unit}</span></div>${k === "rn" ? `${window.InfoTip.note(`막대 = 1시간 강수량`, `강수 막대 = h~h+1시 1시간 강수량(기상청 정시값 = 앞 1시간 누적), 카드별 묶음 막대.`, { cls: "ds-note", label: "강수 막대" })}` : ""}
       ${anyOk ? `<details class="sx-table"><summary>표로 보기 · ${label}</summary><div class="sx-table-wrap"><table><thead><tr><th>${k === "rn" ? "구간" : "시각"}</th>${C.map((x) => `<th>${tag(x.case)} ${unit}</th>`).join("")}</tr></thead><tbody>${Array.from({ length: 24 }, (_, h) => `<tr><td>${hl(h)}</td>${C.map((x) => `<td class="num">${fin(x.series[k][h]) ? fmt(x.series[k][h], dg) : `<span class="muted">${E(STATUS(x.hourlyStatus !== "ok" ? x.hourlyStatus : x.cellStatus[k][h]))}</span>`}</td>`).join("")}</tr>`).join("")}</tbody></table></div></details>` : ""}`;
     if (!anyOk) return;
     V.hourChart($("dbHourChart"), { unit, digits: dg, bar: k === "rn", mean: null, series, aria: `${label} 카드별 입력한 날짜 실제 관측`, tip: (h) => `<b>${hl(h)}</b>${C.map((x) => `<br>${tag(x.case)} ${fin(x.series[k][h]) ? `<b>${fmt(x.series[k][h], dg)}${unit}</b>` : E(STATUS(x.hourlyStatus !== "ok" ? x.hourlyStatus : x.cellStatus[k][h]))}`).join("")}` });

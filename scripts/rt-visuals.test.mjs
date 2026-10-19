@@ -8,7 +8,7 @@ function load(ls = {}) {
   const win = { localStorage: { getItem: (k) => ls[k] ?? null } };
   win.window = win;
   const ctx = vm.createContext(win);
-  for (const f of ["public/rt-weather-art.js", "public/rt-story-visuals.js"]) vm.runInContext(readFileSync(new URL(`../${f}`, import.meta.url), "utf8"), ctx);
+  for (const f of ["public/info-tip.js", "public/rt-weather-art.js", "public/rt-story-visuals.js"]) vm.runInContext(readFileSync(new URL(`../${f}`, import.meta.url), "utf8"), ctx);
   return win;
 }
 const pad = (n) => String(n).padStart(2, "0");

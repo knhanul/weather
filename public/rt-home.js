@@ -104,7 +104,7 @@
     if (first === ptyH && ptyH) items.push(`☂ ${Number(ptyH.time.slice(11, 13))}시 ${esc(ptyH.pty)} 예보${ptyH.pop != null ? `(강수확률 ${ptyH.pop}%)` : ""}, 우산`);
     else if (popH) items.push(`☂ ${Number(popH.time.slice(11, 13))}시 강수확률 ${popH.pop}%, 우산 챙기기`);
     if (!items.length) return "";
-    return `<b>오늘 뭐 입지?</b> ${items.join(" · ")} <span class="rt-badge fc" title="기온별 옷차림 일반 기준을 실황·단기예보 기온에 규칙으로 맞춘 참고 안내입니다. 체감은 바람·습도·사람마다 다릅니다.">참고용</span>`;
+    return `<b>오늘 뭐 입지?</b> ${items.join(" · ")} <span class="rt-badge fc">참고용</span>${window.InfoTip.btn("기온별 옷차림 일반 기준을 실황·단기예보 기온에 규칙으로 맞춘 참고 안내입니다. 체감은 바람·습도·사람마다 다릅니다.", { label: "옷차림 기준" })}`;
   }
   function lifeRow(x) {
     const ps = (x.periods || []).filter((p) => "diff" in p && (basis() === "cmp" || p.id === basis()));
@@ -124,7 +124,7 @@
     if (p?.min) rows.push(`<li><span class="down">가장 추웠던</span> ${ymdK(p.min.date)} 이 시각 <b>${p.min.value}℃</b></li>`);
     if (sim?.ok && sim.top?.[0]) { const b = sim.top[0]; rows.push(`<li><span>오늘과 가장 닮은 날</span> ${ymdK(b.date)}${b.max != null ? ` — 그날 최고 ${b.max}℃ · 최저 ${b.min}℃` : ""} <small>(지금까지 기온 흐름 RMSE ${b.rmse}℃)</small></li>`); }
     if (!rows.length) return "";
-    return `<section class="card rh-hist" aria-label="이맘때의 기록"><h2>보유 자료의 같은 시기 기록 <span class="rt-badge ok">과거 관측</span></h2><ul class="rh-list">${rows.join("")}</ul><p class="rt-note">${esc(p ? nm(p) : "")}: 같은 월일 ±7일, 같은 정시(${t.current.hour}시) ASOS 관측 중. 자세한 목록은 아래 ‘기온 흐름이 닮은 날’.</p></section>`;
+    return `<section class="card rh-hist" aria-label="이맘때의 기록"><h2>보유 자료의 같은 시기 기록 <span class="rt-badge ok">과거 관측</span></h2><ul class="rh-list">${rows.join("")}</ul>${window.InfoTip.note(`${esc(p ? nm(p) : "")} · 같은 시기 ${t.current.hour}시`, `${esc(p ? nm(p) : "")}: 같은 월일 ±7일, 같은 정시(${t.current.hour}시) ASOS 관측 중. 자세한 목록은 아래 ‘기온 흐름이 닮은 날’.`, { cls: "rt-note" })}</section>`;
   }
   // 지금 전국은? — /api/rt/nation-hours(관측소별 오늘 0~23시, 오늘의 날씨 그래프와 같은 값). 실황 실선·예보 점선(잇지 않음), '지금' 세로선
   const NC = ["#0d1b3d", "#c0262d", "#0e7a3e", "#8a4b00", "#026ef8", "#7c3aed", "#0891b2", "#db2777"];
@@ -169,7 +169,7 @@
     const el = document.getElementById("rhNation"), d = NAT.data; if (!el || !d) return;
     const legend = `<div class="rt-legend rh-nlg"><span class="lg-obs">━ 실황</span><span class="lg-fc">┅ 예보</span>${d.rows.map((r, i) => `<button type="button" data-nt="${esc(r.id)}" aria-pressed="${!NAT.hide.has(r.id)}" style="--c:${NC[i % NC.length]}" class="${NAT.hide.has(r.id) ? "" : "on"}${String(r.id) === String(cur) ? " me" : ""}">${esc(r.name)}</button>`).join("")}</div>`;
     const sel = NAT.sel ?? nLast();
-    el.innerHTML = `<h2>지금 전국은? <small class="rh-sub">8개 관측소 오늘 시간별 기온</small></h2>${legend}<div class="rt-svg-wrap" id="rhNatHost">${nSvg(d.rows, cur, 720, 260, sel)}${window.ChartFull ? window.ChartFull.button() : ""}</div><div class="rt-tip" id="rhNatTip">${nTip(sel)}</div><p class="rt-note">이름을 누르면 선을 숨기거나 보입니다(굵은 선 = 지금 보는 관측소). 실황 = 기상청 초단기실황, 이후 = 초단기·단기예보이며 서로 잇지 않습니다. 빈 시각은 자료 없음.</p>`;
+    el.innerHTML = `<h2>지금 전국은? <small class="rh-sub">8개 관측소 오늘 시간별 기온</small></h2>${legend}<div class="rt-svg-wrap" id="rhNatHost">${nSvg(d.rows, cur, 720, 260, sel)}${window.ChartFull ? window.ChartFull.button() : ""}</div><div class="rt-tip" id="rhNatTip">${nTip(sel)}</div>${window.InfoTip.note("실황 + 초단기·단기예보", "이름을 누르면 선을 숨기거나 보입니다(굵은 선 = 지금 보는 관측소). 실황 = 기상청 초단기실황, 이후 = 초단기·단기예보이며 서로 잇지 않습니다. 빈 시각은 자료 없음.", { cls: "rt-note", label: "그래프 보는 법" })}`;
     const svg = el.querySelector("svg.rt-svg");
     if (svg) { const pick = (ev) => { const r = svg.getBoundingClientRect(); const h = nHourAt((ev.clientX - r.left) / r.width, 720); if (h === NAT.sel) return; NAT.sel = h; document.getElementById("rhNatTip").innerHTML = nTip(h); }; svg.addEventListener("pointermove", pick); svg.addEventListener("pointerdown", pick); }
     const host = document.getElementById("rhNatHost");

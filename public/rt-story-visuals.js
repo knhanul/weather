@@ -413,7 +413,7 @@
   }
   function segPanel(s, today) {
     if (!s) return "";
-    return `<div class="vz-segp" role="region" aria-live="polite"><b>${esc(s.label)} ${dayW(s.date, today)} ${s.from}~${s.to}시 — 이렇게 정했어요</b><ul>${s.reasons.map((r) => `<li>${esc(r)}</li>`).join("")}${s.wsMax != null && s.wsMax < RULE.wind ? `<li>바람 최대 ${s.wsMax}m/s</li>` : ""}${s.hmMin != null ? `<li>습도 ${s.hmMin === s.hmMax ? `${s.hmMin}` : `${s.hmMin}~${s.hmMax}`}%</li>` : ""}${!s.rain && s.popMax != null ? `<li>강수형태 예보 없음 · 강수확률 최고 ${s.popMax}%</li>` : ""}${s.missing.length ? `<li class="rt-ins">자료 없음: ${s.missing.map(esc).join(", ")} — 그 항목만 빼고 판단</li>` : ""}</ul><p class="rt-note">옷차림은 기온별 일반 기준(참고용)이며 공식·의학 지수가 아닙니다. 가장 추운 시각 기온으로 겉옷, 가장 따뜻한 시각 기온으로 안에 입을 옷을 골랐어요. 구간 기온은 정시 값(실황·예보)이며 공식 최저·최고(TMN·TMX)와 다를 수 있어요.</p></div>`;
+    return `<div class="vz-segp" role="region" aria-live="polite"><b>${esc(s.label)} ${dayW(s.date, today)} ${s.from}~${s.to}시 — 이렇게 정했어요</b><ul>${s.reasons.map((r) => `<li>${esc(r)}</li>`).join("")}${s.wsMax != null && s.wsMax < RULE.wind ? `<li>바람 최대 ${s.wsMax}m/s</li>` : ""}${s.hmMin != null ? `<li>습도 ${s.hmMin === s.hmMax ? `${s.hmMin}` : `${s.hmMin}~${s.hmMax}`}%</li>` : ""}${!s.rain && s.popMax != null ? `<li>강수형태 예보 없음 · 강수확률 최고 ${s.popMax}%</li>` : ""}${s.missing.length ? `<li class="rt-ins">자료 없음: ${s.missing.map(esc).join(", ")} — 그 항목만 빼고 판단</li>` : ""}</ul>${window.InfoTip.note("옷차림 참고용 · 정시 기온", "옷차림은 기온별 일반 기준(참고용)이며 공식·의학 지수가 아닙니다. 가장 추운 시각 기온으로 겉옷, 가장 따뜻한 시각 기온으로 안에 입을 옷을 골랐어요. 구간 기온은 정시 값(실황·예보)이며 공식 최저·최고(TMN·TMX)와 다를 수 있어요.", { cls: "rt-note", label: "옷차림 기준" })}</div>`;
   }
 
   // ---------------------------------------------------------------- 9) 앞으로 12시간 공용 시간축: 기온 선 · 강수 띠 · 바람 띠 + 구간 음영(탭하면 이유)

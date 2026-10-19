@@ -301,7 +301,7 @@
     if (s.dateStatus === "ok" && st.cal === "solar" && cal?.lunar) when += ` · ${E(cal.lunar.text)}`;
     const warn = s.dateStatus === "future" ? `<p class="sx-warn">${E(STATUS("future"))} — 그해 칸만 비워 두고, 지난 해들은 그대로 보여 줍니다.</p>` : s.dateStatus === "ongoing" ? `<p class="sx-warn">${E(STATUS("ongoing"))} — 오늘 하루 자료는 내일 공식 일자료가 들어오면 채워집니다.</p>` : s.dateStatus === "pending" ? `<p class="sx-warn">${E(STATUS("pending"))} — 지난 날이지만 아직 공식 일자료가 들어오지 않았습니다(최신 ${dot(stn.dailyLast)}).</p>` : "";
     $("dsCard").innerHTML = `<div class="ds-card"><div><p class="ds-k">고른 날짜</p><h3 class="ds-title">${title}</h3><p>${when}</p>${warn}</div>
-      <dl class="ds-dl"><div><dt>관측지점</dt><dd>${E(stn.station_name)} (${E(stn.station_id)})${stn.region ? ` · ${E(stn.region)}` : ""} <small>지점 한 곳의 관측</small></dd></div><div><dt>해마다 볼 날</dt><dd>${E(specLabel())} <small>· ${E(D.window.label)} ${D.dateCounts.requested}개 해${D.dateCounts.nodate ? ` (그 날짜가 있는 해 ${D.dateCounts.exists}개)` : ""}</small></dd></div><div><dt>자료 범위</dt><dd>일자료 ${D.dailyFrom.slice(0, 4)}~${dot(stn.dailyLast)} / 시간자료 ${D.hourlyFrom.slice(0, 4)}~ <span class="ds-i" tabindex="0" role="img" aria-label="'전체'는 이 서비스가 가진 범위이며 기상청 전체 역사가 아닙니다" title="'전체'는 이 서비스가 가진 범위이며 기상청 전체 역사가 아닙니다">ⓘ</span></dd></div></dl></div>`;
+      <dl class="ds-dl"><div><dt>관측지점</dt><dd>${E(stn.station_name)} (${E(stn.station_id)})${stn.region ? ` · ${E(stn.region)}` : ""} <small>지점 한 곳의 관측</small></dd></div><div><dt>해마다 볼 날</dt><dd>${E(specLabel())} <small>· ${E(D.window.label)} ${D.dateCounts.requested}개 해${D.dateCounts.nodate ? ` (그 날짜가 있는 해 ${D.dateCounts.exists}개)` : ""}</small></dd></div><div><dt>자료 범위</dt><dd>일자료 ${D.dailyFrom.slice(0, 4)}~${dot(stn.dailyLast)} / 시간자료 ${D.hourlyFrom.slice(0, 4)}~ ${window.InfoTip.btn("'전체'는 이 서비스가 가진 범위이며 기상청 전체 역사가 아닙니다.", { label: "자료 범위" })}</dd></div></dl></div>`;
   }
 
   // ---- 관측값만으로 고른 작은 그림(하늘 상태는 추정하지 않음): 신적설 > 0 → 눈 결정, 강수 0.1mm 이상 → 물방울, 그 밖 → 온도계(30℃↑ 빨강·영하 파랑)
@@ -350,14 +350,14 @@
     const ex = [X.hottest.value != null ? `가장 더웠던 해 <b>${X.hottest.years.map(yword).join("·")}</b>(최고 ${fmt(X.hottest.value)}℃)` : "", X.coldest.value != null ? `가장 추웠던 해 <b>${X.coldest.years.map(yword).join("·")}</b>(최저 ${fmt(X.coldest.value)}℃)` : "", X.wettest.value != null ? `강수가 가장 많았던 해 <b>${X.wettest.years.map(yword).join("·")}</b>(${fmt(X.wettest.value)}mm)` : ""].filter(Boolean);
     const LIM = 10;
     const list = [...(inPer ? [] : [yearRow(s, { chosen: true, outside: true })]), ...rows.slice(0, st.all ? rows.length : LIM).map((r) => yearRow(r, { chosen: r.referenceYear === st.y }))];
-    $("dsYears").innerHTML = `<h3 class="ds-h">해마다 이날 <small>${E(per)} 해마다 ${E(specLabel())} 하루의 실제 관측 · 같은 날 평균을 내지 않습니다</small></h3>
+    $("dsYears").innerHTML = `<h3 class="ds-h">해마다 이날 ${window.InfoTip.sub(`${E(per)} · 하루 실제 관측`, `${E(per)} 해마다 ${E(specLabel())} 하루의 실제 관측 · 같은 날 평균을 내지 않습니다`, { label: "기준" })}</h3>
       <div class="dy-cnts">${cnt}</div>
       ${ex.length ? `<p class="dy-ext">${ex.join(" · ")}${[X.hottest, X.coldest, X.wettest].some((x) => x.years.length > 1) ? ` <span class="muted">(같은 값은 공동)</span>` : ""}</p>` : ""}
       <ol class="dy-list" aria-label="해마다 이날 관측(최근 해부터)">${list.join("")}</ol>
       ${rows.length > LIM ? `<button type="button" class="sec dy-all" id="dsAll">${st.all ? "접기" : `${rows.length}개 해 모두 보기`}</button>` : ""}
-      <p class="ds-note">줄을 누르면 그해를 자세히 봅니다 · <b>+ 시간</b> = 그해 시간별 관측을 아래 그래프에 겹치기(최대 2개) · 그림은 관측값으로만: 물방울 = 강수 0.1mm 이상, 눈 결정 = 눈이 새로 쌓임, 온도계 = 강수 없음(빨강 최고 30℃ 이상 · 파랑 최저 영하) · 횟수는 자료가 있는 해만 셉니다(자료 없음·그해에는 없는 날짜는 빼고 셈).</p>
+      ${window.InfoTip.note(`줄 = 그해 자세히 · <b>+ 시간</b> = 겹쳐 보기`, `줄을 누르면 그해를 자세히 봅니다 · <b>+ 시간</b> = 그해 시간별 관측을 아래 그래프에 겹치기(최대 2개) · 그림은 관측값으로만: 물방울 = 강수 0.1mm 이상, 눈 결정 = 눈이 새로 쌓임, 온도계 = 강수 없음(빨강 최고 30℃ 이상 · 파랑 최저 영하) · 횟수는 자료가 있는 해만 셉니다(자료 없음·그해에는 없는 날짜는 빼고 셈).`, { cls: "ds-note", label: "보는 법" })}
       <details class="ds-ychart"${matchMedia("(min-width:801px)").matches ? " open" : ""}><summary>그래프로 보기</summary><div class="ds-tools">${seg("ym", Object.entries(YM).map(([v, x]) => [v, x[0]]), st.ym)}</div><div class="sx-chart" id="dsYearChart"></div><p class="ds-note" id="dsYearNote"></p></details>
-      <div class="sx-tools"><span class="muted">목록·횟수·그래프·CSV 는 같은 서버 계산 결과입니다.</span><a class="dl-chip-btn" href="/api/stats/date-weather?${apiQuery("daily")}&format=csv" download>해마다 이날 CSV</a></div>`;
+      <div class="sx-tools"><span class="muted">같은 계산 결과${window.InfoTip.btn("목록·횟수·그래프·CSV 는 같은 서버 계산 결과입니다.", { label: "CSV 안내" })}</span><a class="dl-chip-btn" href="/api/stats/date-weather?${apiQuery("daily")}&format=csv" download>해마다 이날 CSV</a></div>`;
     const det = $("dsYears").querySelector(".ds-ychart");
     det.addEventListener("toggle", () => { if (det.open) renderYearChart(); });
     if (det.open) renderYearChart();
@@ -372,7 +372,7 @@
       rows, bar: kind === "bar", unit, digits: dg, selected: [st.y, ...st.cmp], meanLine: null, aria: `해마다 이날 ${label}`, onPick: pickYear,
       tip: (i) => { const x = rows[i]; return `<b>${x.year}년</b>${st.cal === "lunar" ? "(음력)" : ""} · ${x.r.solarDate ? `${dot(x.r.solarDate)}(${dow(x.r.solarDate)})` : ""}<br>${fin(x.value) ? `${label} <b>${fmt(x.value, dg)}${unit}</b>` : E(x.statusText)} <span class="muted">— 누르면 그해 자세히</span>`; },
     });
-    $("dsYearNote").textContent = `점·막대 하나 = 그해 이날 하루 · 평균선 없음 · 빗금 = 자료 없음·그해에는 없는 날짜 · 하루씩 뽑은 값이라 계절의 추세를 단정하지 않습니다.`;
+    $("dsYearNote").innerHTML = `점·막대 = 그해 이날 하루${window.InfoTip.btn("점·막대 하나 = 그해 이날 하루 · 평균선 없음 · 빗금 = 자료 없음·그해에는 없는 날짜 · 하루씩 뽑은 값이라 계절의 추세를 단정하지 않습니다.", { label: "그래프 보는 법" })}`;
   }
 
   // ---- ② 앞뒤 15일 날씨 통계
@@ -432,11 +432,11 @@
     for (const k of ["avg", "rainDays"]) for (const [r, ys] of Object.entries(M[k].excludedYearsByReason || {})) for (const y of ys) (exAll[r] ||= new Set()).add(y);
     const exText = Object.entries(exAll).map(([r, ys]) => `${STATUS(r)} ${[...ys].sort().join("·")}`).join(" / ");
     const win = S && S.start ? `${S.referenceYear}년 기준 ${dot(S.start)} ~ ${dot(S.end)}` : (A.years.find((y) => y.start) ? `예: ${dot(A.years.find((y) => y.start).start)} ~ ${dot(A.years.find((y) => y.start).end)}` : "");
-    $("dsAround").innerHTML = `<h3 class="ds-h">앞뒤 15일 날씨 통계 <small>해마다 그 날짜 앞뒤 15일(31일) · ${E(per)} · 하루가 아니라 '이 무렵'의 날씨</small></h3>
-      <p class="ds-note ds-note-top">${E(win)}${st.cal === "lunar" ? " · 음력은 해마다 그해 음력 날짜의 양력 날짜를 가운데로" : ""} · 연말·연초는 해를 넘겨 이어 셉니다.</p>
+    $("dsAround").innerHTML = `<h3 class="ds-h">앞뒤 15일 날씨 통계 ${window.InfoTip.sub(`${E(per)} · 앞뒤 15일(31일)`, `해마다 그 날짜 앞뒤 15일(31일) · ${E(per)} · 하루가 아니라 '이 무렵'의 날씨`, { label: "기준" })}</h3>
+      ${window.InfoTip.note(E(win), `${st.cal === "lunar" ? "음력은 해마다 그해 음력 날짜의 양력 날짜를 가운데로 · " : ""}연말·연초는 해를 넘겨 이어 셉니다.`, { cls: "ds-note ds-note-top", label: "31일 창" })}
       <div class="da-wrap"><table class="da-tbl"><thead><tr><th>지표</th><th>${E(per)}<small>${M.avg.n}개 해 · 유효 ${M.avg.validDays}일</small></th><th>${selHead}</th><th>차이</th></tr></thead><tbody>
       ${rows.map(([k, label, kind]) => `<tr><th scope="row">${E(label)}</th>${perCell(k, kind)}${selCell(k, kind)}${diffCell(k, kind)}</tr>`).join("")}</tbody></table></div>
-      <p class="ds-note">해 수: 요청 ${M.avg.requested}개 · 날짜가 있고 끝난 해 ${M.avg.eligible}개 · 쓴 해 ${M.avg.n}개(기온) / ${M.rainDays.n}개(강수)${exText ? ` · 뺀 해: ${E(exText)}` : ""}. 31일 중 자료 없는 날이 1일 이하인 해만 넣고(남은 날로만 집계, 채우지 않음), 2일 이상 빠지면 '자료 부족'으로 뺍니다. 강수일 비율 = 강수일(0.1mm 이상) ÷ 유효한 날, 하루 평균 강수량 = 강수량 합 ÷ 유효한 날(무강수 0 포함). 기온 평균은 해마다 31일 평균을 먼저 낸 뒤 해들끼리 평균합니다.</p>
+      ${window.InfoTip.note(`쓴 해 ${M.avg.n}개(기온) / ${M.rainDays.n}개(강수)`, `해 수: 요청 ${M.avg.requested}개 · 날짜가 있고 끝난 해 ${M.avg.eligible}개 · 쓴 해 ${M.avg.n}개(기온) / ${M.rainDays.n}개(강수)${exText ? ` · 뺀 해: ${E(exText)}` : ""}. 31일 중 자료 없는 날이 1일 이하인 해만 넣고(남은 날로만 집계, 채우지 않음), 2일 이상 빠지면 '자료 부족'으로 뺍니다. 강수일 비율 = 강수일(0.1mm 이상) ÷ 유효한 날, 하루 평균 강수량 = 강수량 합 ÷ 유효한 날(무강수 0 포함). 기온 평균은 해마다 31일 평균을 먼저 낸 뒤 해들끼리 평균합니다.`, { cls: "ds-note", label: "계산 방법" })}
       <details class="sx-table"><summary>해마다 31일 창 보기</summary><div class="sx-table-wrap"><table><thead><tr><th>연도</th><th>기간</th><th>평균(℃)</th><th>최고</th><th>최저</th><th>강수일</th><th>강수량(mm)</th><th>30℃↑</th><th>영하</th><th>상태</th></tr></thead><tbody>${[...(S && !A.years.some((y) => y.referenceYear === S.referenceYear) ? [S] : []), ...A.years.slice().reverse()].map((y) => { const g = (k, d = 1) => { const x = y.metrics[k]; return x && (x.status === "ok" || (y.sofarEnd && x.obs)) ? fmt(x.raw, d) : `<span class="muted">${x ? E(STATUS(x.status)) : "–"}</span>`; }; return `<tr class="${y.referenceYear === st.y ? "ds-tr-sel" : ""}"><td>${y.referenceYear}</td><td>${y.start ? `${md(y.start)}~${md(y.end)}${y.start.slice(0, 4) !== y.end.slice(0, 4) ? " <small>(해 넘김)</small>" : ""}` : "–"}</td><td class="num">${g("avg")}</td><td class="num">${g("max")}</td><td class="num">${g("min")}</td><td class="num">${g("rainDays", 0)}</td><td class="num">${g("rainSum")}</td><td class="num">${g("hot30", 0)}</td><td class="num">${g("frost", 0)}</td><td>${E(y.sofarEnd ? `진행 중(${md(y.sofarEnd)}까지)` : STATUS(y.status))}</td></tr>`; }).join("")}</tbody></table></div><div class="sx-tools"><span class="muted">표·CSV 는 같은 서버 계산 결과입니다.</span><a class="dl-chip-btn" href="/api/stats/date-weather?${apiQuery("around")}&format=csv" download>앞뒤 15일 CSV</a></div></details>`;
     void s0;
   }
@@ -453,11 +453,11 @@
     const hl = (h) => (bar ? `${h}~${h + 1}시` : `${h}시`);
     const listYears = (D ? D.daily.rows.map((r) => r.referenceYear) : []).filter((y) => y >= 1990 && y !== st.y && !st.cmp.includes(y)).reverse();
     const anyOk = sel.some((s) => s.dateStatus === "ok");
-    el.innerHTML = `<h3 class="ds-h">시간별 날씨 <small>고른 해 그날의 실제 정시 관측 · 다른 해를 2개까지 겹쳐 볼 수 있습니다(평균 없음)</small></h3>
+    el.innerHTML = `<h3 class="ds-h">시간별 날씨 ${window.InfoTip.sub(`고른 해 실제 정시 관측`, `고른 해 그날의 실제 정시 관측 · 다른 해를 2개까지 겹쳐 볼 수 있습니다(평균 없음)`, { label: "기준" })}</h3>
       <div class="ds-tools">${seg("hm", Object.entries(HM).map(([v, x]) => [v, x[0]]), k)}<span class="ds-yrs">${sel.map((s, i) => `<span class="sx-yr" style="background:${V.SEL[i].color}">${V.SEL[i].mark} ${s.referenceYear}년${i ? `<button type="button" data-cmpdel="${s.referenceYear}" aria-label="${s.referenceYear}년 겹치기 빼기">×</button>` : ""}</span>`).join("")}${st.cmp.length < 2 && listYears.length ? `<select id="dsCmpAdd" aria-label="겹쳐 볼 해 더하기"><option value="">+ 겹쳐 볼 해</option>${opt(listYears.map((y) => [y, `${y}년`]), "")}</select>` : ""}</span></div>
       ${anyOk ? `<div class="sx-chart" id="dsHourChart"></div>` : `<div class="sx-state">${E(sel.map((s) => `${s.referenceYear}년: ${STATUS(s.dateStatus)}`).join(" · "))}${sel[0]?.dateStatus === "unsupported" ? " — 시간자료는 1990년부터 씁니다" : ""}</div>`}
       <div class="sx-legend">${sel.map((s, i) => `<span style="color:${V.SEL[i].color}"><i style="background:${V.SEL[i].color}"></i>${V.SEL[i].mark} ${s.referenceYear}년${s.solarDate ? ` ${md(s.solarDate)}` : ""} 실제 관측${s.dateStatus !== "ok" ? ` — ${E(STATUS(s.dateStatus))}` : ""}</span>`).join("")}<span>선이 끊긴 곳 = 자료 없음(잇지 않음)</span><span>단위 ${unit}</span></div>
-      ${bar ? `<p class="ds-note">막대 한 칸 = h~h+1시 1시간 강수량(기상청 정시값은 앞 1시간 누적 — 23~24시는 다음날 00시 값). 시간값을 더해 하루 강수량을 만들지 않습니다.</p>` : ""}
+      ${bar ? `${window.InfoTip.note(`막대 한 칸 = 1시간 강수량`, `막대 한 칸 = h~h+1시 1시간 강수량(기상청 정시값은 앞 1시간 누적 — 23~24시는 다음날 00시 값). 시간값을 더해 하루 강수량을 만들지 않습니다.`, { cls: "ds-note", label: "강수 막대" })}` : ""}
       ${anyOk ? hourTable() : ""}`;
     if (!anyOk) return;
     V.hourChart($("dsHourChart"), {
@@ -469,7 +469,7 @@
     const k = st.hm;
     const [label, unit, dg] = HM[k];
     const sel = H.hourly.selected;
-    return `<details class="sx-table"><summary>표로 보기 · ${label}</summary><div class="sx-table-wrap"><table><thead><tr><th>${k === "rn" ? "구간" : "시각"}</th>${sel.map((s) => `<th>${s.referenceYear}년(${unit})</th>`).join("")}</tr></thead><tbody>${Array.from({ length: 24 }, (_, h) => `<tr><td>${k === "rn" ? `${h}~${h + 1}시` : `${h}시`}</td>${sel.map((s) => `<td class="num">${fin(s.series[k][h]) ? fmt(s.series[k][h], dg) : `<span class="muted">${E(STATUS(s.cellStatus[k][h]))}</span>`}</td>`).join("")}</tr>`).join("")}</tbody></table></div><div class="sx-tools"><span class="muted">그래프·표·CSV 는 같은 서버 계산 결과입니다.</span><a class="dl-chip-btn" href="/api/stats/date-weather?${apiQuery("hourly")}&format=csv" download>시간별 CSV</a></div></details>`;
+    return `<details class="sx-table"><summary>표로 보기 · ${label}</summary><div class="sx-table-wrap"><table><thead><tr><th>${k === "rn" ? "구간" : "시각"}</th>${sel.map((s) => `<th>${s.referenceYear}년(${unit})</th>`).join("")}</tr></thead><tbody>${Array.from({ length: 24 }, (_, h) => `<tr><td>${k === "rn" ? `${h}~${h + 1}시` : `${h}시`}</td>${sel.map((s) => `<td class="num">${fin(s.series[k][h]) ? fmt(s.series[k][h], dg) : `<span class="muted">${E(STATUS(s.cellStatus[k][h]))}</span>`}</td>`).join("")}</tr>`).join("")}</tbody></table></div><div class="sx-tools"><span class="muted">같은 계산 결과${window.InfoTip.btn("그래프·표·CSV 는 같은 서버 계산 결과입니다.", { label: "CSV 안내" })}</span><a class="dl-chip-btn" href="/api/stats/date-weather?${apiQuery("hourly")}&format=csv" download>시간별 CSV</a></div></details>`;
   }
   // ---- ④ 연도 × 시간 히트맵(관측값만)
   function renderHeat() {
@@ -481,7 +481,7 @@
       year: r.referenceYear, sel: r.referenceYear === st.y, solar: r.solarDate, lunar: r.lunarDate, leap: r.isLeapMonth, status: r.cellStatus[k],
       dim: r.dateStatus !== "ok" ? STATUS(r.dateStatus) : null, values: r.series[k].map((v) => (fin(v) ? v : null)),
     })).reverse();
-    $("dsHeat").innerHTML = `<h3 class="ds-h">연도 × 시간 히트맵 <small>행 = 해, 열 = 시각 · 관측값 그대로 · 같은 지표는 한 색 범위</small></h3>
+    $("dsHeat").innerHTML = `<h3 class="ds-h">연도 × 시간 히트맵 ${window.InfoTip.sub(`관측값 그대로`, `행 = 해, 열 = 시각 · 관측값 그대로 · 같은 지표는 한 색 범위`, { label: "기준" })}</h3>
       <div class="ds-tools">${seg("hk", Object.entries(HM).map(([v, x]) => [v, x[0]]), k)}</div>
       ${pre.length ? `<p class="ds-note">${pre[0].referenceYear}~${pre[pre.length - 1].referenceYear}년은 시간자료를 쓰지 않습니다(1990년부터) — 행을 그리지 않았습니다.</p>` : ""}
       <div id="dsHeatChart"></div>${k === "rn" ? `<p class="ds-note">강수 칸 = h~h+1시 1시간 강수량.</p>` : ""}`;
@@ -506,7 +506,7 @@
       const hourly = !hs ? `<div class="sx-state">시간자료 불러오는 중…</div>` : hs.dateStatus !== "ok" ? `<p class="ds-note">시간자료: ${E(STATUS(hs.dateStatus))}</p>` : `<details class="sx-table"${matchMedia("(min-width:801px)").matches ? " open" : ""}><summary>그날 시간별 관측표(정시)</summary><div class="sx-table-wrap"><table><thead><tr><th>시각</th><th>기온(℃)</th><th>강수(mm, h~h+1시)</th><th>풍속(m/s)</th><th>습도(%)</th></tr></thead><tbody>${Array.from({ length: 24 }, (_, h) => `<tr><td>${h}시</td>${["ta", "rn", "ws", "hm"].map((k) => `<td class="num">${fin(hs.series[k][h]) ? fmt(hs.series[k][h], k === "hm" ? 0 : 1) : `<span class="muted">${E(STATUS(hs.cellStatus[k][h]))}</span>`}</td>`).join("")}</tr>`).join("")}</tbody></table></div></details>`;
       body = daily + hourly;
     }
-    $("dsSel").innerHTML = `<h3 class="ds-h">${st.y}년 그날 자세히 <small>공식 일자료 + 시간자료(각각 있는 만큼) · 다른 해는 위 목록에서 누르세요</small></h3>
+    $("dsSel").innerHTML = `<h3 class="ds-h">${st.y}년 그날 자세히 ${window.InfoTip.sub(`공식 일자료 + 시간자료`, `공식 일자료 + 시간자료(각각 있는 만큼) · 다른 해는 위 목록에서 누르세요`, { label: "기준" })}</h3>
       <p class="ds-selbar"><b>${E(selWhen(s))}</b></p>
       ${body}
       <div class="sx-tools"><span class="ds-acts"><button type="button" class="sec" id="dsSelBattle">배틀에 추가</button><button type="button" class="sec" id="dsCopy">링크 복사</button><button type="button" class="sec" id="dsCardImg2">카드 이미지</button><label class="sx-check"><input type="checkbox" id="dsShareAlias"> 링크에 별칭 넣기</label><label class="sx-check"><input type="checkbox" id="dsAliasSave"${(() => { try { return localStorage.getItem(aliasKey()) ? " checked" : ""; } catch { return ""; } })()}> 별칭을 이 브라우저에 저장</label></span></div>`;
@@ -517,7 +517,7 @@
     if (!D) return;
     STORIES = [...(D.stories || []), ...((H && H.hourly.stories) || [])].sort((a, b) => a.priority - b.priority).slice(0, 4);
     const C = D.counts;
-    $("dsStory").innerHTML = `<h3 class="ds-h">짧은 이야기와 근거 <small>조건을 만족할 때만, 실제 관측으로(최대 4개)</small></h3>
+    $("dsStory").innerHTML = `<h3 class="ds-h">짧은 이야기와 근거 ${window.InfoTip.sub(`실제 관측 · 최대 4개`, `조건을 만족할 때만, 실제 관측으로(최대 4개)`, { label: "기준" })}</h3>
       ${STORIES.length ? `<ol class="ds-stories">${STORIES.map((s, i) => `<li><p>${E(s.text)}</p><a href="#" data-ev="${i}" class="ds-ev">근거 보기 ›</a><div class="ds-evbox" id="dsEv${i}" hidden></div></li>`).join("")}</ol>` : `<p class="muted">조건을 만족하는 이야기가 없습니다(자료가 적음).</p>`}
       <details class="sx-rules"><summary>센 해 · 뺀 해</summary><ul>${C.rules.map((c) => `<li><b>${E(c.label)}</b>(${E(c.cond)}): ${c.k}번 / 자료가 있는 ${c.n}개 해${c.k ? ` — ${c.hitYears.join("·")}` : ""}${Object.keys(c.excludedYearsByReason).length ? ` · 뺀 해: ${Object.entries(c.excludedYearsByReason).map(([r, ys]) => `${E(STATUS(r))} ${ys.join("·")}`).join(" / ")}` : ""}${c.show ? "" : " <span class=\"muted\">(이 계절이 아니고 0번이라 위에는 숨김)</span>"}</li>`).join("")}</ul></details>
       <details class="sx-rules"><summary>계산 기준</summary><ul>

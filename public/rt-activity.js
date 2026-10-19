@@ -119,7 +119,7 @@
       ${more.length ? `<p class="aw-more">다른 구간: ${more.map((w) => `${esc(lab(w))}(${w.hours}시간, ${w.taMin === w.taMax ? w.taMin : `${w.taMin}~${w.taMax}`}℃)`).join(" · ")}</p>` : ""}
       <div class="aw-strip" role="group" aria-label="시간별 판정(누르면 이유)">${strip}</div>
       <p class="aw-tip" aria-live="polite">칸을 누르면 그 시각 판정 이유가 나와요 · ○ 충족 ${res.counts.pass} · ✕ 조건 밖 ${res.counts.fail} · ? 판단 보류 ${res.counts.unknown}</p>
-      <p class="rt-note">조건: ${esc(condText(c))}${isDefaultCond(c) ? " (기본값)" : " (내 설정)"} · <a href="${esc(settingsHref)}">조건 바꾸기 ›</a><br>기상청 단기예보 정시 값으로 규칙대로만 판정해요(점수 없음). 강수량 '1mm 미만'은 무강수로 보지 않고, 강수확률·강수형태 등 자료가 없는 시각은 '판단 보류'로 빼요. 대기질·자외선·노면은 보지 않습니다.</p>`;
+      <p class="rt-note">조건: ${esc(condText(c))}${isDefaultCond(c) ? " (기본값)" : " (내 설정)"} · <a href="${esc(settingsHref)}">조건 바꾸기 ›</a>${window.InfoTip.btn("기상청 단기예보 정시 값으로 규칙대로만 판정해요(점수 없음). 강수량 '1mm 미만'은 무강수로 보지 않고, 강수확률·강수형태 등 자료가 없는 시각은 '판단 보류'로 빼요. 대기질·자외선·노면은 보지 않습니다.", { label: "판정 방법" })}</p>`;
   }
   function chillHtml(ta, ws) {
     const r = windChill(ta, ws);

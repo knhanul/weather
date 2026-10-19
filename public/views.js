@@ -174,7 +174,7 @@
       </div>
       <div class="vw-dlw" data-vw-dl hidden></div>
       ${s.note ? `<p class="vw-note warn">${esc(s.note)}</p>` : ""}
-      ${login ? `<p class="vw-note">지금은 기본 프리셋만 고를 수 있습니다. <a href="${esc(NW().loginHref())}">카카오 로그인</a>하면 원하는 컬럼으로 내 레이아웃을 만들고, 고른 레이아웃·보기 방식이 내 계정에 저장됩니다.</p>` : ""}`;
+      ${login ? `<p class="vw-note">기본 프리셋만 · <a href="${esc(NW().loginHref())}">카카오 로그인</a>하면 내 레이아웃${window.InfoTip.btn("지금은 기본 프리셋만 고를 수 있습니다. 카카오 로그인하면 원하는 컬럼으로 내 레이아웃을 만들고, 고른 레이아웃·보기 방식이 내 계정에 저장됩니다.", { label: "레이아웃 안내" })}</p>` : ""}`;
   }
   function showCols(kind) {
     const s = st[kind];

@@ -17,14 +17,14 @@
     const cur = window.NWStation?.storedId?.() || window.NWStation?.stored?.()?.id || ""; // stored() = { id, why, at }
     const favN = (k) => { try { return (JSON.parse(localStorage.getItem(k) || "[]") || []).length; } catch { return 0; } };
     return `<div class="ms-wrap">
-      <section class="card ms-card"><h2>이 기기에만 저장돼요</h2><p class="rt-note">로그인 없이 이 브라우저(localStorage)에 저장하고 서버로 보내지 않아요. 다른 기기·브라우저에는 따로 설정해야 합니다. 바꾸면 바로 저장돼요.</p><p class="ms-msg" id="msMsg" role="status" aria-live="polite"></p></section>
+      <section class="card ms-card"><h2>이 기기에만 저장돼요</h2>${window.InfoTip.note(`이 브라우저에만 저장 · 서버로 보내지 않음`, `로그인 없이 이 브라우저(localStorage)에 저장하고 서버로 보내지 않아요. 다른 기기·브라우저에는 따로 설정해야 합니다. 바꾸면 바로 저장돼요.`, { cls: "rt-note", label: "저장 방식" })}<p class="ms-msg" id="msMsg" role="status" aria-live="polite"></p></section>
       <section class="card ms-card" aria-labelledby="msStT"><h2 id="msStT">기본 관측지점</h2>
         <p><select id="msStation" aria-label="기본 관측지점">${(stations || []).map((s) => `<option value="${esc(s.station_id)}"${String(s.station_id) === cur ? " selected" : ""}>${esc(s.station_name)}(${esc(s.station_id)})</option>`).join("") || `<option value="">불러오는 중…</option>`}</select></p>
-        <p class="rt-note">오늘 날씨·내일 날씨·날씨 이야기를 열 때 이 지점으로 시작해요. ${cur ? "" : "지금은 저장된 지점이 없어 위치(허용 시) 또는 서울(108)로 시작합니다."}</p></section>
+        ${window.InfoTip.note(`처음 열 때 이 지점으로 시작`, `오늘 날씨·내일 날씨·날씨 이야기를 열 때 이 지점으로 시작해요. ${cur ? "" : "지금은 저장된 지점이 없어 위치(허용 시) 또는 서울(108)로 시작합니다."}`, { cls: "rt-note", label: "자세히" })}</section>
       <section class="card ms-card" aria-labelledby="msSegT"><h2 id="msSegT">하루 구간 <small>오늘 날씨 12시간 칸의 구간 옷차림</small></h2>
         <div id="msSegs">${segRows(segs)}</div>
         <p class="ms-acts"><button type="button" class="sec" id="msSegAdd"${segs.length >= 6 ? " disabled" : ""}>구간 더하기</button><button type="button" class="sec" id="msSegReset">기본값(출근 7~9 · 낮 12~15 · 퇴근 18~20 · 밤 21~6)</button></p>
-        <p class="rt-note">이름은 8자까지, 최대 6개. 끝 시각이 시작보다 이르면 다음 날까지(예: 밤 21~6시). 시작과 끝이 같으면 저장하지 않아요.</p></section>
+        ${window.InfoTip.note(`이름 8자 · 최대 6개`, `이름은 8자까지, 최대 6개. 끝 시각이 시작보다 이르면 다음 날까지(예: 밤 21~6시). 시작과 끝이 같으면 저장하지 않아요.`, { cls: "rt-note", label: "자세히" })}</section>
       <section class="card ms-card" aria-labelledby="msActT"><h2 id="msActT">산책·러닝 조건 <small>오늘 날씨 ‘산책·러닝 시간 찾기’</small></h2>
         <div class="ms-grid">
           <span>기온</span><span>${numIn("msTMin", c.tMin, -20, 35, 1, "℃")} ~ ${numIn("msTMax", c.tMax, -10, 40, 1, "℃")}</span>
@@ -35,7 +35,7 @@
           <span>찾을 범위</span><span><select id="msHours" aria-label="앞으로 몇 시간"><option value="12"${c.hours === 12 ? " selected" : ""}>앞으로 12시간</option><option value="24"${c.hours === 24 ? " selected" : ""}>앞으로 24시간</option></select></span>
         </div>
         <p class="ms-acts"><button type="button" class="sec" id="msActReset">기본값(10~25℃ · 5m/s · 30% · 2시간 · 6~21시 · 24시간)</button></p>
-        <p class="rt-note">강수형태 ‘없음’과 강수량 0(강수없음)은 늘 조건이에요. 선호 시간대는 순서만 바꿔요(맞는 구간이 선호 시간과 겹치면 먼저 보여 줌).</p></section>
+        ${window.InfoTip.note(`강수 없음은 늘 조건`, `강수형태 ‘없음’과 강수량 0(강수없음)은 늘 조건이에요. 선호 시간대는 순서만 바꿔요(맞는 구간이 선호 시간과 겹치면 먼저 보여 줌).`, { cls: "rt-note", label: "자세히" })}</section>
       <section class="card ms-card" aria-labelledby="msIntT"><h2 id="msIntT">관심 카드 <small>오늘 날씨에 보일 것</small></h2>
         <div class="ms-ints">${act.INTERESTS.map(([k, lab, why]) => `<label class="ms-int"><input type="checkbox" data-int="${k}"${it[k] ? " checked" : ""}> <b>${esc(lab)}</b><small>${esc(why)}</small></label>`).join("")}</div></section>
       <section class="card ms-card" aria-labelledby="msFavT"><h2 id="msFavT">즐겨찾기</h2><p class="rt-note">날짜로 보는 날씨 ${favN("nw.fav.day")}개 · 날씨 배틀 ${favN("nw.fav.battle")}개 — 각 화면의 ☆ 버튼으로 더하고 지워요.</p>

@@ -126,10 +126,10 @@
           </div>
           ${fresh.state === "stale" ? `<p class="result bad rt-stale">${esc(fresh.text)}. 아래 값은 지금 날씨가 아닙니다.</p>` : ""}
           ${ta ? `<div class="rt-cmp">${ta.filter((p) => ids.includes(p.id)).map((p) => `<div class="rt-cmp-i"><span>${esc(p.label)}<small>${esc(p.range)}</small></span><b>${p.mean == null ? `<em class="rt-ins">${esc(p.statusText)}</em>` : `${p.mean}℃`}</b><i class="${p.diff > 0 ? "up" : p.diff < 0 ? "down" : ""}">${p.mean == null ? "" : sg(p.diff)}</i></div>`).join("")}</div>` : ""}
-          <p class="rt-src">출처: ${esc(c.source)} ${esc(c.time.slice(0, 16))} · ${esc(d.grid?.note || "")}</p>
+          ${window.InfoTip.note(`출처: ${esc(c.source)} ${esc(c.time.slice(0, 16))}`, d.grid?.note ? esc(d.grid.note) : "", { cls: "rt-src", label: "격자 기준" })}
         </section>`
       : `<section class="card rt-now"><p class="result bad">${esc(c.message || "오늘 실황 자료가 없습니다")}</p></section>`;
-    const story = d.stories.length ? `<section class="card rt-stories" aria-label="오늘의 날씨 이야기"><h2>오늘의 날씨 이야기</h2>${d.stories.map((s) => `<article class="rt-story"><h3>${esc(s.title)} <b>${esc(s.value)}</b></h3><p>${esc(s.text)}</p><p class="rt-basis-row">${s.periods.filter((p) => ids.includes(idOf(p.label))).map((p) => `<span>${esc(p.label.replace(" 평균", ""))} ${p.mean != null ? `${p.mean}℃(${sg(p.diff)})` : p.percentile != null ? `${p.percentile}백분위` : "비교 데이터 부족"}</span>`).join("")}</p><p class="rt-note">근거: ${esc(s.basis)} · 기준 ${esc(s.asOf || "")}</p></article>`).join("")}</section>` : "";
+    const story = d.stories.length ? `<section class="card rt-stories" aria-label="오늘의 날씨 이야기"><h2>오늘의 날씨 이야기</h2>${d.stories.map((s) => `<article class="rt-story"><h3>${esc(s.title)} <b>${esc(s.value)}</b></h3><p>${esc(s.text)}</p><p class="rt-basis-row">${s.periods.filter((p) => ids.includes(idOf(p.label))).map((p) => `<span>${esc(p.label.replace(" 평균", ""))} ${p.mean != null ? `${p.mean}℃(${sg(p.diff)})` : p.percentile != null ? `${p.percentile}백분위` : "비교 데이터 부족"}</span>`).join("")}</p>${window.InfoTip.note(`기준 ${esc(s.asOf || "")}`, `근거: ${esc(s.basis)}`, { cls: "rt-note", label: "근거" })}</article>`).join("")}</section>` : "";
     // 첫 화면: 히어로·다음 12시간·옷차림 참고·생활 질문 → 이야기(넘겨 보기) → 이번 주 → 이맘때의 기록 → 그래프 → 기존 상세(접힘)
     const H = window.RTHome;
     const fold = (t, html) => (html ? `<details class="card rh-fold"><summary>${t}</summary>${html.replace(/^<section class="card[^"]*"[^>]*>|<\/section>$/g, "")}</details>` : "");
@@ -144,7 +144,7 @@
     const ta = d.current.compare?.ta;
     if (!ta) return "";
     const rows = ta.filter((p) => ids.includes(p.id)).map((p) => `<tr><th scope="row">${esc(p.label)}<small>${esc(p.range)}</small></th><td>${p.percentile == null ? `<span class="rt-ins">${esc(p.rankNote || p.statusText || "표본 부족")}</span>` : `${p.percentile}`}</td><td>${p.percentile == null ? "–" : `높은 쪽 ${p.rankHigh}위 / ${p.samples}`}</td><td>${p.p10 == null ? "–" : `${p.p10}~${p.p90}℃`}${p.outside ? ` <b class="${p.outside > 0 ? "up" : "down"}">(${sg(p.outside)} 벗어남)</b>` : ""}</td><td>${p.max ? `${p.max.value}℃ <small>${esc(p.max.date)}</small>` : "–"}</td><td>${p.min ? `${p.min.value}℃ <small>${esc(p.min.date)}</small>` : "–"}</td></tr>`).join("");
-    return `<section class="card rt-dist"><h2>같은 시기·같은 시각 분포에서 지금 위치</h2><div class="tbl-wrap"><table class="rt-tbl"><thead><tr><th>기준</th><th>백분위</th><th>순위</th><th>보통 범위(10~90%)</th><th>과거 최고</th><th>과거 최저</th></tr></thead><tbody>${rows}</tbody></table></div><p class="rt-note">${esc(d.current.hour)}시 정시 관측, 같은 월일 ±7일. 실황은 격자 값이고 분포는 ASOS 관측소 값이라 장소가 조금 다를 수 있습니다.</p></section>`;
+    return `<section class="card rt-dist"><h2>같은 시기·같은 시각 분포에서 지금 위치</h2><div class="tbl-wrap"><table class="rt-tbl"><thead><tr><th>기준</th><th>백분위</th><th>순위</th><th>보통 범위(10~90%)</th><th>과거 최고</th><th>과거 최저</th></tr></thead><tbody>${rows}</tbody></table></div>${window.InfoTip.note(`${esc(d.current.hour)}시 정시 · 같은 월일 ±7일`, `${esc(d.current.hour)}시 정시 관측, 같은 월일 ±7일. 실황은 격자 값이고 분포는 ASOS 관측소 값이라 장소가 조금 다를 수 있습니다.`, { cls: "rt-note" })}</section>`;
   }
   function dayCard(d, ids) {
     const it = [["max", "최고기온"], ["min", "최저기온"]].map(([k, l]) => {
@@ -158,7 +158,7 @@
     if (!c) return "";
     const row = (label, list, u, val) => (list ? `<tr><th scope="row">${label}</th><td>${v1(val, u)}</td>${list.filter((p) => ids.includes(p.id)).map((p) => `<td>${p.mean == null ? `<span class="rt-ins">${esc(p.statusText)}</span>` : `${p.mean}${u} <small>(${sg(p.diff, u)})</small>`}</td>`).join("")}</tr>` : "");
     const hd = c.ta.filter((p) => ids.includes(p.id)).map((p) => `<th>${esc(p.label)}</th>`).join("");
-    return `<section class="card"><h2>습도·강수·바람도 비교</h2><div class="tbl-wrap"><table class="rt-tbl"><thead><tr><th>항목</th><th>지금</th>${hd}</tr></thead><tbody>${row("습도", c.hm, "%", d.current.values.hm)}${row("1시간 강수량", c.rn, "mm", d.current.values.rn1)}${row("풍속", c.ws, "m/s", d.current.values.ws)}</tbody></table></div><p class="rt-note">강수량 평균은 같은 시각 1시간 강수량(비 안 온 시간 0 포함)의 평균입니다. 결측은 0으로 넣지 않습니다.</p></section>`;
+    return `<section class="card"><h2>습도·강수·바람도 비교</h2><div class="tbl-wrap"><table class="rt-tbl"><thead><tr><th>항목</th><th>지금</th>${hd}</tr></thead><tbody>${row("습도", c.hm, "%", d.current.values.hm)}${row("1시간 강수량", c.rn, "mm", d.current.values.rn1)}${row("풍속", c.ws, "m/s", d.current.values.ws)}</tbody></table></div>${window.InfoTip.note("같은 시각 평균", "강수량 평균은 같은 시각 1시간 강수량(비 안 온 시간 0 포함)의 평균입니다. 결측은 0으로 넣지 않습니다.", { cls: "rt-note" })}</section>`;
   }
   function methodCard(d) {
     const st = d.baseStatus || {};
@@ -174,7 +174,7 @@
     if (!svg) return `<section class="card"><h2>오늘 시간별 기온</h2><p class="rt-ins">그릴 자료가 없습니다</p></section>`;
     const names = { all: d.periods[0].label, r10: d.periods[1].label, r5: d.periods[2].label };
     const legend = `<div class="rt-legend"><span class="lg-obs">━ 실황(관측)</span><span class="lg-fc">┅ 예보</span>${["all", "r10", "r5"].filter((k) => ids.includes(k)).map((k) => `<button type="button" data-line="${k}" aria-pressed="${state.show[k]}" style="--c:${COLORS[k]}" class="${state.show[k] ? "on" : ""}">${esc(names[k])}</button>`).join("")}</div>`;
-    return `<section class="card rt-chart"><h2>오늘 시간별 기온과 과거 평균</h2>${legend}<div class="rt-svg-wrap" id="rtChartHost">${svg}${window.ChartFull ? window.ChartFull.button() : ""}</div><div id="rtTip" class="rt-tip">${tipHtml(d, state.sel ?? lastObsHour(d) ?? 12, ids)}</div><p class="rt-note">관측과 예보는 이어 그리지 않습니다. 그래프를 누르거나 마우스를 올리면 그 시각의 값과 기준별 차이를 보여 줍니다.</p></section>`;
+    return `<section class="card rt-chart"><h2>오늘 시간별 기온과 과거 평균</h2>${legend}<div class="rt-svg-wrap" id="rtChartHost">${svg}${window.ChartFull ? window.ChartFull.button() : ""}</div><div id="rtTip" class="rt-tip">${tipHtml(d, state.sel ?? lastObsHour(d) ?? 12, ids)}</div>${window.InfoTip.note("관측·예보 따로 그림", "관측과 예보는 이어 그리지 않습니다. 그래프를 누르거나 마우스를 올리면 그 시각의 값과 기준별 차이를 보여 줍니다.", { cls: "rt-note", label: "그래프 보는 법" })}</section>`;
   }
   const lastObsHour = (d) => { const h = [...d.hours].reverse().find((x) => x.obs != null); return h ? h.hour : null; };
   // 시간별 기온 SVG(카드 = 720×260 viewBox, 크게 보기 = 겹친 화면 크기로 다시 그림). 가로 위치 → 시각은 todayHourAt
