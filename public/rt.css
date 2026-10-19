@@ -192,6 +192,9 @@
 .fv-hc{flex:1 0 54px;display:flex;flex-direction:column;align-items:center;font-size:.8rem}
 .fv-hc b{font-size:.95rem}
 .fv-hc small{color:#2f7cf6;min-height:1em}
+.fv-hc small.wet{font-weight:700}
+.rh-rainnote{margin:6px 0 0}
+.rh-chip small.rh-amt,.fv-hc small.fv-amt{font-size:10px;font-weight:400;line-height:1.15;text-align:center;white-space:normal;max-width:100%;word-break:keep-all}
 .fv-hero .fv-rel{position:relative;margin:0;padding:4px 14px 10px;background:rgba(255,255,255,.88);color:#5e7090}
 .fv-chg ul{list-style:none;margin:6px 0;padding:0;display:grid;gap:8px}
 .fv-chg li{display:flex;gap:10px;align-items:center;background:#f4f8ff;border-radius:12px;padding:8px 10px}

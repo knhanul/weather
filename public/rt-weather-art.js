@@ -64,5 +64,33 @@
     }
     return { k: null, night: n, text: "하늘 자료 없음", source: null, time: null, borrowed: false };
   }
-  window.RTArt = { kind, wfKind, icon, iconSvg, sceneBg, sceneSvg, sceneOf, night, SUN, MOON, CLOUD, DROPS, FLAKES };
+  // 시간 칸의 강수 한 줄(그림·숫자·문장이 같은 자료를 따르게). 강수확률(POP)은 단기예보에만 있고,
+  //   앞 6시간의 강수형태·강수량은 더 늦게 나온 초단기예보로 바뀜 → 두 발표가 어긋날 수 있음(예: 초단기 18:30 '비 1mm 미만', 단기 17:00 강수확률 0%).
+  //   규칙: 강수형태(비·눈) 예보가 있는 칸 = 그림과 같은 자료의 강수형태·강수량을 보여 줌(강수확률은 설명에만).
+  //         없는 칸 = 강수확률(☂n%). 강수확률을 같이 말하는 건 강수형태와 같은 발표일 때만(sameRelease).
+  //   없는 값은 0 으로 채우지 않음(pop null → 표시 없음).
+  const hm5 = (b) => (b ? String(b).slice(11, 16) : "");
+  const srcTxt = (it) => (it ? `${it.source}${it.base ? ` ${hm5(it.base)} 발표` : ""}` : "");
+  function rainOf(h) {
+    const at = `${Number(String(h?.time || "").slice(11, 13))}시`;
+    const it = h?.items || {}, pty = h?.pty, wet = !!(pty && pty !== "없음");
+    const pop = Number.isFinite(h?.pop) ? h.pop : null, popHigh = pop != null && pop >= 60;
+    const popTxt = pop == null ? "강수확률 자료 없음" : `강수확률 ${pop}%`;
+    const same = !!(it.pop && it.pty && it.pop.source === it.pty.source && it.pop.base === it.pty.base);
+    const snowy = wet && /눈/.test(pty);
+    // 예상 강수량(1시간): 기상청 표기 그대로('1mm 미만', '1.0mm', '30~50mm'). 칸이 없으면 '—'(0 아님)
+    const pcpT = h?.pcp == null ? null : String(h.pcp);
+    const snoT = h?.sno == null ? null : String(h.sno);
+    const amtOf = () => { const a = []; if (pcpT != null && pcpT !== "강수 없음") a.push(pcpT); if (snowy && snoT != null && snoT !== "적설 없음") a.push(`눈 ${snoT}`); return a.length ? a.join(" · ") : null; };
+    const amtTip = `예상 강수량 ${pcpT == null ? "자료 없음" : pcpT}${it.pcp ? `(${srcTxt(it.pcp)})` : ""}${snowy || (snoT && snoT !== "적설 없음") ? ` · 신적설 ${snoT == null ? "자료 없음" : snoT}${it.sno ? `(${srcTxt(it.sno)})` : ""}` : ""}`;
+    if (!wet) {
+      // 비·눈 예보는 없지만 강수확률 60% 이상: 강수량 줄도 같이(기상청 표기 그대로, 없으면 —)
+      const amt = popHigh ? (pcpT == null ? "—" : pcpT) : "";
+      return { wet: false, mismatch: false, sameRelease: same, text: pop == null ? "" : `☂${pop}%`, amt, popHigh, tip: `${at} ${pty == null ? "강수형태 자료 없음" : "비·눈 예보 없음"} · ${popTxt}${it.pop ? `(${srcTxt(it.pop)})` : ""}${popHigh ? ` · ${amtTip}` : ""}` };
+    }
+    const mismatch = !same && pop != null && pop < 60;
+    const tip = `${at} ${pty} 예보(${srcTxt(it.pty) || "예보"}) · ${amtTip}` + (pop == null ? " · 강수확률 자료 없음" : same ? ` · ${popTxt}` : ` · ${popTxt}는 ${srcTxt(it.pop) || "다른 발표"} 값`) + (mismatch ? ". 강수확률은 단기예보에만 있어 더 늦게 나온 초단기예보와 다를 수 있어요. 비·눈 표시는 더 최신 발표를 따릅니다." : "");
+    return { wet: true, mismatch, sameRelease: same, text: ({ 빗방울눈날림: "비/눈", 눈날림: "눈" })[pty] || pty, amt: amtOf() ?? "—", popHigh, tip };
+  }
+  window.RTArt = { kind, wfKind, icon, iconSvg, sceneBg, sceneSvg, sceneOf, night, rainOf, SUN, MOON, CLOUD, DROPS, FLAKES };
 })();

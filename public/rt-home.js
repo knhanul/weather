@@ -85,11 +85,21 @@
   function hoursHtml(f) {
     const hs = (f.hours || []).slice(0, 12);
     if (!hs.length) return `<p class="rt-ins">예보 자료가 없습니다</p>`;
-    return hs.map((h) => `<div class="rh-chip${h.pop >= 60 ? " wet" : ""}">${chipIn(h)}</div>`).join("") + `<a class="rh-chip rh-chip-more" href="#/forecast">72시간<br>예보 보기 ›</a>`;
+    return hs.map((h) => chipCol(h)).join("") + `<a class="rh-chip rh-chip-more" href="#/forecast">72시간<br>예보 보기 ›</a>`;
   }
-  const chipIn = (h) => `<span>${Number(h.time.slice(11, 13))}시</span><i aria-label="${esc(wx(h) || "")}">${art(h)}</i><b>${h.ta ?? "–"}°</b><small>${h.pop == null ? "" : `☂${h.pop}%`}</small>`;
+  // 아래 줄: 비·눈 예보가 있는 칸은 그림과 같은 자료(초단기 우선)의 강수형태·강수량, 없는 칸은 강수확률(RTArt.rainOf). 누르면/올리면 출처·발표
+  const rainLine = (h) => (window.RTArt?.rainOf ? window.RTArt.rainOf(h) : { wet: false, popHigh: h.pop >= 60, text: h.pop == null ? "" : `☂${h.pop}%`, amt: "", tip: "" });
+  const chipIn = (h) => { const r = rainLine(h); return `<span>${Number(h.time.slice(11, 13))}시</span><i aria-label="${esc(wx(h) || "")}">${art(h)}</i><b>${h.ta ?? "–"}°</b><small${r.tip ? ` title="${esc(r.tip)}" aria-label="${esc(r.tip)}"` : ""}>${esc(r.text)}</small>${r.amt ? `<small class="rh-amt" aria-hidden="true">${esc(r.amt)}</small>` : ""}`; };
+  // 비·눈 칸이 있으면 칸 아래 글자의 뜻을 ⓘ 로(초단기 비 + 단기 강수확률이 어긋날 때 그 까닭까지)
+  function rainNote(f) {
+    const ws = (f.hours || []).slice(0, 12).map((h) => [h, rainLine(h)]).filter(([, r]) => r.wet || r.popHigh);
+    if (!ws.length || !window.InfoTip) return "";
+    const mis = ws.filter(([, r]) => r.mismatch);
+    const d = `비·눈 예보가 있는 칸(그리고 강수확률 60% 이상인 칸)은 아래에 예상 강수량(1시간, 기상청 표기 그대로 · 눈은 신적설)을 적었습니다. 강수량 자료가 없으면 —(0 아님)입니다. 그림·강수량은 더 늦게 나온 예보(앞 6시간은 초단기예보)를 따릅니다. 강수확률은 단기예보에만 있어서${mis.length ? ` ${mis.map(([h]) => `${Number(h.time.slice(11, 13))}시`).join("·")}처럼` : ""} 초단기예보가 비를 예보해도 앞선 단기예보의 강수확률은 낮게 남아 있을 수 있습니다. 칸마다의 강수확률과 발표 시각은 72시간 예보 표에 있습니다.${mis.length ? `<br>${mis.map(([, r]) => esc(r.tip.split(". ")[0])).join("<br>")}` : ""}`;
+    return window.InfoTip.note("비·눈 칸 아래 = 예상 강수량", d, { cls: "rt-note rh-rainnote", label: "강수 표시 기준" });
+  }
   // 시간축과 같은 열에 맞춘 칩(rt-story-visuals day 의 o.chip)
-  const chipCol = (h) => `<div class="rh-chip${h.pop >= 60 ? " wet" : ""}">${chipIn(h)}</div>`;
+  const chipCol = (h) => { const r = rainLine(h); return `<div class="rh-chip${r.wet || r.popHigh ? " wet" : ""}">${chipIn(h)}</div>`; };
   // 오늘 뭐 입지? — 같은 규칙(기온별 옷차림 일반 기준·일교차 10℃·강수확률 60%)을 히어로 안 한 줄로
   // 강수형태(PTY) 예보가 있는 시각과 강수확률만 60% 이상인 시각을 구별해서 말함(확률만으로 '비'라고 하지 않음)
   const POP_HIGH = 60; // rt-story-rules FORECAST_RULES.popHigh
@@ -101,7 +111,8 @@
     if (max != null && min != null && max - min >= 10) items.push(`일교차 ${Math.round((max - min) * 10) / 10}℃, 겉옷`);
     const ptyH = hs.find((h) => h.pty && h.pty !== "없음"), popH = hs.find((h) => h.pop != null && h.pop >= POP_HIGH);
     const first = ptyH && (!popH || ptyH.time <= popH.time) ? ptyH : popH;
-    if (first === ptyH && ptyH) items.push(`☂ ${Number(ptyH.time.slice(11, 13))}시 ${esc(ptyH.pty)} 예보${ptyH.pop != null ? `(강수확률 ${ptyH.pop}%)` : ""}, 우산`);
+    // 강수확률은 강수형태와 같은 발표일 때만 같이 말함(초단기 '비' + 단기 '0%' 를 한 문장에 섞지 않음)
+    if (first === ptyH && ptyH) { const r = rainLine(ptyH), amt = ptyH.pcp && ptyH.pcp !== "강수 없음" ? ` ${ptyH.pcp}` : ""; items.push(`☂ ${Number(ptyH.time.slice(11, 13))}시 ${esc(ptyH.pty)}${esc(amt)} 예보${r.sameRelease && ptyH.pop != null ? `(강수확률 ${ptyH.pop}%)` : ptyH.items?.pty?.source ? `(${esc(ptyH.items.pty.source)})` : ""}, 우산`); }
     else if (popH) items.push(`☂ ${Number(popH.time.slice(11, 13))}시 강수확률 ${popH.pop}%, 우산 챙기기`);
     if (!items.length) return "";
     return `<b>오늘 뭐 입지?</b> ${items.join(" · ")} <span class="rt-badge fc">참고용</span>${window.InfoTip.btn("기온별 옷차림 일반 기준을 실황·단기예보 기온에 규칙으로 맞춘 참고 안내입니다. 체감은 바람·습도·사람마다 다릅니다.", { label: "옷차림 기준" })}`;
@@ -226,7 +237,7 @@
     document.getElementById("rhHours").innerHTML = fv ? hoursHtml(fv) : `<p class="rt-ins">예보를 불러오지 못했습니다</p>`;
     paintSky(t, fv);
     // 앞으로 12시간 공용 시간축 + 하루 구간 옷차림: 이미 받은 예보·실황만으로, 보일 때 그림
-    if (fv && window.RTViz) lazy("rhDay", (el) => { if (my !== seq) return; const v = t.current?.values || {}; window.RTViz.day(el, { nowW: t.now || `${t.date} ${String(t.current?.hour ?? 0).padStart(2, "0")}:00`, obsHours: (t.hours || []).filter((h) => h.obs != null).map((h) => ({ time: h.time, ta: h.obs })), current: t.current?.time && v.ta != null ? { time: t.current.time, ta: v.ta, hm: v.hm, ws: v.ws } : null, fc: fv.hours || [], days: fv.days || [], chip: chipCol, noSegs: !!(window.RTAct && !RTAct.loadInterests().outfit), more: `<p class="rh-more12"><a href="#/forecast?station=${esc(st)}">72시간 예보 보기 ›</a> · <a href="#/my">구간 시간 바꾸기 ›</a></p>` }); const hh = document.getElementById("rhHours"); if (hh && el.querySelector(".vz-sync")) hh.hidden = true; });
+    if (fv && window.RTViz) lazy("rhDay", (el) => { if (my !== seq) return; const v = t.current?.values || {}; window.RTViz.day(el, { nowW: t.now || `${t.date} ${String(t.current?.hour ?? 0).padStart(2, "0")}:00`, obsHours: (t.hours || []).filter((h) => h.obs != null).map((h) => ({ time: h.time, ta: h.obs })), current: t.current?.time && v.ta != null ? { time: t.current.time, ta: v.ta, hm: v.hm, ws: v.ws } : null, fc: fv.hours || [], days: fv.days || [], chip: chipCol, noSegs: !!(window.RTAct && !RTAct.loadInterests().outfit), more: `${rainNote(fv)}<p class="rh-more12"><a href="#/forecast?station=${esc(st)}">72시간 예보 보기 ›</a> · <a href="#/my">구간 시간 바꾸기 ›</a></p>` }); const hh = document.getElementById("rhHours"); if (hh && el.querySelector(".vz-sync")) hh.hidden = true; });
     paintWalk(t, fv);
     const tip = document.getElementById("rhTip"), th = fv ? tipHtml(t, fv) : "";
     if (tip && th) { tip.innerHTML = th; tip.hidden = false; }

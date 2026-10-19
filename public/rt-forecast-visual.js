@@ -28,7 +28,7 @@
     const k = kind(h0.sky, h0.pty), n = night(h0h);
     const { dark } = window.RTArt.sceneBg(k, n);
     const art = window.RTArt.sceneSvg(k, n, { cls: "fv-art", id: "fvSky" });
-    const strip = span.filter((x, i) => i % (span.length > 10 ? 2 : 1) === 0).slice(0, 9).map((x) => `<div class="fv-hc"><span>${hh(x.time)}시</span>${iconSvg(kind(x.sky, x.pty), night(hh(x.time)), 26, x.pty && x.pty !== "없음" ? x.pty : x.sky)}<b>${x.ta ?? "–"}°</b><small>${x.pop == null ? "" : `☂${x.pop}%`}</small></div>`).join("");
+    const strip = span.filter((x, i) => i % (span.length > 10 ? 2 : 1) === 0).slice(0, 9).map((x) => `<div class="fv-hc"><span>${hh(x.time)}시</span>${iconSvg(kind(x.sky, x.pty), night(hh(x.time)), 26, x.pty && x.pty !== "없음" ? x.pty : x.sky)}<b>${x.ta ?? "–"}°</b>${((r) => `<small${r.wet ? ' class="wet"' : ""}${r.tip ? ` title="${esc(r.tip)}" aria-label="${esc(r.tip)}"` : ""}>${esc(r.text)}</small>${r.amt ? `<small class="fv-amt" aria-hidden="true">${esc(r.amt)}</small>` : ""}`)(window.RTArt.rainOf(x))}</div>`).join("");
     const rel = d.releases || {};
     return `<section class="card fv-hero${dark ? " dark" : ""}" aria-label="지금부터 오늘 밤까지">${art}<div class="fv-hin">
       <p class="fv-meta">${esc(d.station.name)} · 지금부터 ${h0h >= 18 ? "내일 아침" : "오늘 밤"}까지 <span class="rt-badge fc">예보</span></p>

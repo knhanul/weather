@@ -465,7 +465,7 @@
       const xb = xt(h.time), xa = Math.max(xb - cw, L - 1), w = Math.max(6, xb - xa - 2), x = xa + 1;
       const w2 = h.pty && h.pty !== "없음";
       const at = `${hh(h.time)}시`, popT = fin(h.pop) ? `강수확률 ${h.pop}%${h.pop >= RULE.popHigh ? " (60% 이상)" : ""}` : "강수확률 자료 없음";
-      const rT = w2 ? `${at} ${h.pty} 예보 · ${popT}` : h.pty == null ? `${at} 강수 예보 자료 없음${fin(h.pop) ? ` · ${popT}` : ""}` : `${at} 강수형태 예보 없음 · ${popT}`;
+      const rT = (w2 || (fin(h.pop) && h.pop >= RULE.popHigh)) && window.RTArt?.rainOf ? window.RTArt.rainOf(h).tip : w2 ? `${at} ${h.pty} 예보 · ${popT}` : h.pty == null ? `${at} 강수 예보 자료 없음${fin(h.pop) ? ` · ${popT}` : ""}` : `${at} 강수형태 예보 없음 · ${popT}`;
       const wT = fin(h.ws) ? `${at} 풍속 ${r1(h.ws)}m/s${h.ws >= RULE.wind ? " (5m/s 이상)" : ""}` : `${at} 바람 예보 자료 없음`;
       let rs = "", wsS = "";
       rs += w2 ? `<rect x="${x}" y="${RY}" width="${w}" height="14" rx="2" fill="${/눈/.test(h.pty) ? "#6aa6ff" : C.wet}"/>` : h.pty == null ? `<rect x="${x}" y="${RY}" width="${w}" height="14" rx="2" fill="url(#${og.id}h)"/>` : `<rect x="${x + 0.5}" y="${RY + 0.5}" width="${w - 1}" height="13" rx="2" fill="#fff" stroke="#c7d2e2" stroke-dasharray="3 2"/>`;

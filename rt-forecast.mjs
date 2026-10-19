@@ -26,6 +26,14 @@ export function elementInterval(time, el) {
   return ELEMENT_TIME.convention === "preceding-hour" ? { intervalStart: wallAdd(time, -1), intervalEnd: time } : { intervalStart: time, intervalEnd: wallAdd(time, 1) };
 }
 
+// 신적설(SNO): '적설없음' → '적설 없음', 숫자 → 'ncm', '1cm 미만' 같은 범위 표기는 그대로
+export function snowText(v) {
+  if (v == null || String(v).trim() === "") return null;
+  const s = String(v).trim();
+  if (s === "적설없음" || s === "0" || s === "0.0") return "적설 없음";
+  const n = Number(s.replace(/cm$/, ""));
+  return Number.isFinite(n) ? `${n}cm` : s;
+}
 // 시간별: rows = 단기예보 최신 발표 전부 + 초단기예보 최신 발표 전부(각 { fcst, category, value, base })
 export function hourlyForecast({ vilRows = [], ultraRows = [], fromWall }) {
   const m = new Map();
@@ -46,11 +54,13 @@ export function hourlyForecast({ vilRows = [], ultraRows = [], fromWall }) {
       ta: iv(useU ? U : s.v.TMP != null ? V : null, "ta"), pop: iv(s.v.POP != null ? V : null, "pop"),
       pcp: iv(useU && s.u.RN1 != null ? U : s.v.PCP != null ? V : null, "pcp"), pty: iv(from("PTY", "PTY"), "pty"), sky: iv(from("SKY", "SKY"), "sky"),
       hm: iv(from("REH", "REH"), "hm"), ws: iv(from("WSD", "WSD"), "ws"),
+      sno: iv(s.v.SNO != null ? V : null, "pcp"),
     };
     return {
       time: s.time, ta: fin(ta), pop: fin(num(s.v.POP)), // 강수확률은 단기예보에만 있음
       pcp: pcp ? pcp.text : null, pcpMm: pcp ? pcp.mm : null, pty: Number.isFinite(pty) ? PTY[pty] ?? String(pty) : null, sky: Number.isFinite(sky) ? SKY[sky] ?? String(sky) : null,
       hm: fin(num(pick("REH", "REH"))), ws: fin(num(pick("WSD", "WSD"))),
+      sno: snowText(s.v.SNO), // 신적설(1시간)은 단기예보에만 있음. 없으면 null(0 아님)
       source: useU ? "초단기예보" : "단기예보", base: useU ? s.uBase : s.vBase,
       items,
     };
