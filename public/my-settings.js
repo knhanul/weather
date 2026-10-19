@@ -39,7 +39,7 @@
       <section class="card ms-card" aria-labelledby="msIntT"><h2 id="msIntT">관심 카드 <small>오늘 날씨에 보일 것</small></h2>
         <div class="ms-ints">${act.INTERESTS.map(([k, lab, why]) => `<label class="ms-int"><input type="checkbox" data-int="${k}"${it[k] ? " checked" : ""}> <b>${esc(lab)}</b><small>${esc(why)}</small></label>`).join("")}</div></section>
       <section class="card ms-card" aria-labelledby="msFavT"><h2 id="msFavT">즐겨찾기</h2><p class="rt-note">날짜로 보는 날씨 ${favN("nw.fav.day")}개 · 날씨 배틀 ${favN("nw.fav.battle")}개 — 각 화면의 ☆ 버튼으로 더하고 지워요.</p>
-        <p class="ms-acts"><button type="button" class="sec" id="msClear">이 기기 설정 모두 지우기</button></p><p class="rt-note">하루 구간·산책 조건·관심 카드를 기본값으로 되돌려요(즐겨찾기·지점은 그대로).</p></section>
+        <p class="ms-acts"><button type="button" class="sec" id="msClear">구간·조건·카드 기본값으로</button></p><p class="rt-note">하루 구간·산책 조건·관심 카드를 기본값으로 되돌려요(즐겨찾기·지점은 그대로).</p></section>
     </div>`;
   }
   const say = (t) => { const m = $("msMsg"); if (m) { m.textContent = t; clearTimeout(say.t); say.t = setTimeout(() => { if (m.isConnected) m.textContent = ""; }, 2600); } };
@@ -79,7 +79,7 @@
       else if (t.id === "msSegAdd") { const segs = readSegs(); if (segs.length < 6) { segs.push({ id: `s${segs.length}`, label: "새 구간", from: 10, to: 11 }); A().writeJ(SEGK, segs); render(); say("구간을 더했어요 — 이름·시각을 바꿔 보세요"); } }
       else if (t.id === "msSegReset") { A().writeJ(SEGK, null); render(); say("하루 구간을 기본값으로 되돌렸어요"); }
       else if (t.id === "msActReset") { A().saveCond(null); render(); say("산책·러닝 조건을 기본값으로 되돌렸어요"); }
-      else if (t.id === "msClear") { if (!confirm("하루 구간·산책 조건·관심 카드를 이 기기에서 지울까요? (즐겨찾기·지점은 그대로)")) return; A().writeJ(SEGK, null); A().saveCond(null); A().saveInterests(null); render(); say("이 기기 설정을 지웠어요"); }
+      else if (t.id === "msClear") { if (!confirm("하루 구간·산책 조건·관심 카드를 기본값으로 되돌릴까요? (즐겨찾기·지점은 그대로)")) return; A().writeJ(SEGK, null); A().saveCond(null); A().saveInterests(null); render(); say("구간·조건·카드를 기본값으로 되돌렸어요"); }
     });
   }
   async function show() {
