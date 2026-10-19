@@ -128,13 +128,11 @@ test("가장 큰 변화: 3시간 상승·풍속·습도·강수형태(2시간씩
   assert.ok(!bigChanges({ hours: h2, days: [], today: "2026-10-17" }).items.some((x) => x.kind === "pty" && /비→눈/.test(x.title)));
 });
 
-test("가장 큰 변화: 이웃한 날 최저 ≥5, 일교차 ≥10 이고 5 이상 커짐, 큰 예보 수정은 '발표 변경'", () => {
+test("가장 큰 변화: 이웃한 날 최저 ≥5, 일교차 ≥10 이고 5 이상 커짐. 발표 수정은 넣지 않음", () => {
   const days = [{ date: "2026-10-17", max: 20, min: 12 }, { date: "2026-10-18", max: 21, min: 5, minSource: "단기예보", maxSource: "단기예보" }];
-  const rev = [{ kind: "big", date: "2026-10-18", metric: "max", label: "최고기온", prev: 17, last: 21, delta: 4, source: "단기예보", prevBase: "2026-10-17 11:00:00", lastBase: "2026-10-17 14:00:00" }];
-  const r = bigChanges({ hours: [], days, revisions: rev, today: "2026-10-17" });
+  const r = bigChanges({ hours: [], days, today: "2026-10-17" });
   const k = r.items.map((x) => x.kind).sort();
-  assert.deepEqual(k, ["range", "revision", "tmn"]);
-  assert.match(r.items.find((x) => x.kind === "revision").title, /^발표 변경/);
+  assert.deepEqual(k, ["range", "tmn"]);
   assert.equal(r.items.find((x) => x.kind === "tmn").M, 0.7);
 });
 

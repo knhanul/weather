@@ -83,8 +83,8 @@
     return out;
   }
   // 4단계 '가장 큰 변화'(6장): 서버 bigChanges(크기 M 큰 순 3개 → 시간순) 를 시간선으로. 누르면 72시간 그래프에서 그 구간 강조
-  const BC_ICON = { ta3h: (x) => (x.delta < 0 ? "drop" : "rise"), tmn: (x) => (x.delta < 0 ? "drop" : "rise"), range: () => "rise", wind: () => "wind", rh: () => "rh", pty: () => "pty", weekend: () => "weekend", revision: () => "rev" };
-  const BC_WORD = { ta3h: "3시간 기온", tmn: "아침 최저", range: "일교차", wind: "바람", rh: "습도", pty: "강수형태", weekend: "주말", revision: "발표 변경" };
+  const BC_ICON = { ta3h: (x) => (x.delta < 0 ? "drop" : "rise"), tmn: (x) => (x.delta < 0 ? "drop" : "rise"), range: () => "rise", wind: () => "wind", rh: () => "rh", pty: () => "pty", weekend: () => "weekend" };
+  const BC_WORD = { ta3h: "3시간 기온", tmn: "아침 최저", range: "일교차", wind: "바람", rh: "습도", pty: "강수형태", weekend: "주말" };
   function bigCard(d, sel) {
     const B = d.bigChanges, it = B.items || [];
     const old = changes(d);
@@ -92,42 +92,13 @@
     const when = (w) => `${dayWord(w.slice(0, 10), d.date)} ${hh(w)}시`;
     const tl = it.length ? `<ol class="fv-tl" aria-label="큰 변화 시간선(누르면 72시간 그래프에서 그 구간 강조)">${it.map((x, i) => `<li><button type="button" class="fv-tli${sel === i ? " on" : ""}" data-bc="${i}" aria-pressed="${sel === i}"><span class="fv-tlt">${esc(when(x.startW))}</span>${ic(x)}<span class="fv-tlb"><b>${esc(x.title)}</b><small>${esc(x.sub)}${x.source ? ` · ${esc(x.source)}` : ""}</small></span><span class="fv-m" title="크기 M ${x.M}(통계적 희귀도 아님)"><i style="width:${Math.round(x.M * 100)}%"></i></span></button></li>`).join("")}</ol>` : `<p class="rt-ins">앞으로 72시간 큰 변화 없음(규칙에 해당하는 변화가 없어요)</p>`;
     const more = old.length ? `<details class="fv-more"><summary>규칙별 예보 변화 ${old.length}개 더 보기</summary><ul>${old.map((c) => `<li><div><b>${esc(c.t)}</b><small>${esc(c.sub)} · ${esc(c.src)}</small></div></li>`).join("")}</ul></details>` : "";
-    return `<section class="card fv-chg" aria-label="가장 큰 변화"><h2>가장 큰 변화 <span class="rt-badge fc">예보</span>${B.found > it.length ? ` <small class="rh-sub">${B.found}개 중 큰 ${it.length}개</small>` : ""}</h2>${tl}${more}${window.InfoTip.note(`막대 = 변화 크기(드문 정도 아님)`, `막대 = 변화 크기 M(기준 대비 변화량: 3시간 기온 8℃, 최저기온 10℃, 바람 6m/s, 습도 40%p 등) — 드문 정도가 아닙니다. 규칙: 3시간 기온 4℃ 이상(아침 오름·저녁 내림 방향은 6℃), 이웃한 날 최저 5℃ 이상, 3시간 풍속 3m/s 이상 늘어 5m/s 이상, 다음 날 일교차 10℃ 이상이고 5℃ 이상 커짐, 습도 3시간 20%p 이상(같은 하루 흐름 방향은 30%p), 강수형태가 2시간 이상씩 바뀜, 주말 중 하루만 바깥 활동 조건, 직전 발표 대비 기온 3℃·강수확률 20%p 이상 바뀜(발표 변경). 시각은 예보 정시 기준.`, { cls: "rt-note", label: "변화 규칙" })}</section>`;
+    return `<section class="card fv-chg" aria-label="가장 큰 변화"><h2>가장 큰 변화 <span class="rt-badge fc">예보</span>${B.found > it.length ? ` <small class="rh-sub">${B.found}개 중 큰 ${it.length}개</small>` : ""}</h2>${tl}${more}${window.InfoTip.note(`막대 = 변화 크기(드문 정도 아님)`, `막대 = 변화 크기 M(기준 대비 변화량: 3시간 기온 8℃, 최저기온 10℃, 바람 6m/s, 습도 40%p 등) — 드문 정도가 아닙니다. 규칙: 3시간 기온 4℃ 이상(아침 오름·저녁 내림 방향은 6℃), 이웃한 날 최저 5℃ 이상, 3시간 풍속 3m/s 이상 늘어 5m/s 이상, 다음 날 일교차 10℃ 이상이고 5℃ 이상 커짐, 습도 3시간 20%p 이상(같은 하루 흐름 방향은 30%p), 강수형태가 2시간 이상씩 바뀜, 주말 중 하루만 바깥 활동 조건. 시각은 예보 정시 기준.`, { cls: "rt-note", label: "변화 규칙" })}</section>`;
   }
   function changeCard(d, sel = null) {
     if (d.bigChanges) return bigCard(d, sel);
     const cs = changes(d);
     const ic = (k) => (k === "drop" ? `<b class="fv-arrow down">↓</b>` : k === "rise" ? `<b class="fv-arrow up">↑</b>` : iconSvg(k, false, 34, k));
     return `<section class="card fv-chg" aria-label="가장 큰 변화"><h2>가장 큰 변화 <span class="rt-badge fc">예보</span></h2>${cs.length ? `<ul>${cs.map((c) => `<li>${ic(c.ico)}<div><b>${esc(c.t)}</b><small>${esc(c.sub)} · ${esc(c.src)}</small></div></li>`).join("")}</ul>` : `<p class="rt-ins">앞으로 큰 변화 없음</p>`}${window.InfoTip.note(`예보 정시 기준 · 해당하는 것만`, `규칙: 강수형태(비·눈 등) 예보가 시작·끝나는 시각, 강수형태 예보 없이 강수확률만 60% 이상인 시간대(따로 표시), 3시간 사이 기온 4℃ 이상 하강, 이웃한 날 최고기온 5℃ 이상 변화. 시각은 예보 정시 기준이라 정확한 시작 시각이 아닙니다. 해당하는 것만 보입니다.`, { cls: "rt-note", label: "변화 규칙" })}</section>`;
-  }
-  // 발표별 변화 한 줄: 이웃한 두 발표 사이 3℃ 이상 바뀐 경우만
-  function releaseJumps(d) {
-    const out = [];
-    for (const c of d.changes || []) for (const [k, lab] of [["max", "최고"], ["min", "최저"]]) {
-      const a = c[k] || [];
-      for (let i = 1; i < a.length; i++) { const dv = Math.round((a[i].value - a[i - 1].value) * 10) / 10; if (Math.abs(dv) >= 3) out.push({ date: c.date, lab, from: a[i - 1], to: a[i], dv }); }
-    }
-    return out.sort((x, y) => Math.abs(y.dv) - Math.abs(x.dv));
-  }
-  function releaseLine(d) {
-    const j = releaseJumps(d)[0];
-    if (!j) return "";
-    const n = releaseJumps(d).length;
-    return `<p class="card fv-rel-line">🔁 <b>${esc(dlab(j.date))} ${j.lab}기온 예보가 ${j.from.value}℃ → ${j.to.value}℃(${sg(j.dv)})</b> <small>${esc(hm(j.from.base))} → ${esc(hm(j.to.base))} 발표${n > 1 ? ` · 3℃ 이상 바뀐 경우 모두 ${n}번` : ""}</small></p>`;
-  }
-
-  // 예보가 바뀐 흐름(14장): 오늘~모레 최고·최저 발표 이력 분류 + 강수확률 수정. 신뢰도 % 없음
-  const REV_KIND = { up: ["연속 상향", "fc"], down: ["연속 하향", "fc"], osc: ["발표마다 변동", "fc"], big: ["큰 단일 수정", "bad"], steady: ["큰 수정 없음", "ok"], mixed: ["작은 변화", ""], few: ["발표 적음", ""] };
-  function revisionCard(d, sel = 0) {
-    const rv = (d.revisions || []).filter((x) => x.kind !== "few" && Math.round((Date.parse(x.date) - Date.parse(d.date)) / 864e5) <= 2);
-    const pr = d.popRevision;
-    if (!rv.length && !pr?.list?.length) return d.revisions ? "" : releaseLine(d);
-    // 기본 선택 = 수정이 있었던 첫 항목(모두 '큰 수정 없음'이면 첫 항목)
-    const i0 = sel == null ? Math.max(0, rv.findIndex((x) => x.kind !== "steady")) : Math.min(sel, Math.max(0, rv.length - 1)), x0 = rv[i0];
-    const viz = x0 && window.RTViz ? window.RTViz.revision({ type: "revision", date: x0.date, metric: x0.metric, label: x0.label, unit: "℃", points: x0.points }) : "";
-    const rows = rv.map((x, i) => { const [w, c] = REV_KIND[x.kind] || ["", ""]; return `<button type="button" class="fv-rv${i === i0 ? " on" : ""}" data-rv="${i}" aria-pressed="${i === i0}"><b>${esc(dlab(x.date))} ${esc(x.label.replace("기온", ""))}</b> <span class="rt-badge ${c}">${esc(w)}</span></button>`; }).join("");
-    const pop = pr?.list?.length ? `<p class="fv-rvpop">☂ 강수확률: 직전 단기 발표(${esc(hm(pr.prevBase))})와 같은 대상 시각 ${pr.compared}개 중 ${pr.list.length}개가 ${pr.threshold}%p 이상 바뀜 — ${pr.list.slice(0, 3).map((p) => `${esc(dlab(p.time.slice(0, 10)))} ${hh(p.time)}시 ${p.prev}→${p.value}%`).join(", ")}${pr.list.length > 3 ? " 등" : ""}</p>` : pr && pr.compared ? `<p class="rt-note">강수확률: 직전 단기 발표와 같은 대상 시각 ${pr.compared}개 모두 ${pr.threshold}%p 미만 변화.</p>` : "";
-    return `<section class="card fv-rev" aria-label="예보가 바뀐 흐름"><h2>예보가 바뀐 흐름 <span class="rt-badge fc">발표 이력</span></h2>${rows ? `<div class="fv-rvs" role="group" aria-label="날짜·지표 고르기">${rows}</div>` : ""}${x0 ? `<p class="fv-rvt"><b>${esc(dlab(x0.date))} ${esc(x0.label)}</b> — ${esc(x0.text)} · ${esc(x0.source)} ${x0.gap ? `확보된 ${x0.n}회` : `${x0.n}회`}</p>` : ""}${viz}${pop}${window.InfoTip.note(`단기 24시간 · 중기 48시간 발표 비교`, `같은 상품(단기/중기)·대상일·지표의 발표값만 비교합니다(단기 최근 24시간, 중기 48시간). 예정 회차가 빠지면 '확보된 n회'. 단기↔중기 전환은 선을 끊습니다. 발표가 일정하다고 정확하다는 뜻은 아니며, 신뢰도 %는 내지 않습니다.`, { cls: "rt-note", label: "비교 방법" })}</section>`;
   }
   // 기상청 중기전망(10장): 원문 그대로(이스케이프), 발표시각·구역·지연 표시. 낱말 표지는 문장으로 가는 길잡이일 뿐
   const OL_KEYS = ["비", "눈", "기온", "바람"];
@@ -225,5 +196,5 @@
     }).join("");
     return `<section class="card fv-pills" aria-label="10일 예보"><h2>${ds.length}일 예보 <span class="rt-badge fc">예보</span></h2><div class="rt-legend"><span><i class="fv-key rng"></i> 예보 최저~최고</span><span><i class="fv-key base"></i> ${esc(per ? `${per.label.replace(" 평균", "")}(${per.range}) 평균` : "기준 평균")} 같은 시기 최저~최고</span></div><ul>${rows}</ul>${window.InfoTip.note(`단기 → 중기(발표 ${esc(hm(d.releases?.midTa) || "없음")})`, `최고기온 옆 숫자 = 기준 평균 최고기온과의 차이(1℃ 이상만). 단기 = 단기예보(대략 3일), 중기 = 중기예보(발표 ${esc(hm(d.releases?.midTa) || "없음")}). 강수확률은 하루 중 가장 큰 값.`, { cls: "rt-note", label: "보는 법" })}</section>`;
   }
-  window.RTFV = { hero, changeCard, releaseLine, revisionCard, outlookFold, chart72, pills, xOf, idxAt, iconSvg, kind, dlab };
+  window.RTFV = { hero, changeCard, outlookFold, chart72, pills, xOf, idxAt, iconSvg, kind, dlab };
 })();

@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { ytdCompare, cumulativeYear, firstHotDay, firstHotSeasons, derivedCompare, outdoorWindow, basePeriods, hourlyCompare, dailyCompare, kst, createBaselineCache, HOURLY_FIELDS, DAILY_FIELDS, diffWord, WINDOW_DAYS, MIN_YEAR_SHARE, MIN_IN_YEAR_SHARE, MIN_SAMPLES_RANK } from "./rt-baseline.mjs";
 import { StatsError, unknownStationMsg, hourlyLastDay, ymdToDn, OUTDOOR_DEFAULT, outdoorLabel } from "./stats-engine.mjs";
 import { windHours } from "./rt-forecast-wind.mjs";
-import { hourlyForecast, shortDaySummary, extremesByDate, midByDate, stitchDays, forecastChanges, addDays } from "./rt-forecast.mjs";
+import { hourlyForecast, shortDaySummary, extremesByDate, midByDate, stitchDays, addDays } from "./rt-forecast.mjs";
 
 const pad = (n) => String(n).padStart(2, "0");
 const num = (v) => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? NaN : Number(v));
@@ -23,7 +23,6 @@ import { runningJudgement, rankRegions, seasonExposure, emptyReasonOf, emptyText
 import { render as renderTpl, warmWord, describeDifference, fnv1a32 } from "./rt-story-templates.mjs";
 import { seasonEvent, forecastCrossing, seasonChart, seasonHome, seasonCands, SEASON_IDS } from "./rt-season.mjs";
 import { regionFacts, regionCands } from "./rt-region.mjs";
-import { revisionFlow, popRevisions, revisionCands } from "./rt-revision.mjs";
 import { bigChanges } from "./rt-changes.mjs";
 import { hourlyReference, dailyReference, evaluateRefs, BASELINE_ALGO } from "./rt-baseline.mjs";
 import { createDbHistory, SNAPSHOT_SCHEMA } from "./rt-snapshot-db.mjs";
@@ -330,18 +329,10 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     });
     const obsDays = week.filter((w) => w.source === "관측").length, fcDays = week.filter((w) => w.source && w.source !== "관측").length;
     out.week = { from: weekStart, to: addDays(weekStart, 6), days: week, anomaly: anom, obsDays, fcDays, note: `관측 ${obsDays}일 + 예보 ${fcDays}일. 최고·최저기온 각각의 (값 − 같은 시기 평균)을 평균한 것` };
-    out.changes = forecastChanges(extremes, mid, days.map((d) => d.date)).filter((c) => c.max.length + c.min.length > 1);
-    // 4단계(astra 6·10·14장): 예보가 바뀐 흐름 · 강수확률 수정(직전 단기 발표, 같은 대상 시각) · 가장 큰 변화 · 기상청 중기전망(wfSv 원문)
-    out.revisions = revisionFlow(out.changes, { today: k.ymd });
-    let prevRows = [];
-    if (vilRel) { try { prevRows = await rt.fcst("KMA_VILAGE_FCST", g.nx, g.ny, shiftWall(vilRel.base, -3)); } catch { prevRows = []; } }
-    if (prevRows[0]?.base === vilRows[0]?.base) prevRows = [];
-    out.popRevision = popRevisions(vilRows, prevRows, { fromWall: `${k.ymd} ${pad(k.hour)}:00:00` });
-    out.bigChanges = bigChanges({ hours, days, revisions: out.revisions, pop: out.popRevision, today: k.ymd, nowW: k.text });
+    out.bigChanges = bigChanges({ hours, days, today: k.ymd, nowW: k.text });
     out.outlook = await midOutlook(rt, g, k, nowMs).catch(() => ({ text: null, note: "중기전망을 불러오지 못함" }));
     return out;
   }
-  const shiftWall = (w, h) => new Date(Date.parse(`${String(w).slice(0, 10)}T${String(w).slice(11, 19)}Z`) + h * 3600e3).toISOString().slice(0, 19).replace("T", " ");
   const MID_STN_NAME = { 109: "서울·인천·경기", 133: "대전·세종·충남", 143: "대구·경북", 156: "광주·전남", 159: "부산·울산·경남", 184: "제주", 105: "강원", 131: "충북", 146: "전북" };
   // 기상청 중기전망(getMidFcst wfSv): 지점의 mid_stn_id, 가장 최근 발표 원문 그대로(숫자·문장을 만들지 않음). 발표 06·18시 → 13시간 넘으면 지연
   async function midOutlook(rt, g, k, nowMs) {
@@ -678,8 +669,6 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     const seasons = seasonEvents({ store, hs, k, f });
     C.push(...seasonCands(seasons, { sid, basis, bi, today: k.ymd, tv, LIFE_VALUE, basisName: BASIS_NAME[basis] }));
     // 새 규칙(rt-story-catalog: H01·W01·T01·T02·R01~R04·S01·C01·N01·T03·L01) — 같은 ctx 를 되돌려 보기 스크립트도 씀
-    // 예보가 바뀐 흐름(14장) — 과거 평균과 비교하지 않아 기준과 무관
-    C.push(...revisionCands(f.revisions || [], f.popRevision, { sid, tv, ymd: k.ymd, LIFE_VALUE }));
     const ctx = storyCtx({ sid, nm, k, t, f, hs, store });
     ctx.bi = bi; ctx.basisId = basis;
     const cat = runCatalog(ctx);

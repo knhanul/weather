@@ -3,10 +3,9 @@
 //   규칙(초기값): 3시간 기온 변화 |Δ| ≥ 4℃(기준 8; 하루 흐름 방향이면 6℃ — CHANGE_RULES.diurnal) / 이웃한 날 최저기온 |Δ| ≥ 5℃(기준 10) / 풍속 W(t+3)−W(t) ≥ 3 이고 W(t+3) ≥ 5 m/s(기준 6, '돌풍'이라 하지 않음)
 //   / 다음 날 일교차 D ≥ 10 이고 전날보다 5 이상 큼(기준 10) / 습도 3시간 |Δ| ≥ 20%p(기준 40, 건조·안개로 해석하지 않음)
 //   / 강수형태가 각각 2시간 이상 이어진 두 형태로 바뀜(빈 시각을 건너 잇지 않음) / 주말: 토·일 중 하루만 활동 조건 2시간 이상 연속
-//   / 큰 예보 수정: 직전 발표 대비 기온 ≥ 3℃ 또는 강수확률 ≥ 20%p — '발표 변경'으로 표시
 export const CHANGE_RULES = {
   rise3h: { delta: 4, ref: 8 }, tmn: { delta: 5, ref: 10 }, wind: { delta: 3, min: 5, ref: 6 }, range: { min: 10, up: 5, ref: 10 }, rh: { delta: 20, ref: 40 },
-  pty: { run: 2, mStart: 0.7, mSwitch: 1 }, weekend: { run: 2, from: 7, to: 20, tmin: 10, tmax: 25, wind: 5, popMax: 60, m: 0.5 }, revision: { ta: 3, taRef: 6, pop: 20, popRef: 40 },
+  pty: { run: 2, mStart: 0.7, mSwitch: 1 }, weekend: { run: 2, from: 7, to: 20, tmin: 10, tmax: 25, wind: 5, popMax: 60, m: 0.5 },
   max: 3, hours: 72,
   // 4단계 되돌려 보기 조정: 아침 오름(5~12시 시작 기온 상승·습도 하강)·저녁 내림(15~21시 시작 기온 하강·습도 상승)은
   //   매일 있는 하루 흐름이라 초기 기준(4℃·20%p)으로는 거의 매일 걸림 → 그 방향·시간대에만 기준 × 1.5(6℃·30%p)
@@ -38,7 +37,7 @@ function threeHour(hours, key, test, mk) {
   }
   return groups.map((g) => mk(g.reduce((m, x) => (Math.abs(x.d) > Math.abs(m.d) ? x : m))));
 }
-export function bigChanges({ hours = [], days = [], revisions = [], pop = null, today, nowW }) {
+export function bigChanges({ hours = [], days = [], today, nowW }) {
   const H = hours.slice(0, CR.hours);
   const C = [];
   const src = (h) => h.items?.ta?.source || h.source;
@@ -90,9 +89,6 @@ export function bigChanges({ hours = [], days = [], revisions = [], pop = null, 
     const sOk = s.mx >= W.run, uOk = u.mx >= W.run;
     if (sOk !== uOk) C.push({ kind: "weekend", M: W.m, delta: null, unit: "", startW: `${(sOk ? d : sun[0].time.slice(0, 10))} ${String(W.from).padStart(2, "0")}:00`, endW: `${(sOk ? d : sun[0].time.slice(0, 10))} ${W.to}:00`, title: `주말은 ${sOk ? "토요일" : "일요일"}만 바깥 활동 조건`, sub: `${W.tmin}~${W.tmax}℃·풍속 ${W.wind}m/s 이하·강수확률 ${W.popMax}% 미만·강수 없음이 ${W.run}시간 이상 이어지는 날(${W.from}~${W.to}시)`, source: "단기예보" });
   }
-  // 8) 큰 예보 수정(발표 변경)
-  for (const r of revisions) if (r.kind === "big" && r.date >= today) C.push({ kind: "revision", M: Math.min(1, Math.abs(r.delta) / CR.revision.taRef), delta: r.delta, unit: "℃", startW: `${r.date} ${r.metric === "max" ? "12:00" : "04:00"}`, endW: `${r.date} ${r.metric === "max" ? "16:00" : "08:00"}`, title: `발표 변경: ${dayWord(r.date, today)} ${r.label} ${r.prev}→${r.last}℃`, sub: `${r.source} ${String(r.prevBase).slice(5, 16)} → ${String(r.lastBase).slice(5, 16)} 발표`, source: r.source });
-  for (const p of (pop?.list || []).slice().sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 1)) C.push({ kind: "revision", M: Math.min(1, Math.abs(p.delta) / CR.revision.popRef), delta: p.delta, unit: "%p", startW: p.time.slice(0, 16), endW: p.time.slice(0, 16), title: `발표 변경: ${dayWord(p.time.slice(0, 10), today)} ${hh(p.time)} 강수확률 ${p.prev}→${p.value}%`, sub: `단기예보 ${String(pop.prevBase).slice(11, 16)} → ${String(pop.base).slice(11, 16)} 발표(같은 대상 시각)`, source: "단기예보" });
   const all = C.filter((x) => !nowW || x.endW >= nowW.slice(0, 13));
   // 종류가 겹치지 않게 먼저 종류마다 하나씩, 모자라면 나머지에서 채움
   const ord = all.slice().sort((a, b) => b.M - a.M || (a.startW < b.startW ? -1 : 1));

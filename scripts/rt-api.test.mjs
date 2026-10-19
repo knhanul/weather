@@ -190,8 +190,8 @@ test("4단계: stories 기준(basis) 연동·계절 신호·30일 비 달력, fo
   assert.equal(se.basisId, "r10");
   assert.deepEqual(se.events.map((e) => e.id), ["first-hot-day", "first-frost", "first-snow", "first-warm-night", "last-hot-day"]);
   const f = (await call(api, "/api/rt/forecast?station=108")).body;
-  assert.ok(Array.isArray(f.revisions));
   assert.ok(f.bigChanges && Array.isArray(f.bigChanges.items) && f.bigChanges.items.length <= 3);
-  assert.ok(f.popRevision && Array.isArray(f.popRevision.list));
+  assert.equal(f.revisions, undefined);
+  assert.equal(f.popRevision, undefined);
   assert.equal(f.outlook.text, null); // 지점에 mid_stn_id 없음 → 원문 없음(만들지 않음)
 });

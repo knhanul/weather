@@ -8,7 +8,7 @@
   const dlab = (ymd) => `${+ymd.slice(5, 7)}/${+ymd.slice(8, 10)}(${DOW[new Date(`${ymd}T00:00:00Z`).getUTCDay()]})`;
   const hm = (w) => (w ? `${+w.slice(5, 7)}/${+w.slice(8, 10)} ${w.slice(11, 16)}` : "");
   const COLORS = { all: "#8a4b00", r10: "#0e7a3e", r5: "#c0262d", fc: "#026ef8" };
-  const state = { station: null, data: null, stations: [], show: { all: true, r10: true, r5: true }, bcSel: null, rvSel: null };
+  const state = { station: null, data: null, stations: [], show: { all: true, r10: true, r5: true }, bcSel: null };
   const hlOf = () => { const it = state.bcSel != null ? state.data?.bigChanges?.items?.[state.bcSel] : null; return it ? { startW: it.startW, endW: it.endW, label: it.title.length > 18 ? `${it.title.slice(0, 18)}…` : it.title } : null; };
   // 강조 구간이 보이게 가로 스크롤·카드 위치 맞춤
   function focusHl() {
@@ -33,8 +33,6 @@
         // 가장 큰 변화 시간선: 누르면 72시간 그래프에서 그 구간 강조(다시 누르면 해제)
         const bc = e.target.closest("[data-bc]");
         if (bc) { const i = +bc.dataset.bc; state.bcSel = state.bcSel === i ? null : i; render(); focusHl(); return; }
-        const rv = e.target.closest("[data-rv]");
-        if (rv) { state.rvSel = +rv.dataset.rv; render(); return; }
         const ok = e.target.closest("[data-olk]");
         if (ok) { const k = ok.dataset.olk, box = ok.closest(".fv-outlook"); let first = null; for (const p0 of box.querySelectorAll(".fv-ols")) { const on = (p0.dataset.k || "").split(" ").includes(k); p0.classList.toggle("hit", on); if (on && !first) first = p0; } for (const b0 of box.querySelectorAll("[data-olk]")) b0.setAttribute("aria-pressed", String(b0 === ok)); if (first) first.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
       });
@@ -69,7 +67,7 @@
       }
       if (my !== seq) return;
       if (!d) throw new Error("불러오지 못했습니다");
-      state.data = d; state.wind = null; state.bcSel = null; state.rvSel = null; render(); document.dispatchEvent(new Event("rt:ready"));
+      state.data = d; state.wind = null; state.bcSel = null; render(); document.dispatchEvent(new Event("rt:ready"));
       // 바람 띠(읽기 전용 추가 자료): 받으면 그래프만 다시
       const ws = state.station;
       fetch(`/api/rt/forecast-wind?station=${encodeURIComponent(ws)}`).then((r) => r.json()).then((w) => { if (my !== seq || ws !== state.station || !w.ok || !w.hours?.length) return; state.wind = w.hours; render(); }).catch(() => {});
@@ -86,9 +84,8 @@
     if (stale.length) h += `<div class="card result bad">예보 발표가 늦어지고 있습니다(${stale.map((x) => `${esc(hm(x.base))} 발표 · ${esc(x.freshness.text)}`).join(" / ")}). 최신 예보가 아닐 수 있습니다.</div>`;
     const V = window.RTFV;
     let weekH = "";
-    // 그림 중심: 히어로 → 가장 큰 변화 → (발표 변화 한 줄) → 72시간 그래프 → 10일 알약
-    // 4단계: 가장 큰 변화(시간선·그래프 강조) → 예보가 바뀐 흐름 → 72시간 → 10일 → 기상청 중기전망(접힘)
-    h += V.hero(d) + V.changeCard(d, state.bcSel) + (V.revisionCard ? V.revisionCard(d, state.rvSel) : V.releaseLine(d)) + chart72Card(d, ids) + V.pills(d, ids.length > 1 ? "all" : ids[0]) + (V.outlookFold ? V.outlookFold(d) : "");
+    // 그림 중심: 히어로 → 가장 큰 변화 → 72시간 그래프 → 10일 알약 → 기상청 중기전망(접힘)
+    h += V.hero(d) + V.changeCard(d, state.bcSel) + chart72Card(d, ids) + V.pills(d, ids.length > 1 ? "all" : ids[0]) + (V.outlookFold ? V.outlookFold(d) : "");
     // 접힌 표: 이번 주 이맘때 평균 대비
     if (d.week) {
       const w = d.week;
@@ -109,8 +106,6 @@
     }).join("")}</tbody></table></div>${mobileDays(d, ids, pi)}${window.InfoTip.note("단기예보 → 중기예보", "단기예보가 있는 날은 단기예보, 그 뒤(대략 4일 이후)는 중기예보. 강수확률은 하루 중 가장 큰 값이며 더하지 않습니다. 예상 강수량은 숫자로 나온 시간만 더하고 '1mm 미만'은 시간 수로 따로 적습니다.", { cls: "rt-note" })}</section></details>`;
     // 접힌 표: 시간별 표
     h += hourlyTable(d, ids);
-    // 접힌 표: 발표별 변화
-    if (d.changes.length) h += `<details class="card rh-fold fv-fold"><summary>발표마다 바뀐 최고·최저기온 예보</summary><section><div class="tbl-wrap"><table class="rt-tbl"><thead><tr><th>날짜</th><th>최고기온 (발표 → 값)</th><th>최저기온</th></tr></thead><tbody>${d.changes.map((c) => `<tr><th scope="row">${esc(dlab(c.date))}</th><td>${seqTxt(c.max)}</td><td>${seqTxt(c.min)}</td></tr>`).join("")}</tbody></table></div>${window.InfoTip.note("맨 오른쪽 = 최근 발표", "저장된 발표 회차별 값(단기예보 TMX·TMN, 중기기온 taMax·taMin). 맨 오른쪽이 가장 최근 발표.", { cls: "rt-note" })}</section></details>`;
     h += `<details class="card rt-method"><summary>계산 기준</summary><ul><li>${esc(d.method.rule)}</li><li>${esc(d.method.note)}</li><li>${esc(d.mapping?.note || "")}</li><li>최신 발표: 단기 ${esc(hm(d.releases?.vilage?.base) || "없음")}, 초단기 ${esc(hm(d.releases?.ultra?.base) || "없음")}, 중기기온 ${esc(hm(d.releases?.midTa) || "없음")}, 중기육상 ${esc(hm(d.releases?.midLand) || "없음")}.</li><li>시간별 기온 비교 = 같은 날짜 ±7일·같은 정시 ASOS 평균, 일별 = 공식 일자료 최고·최저기온 평균. 예보값으로 기록 경신을 확정하지 않습니다.</li></ul></details>`;
     const out = $("fcOut"), wasOpen = new Set([...out.querySelectorAll("details[open] > summary")].map((x) => x.textContent.slice(0, 12)));
     const sx = out.querySelector("#fcChartHost .rt-hscroll")?.scrollLeft || 0;
@@ -120,8 +115,6 @@
     bindFull();
     bindDayTag();
   }
-  // 값이 바뀐 발표만(첫 발표 + 바뀐 회차), 최근 6개
-  const changesOnly = (a) => a.filter((x, i) => i === 0 || x.value !== a[i - 1].value || x.source !== a[i - 1].source);
   // 좁은 화면: 날짜마다 한 줄 카드(표 가로 스크롤 대신)
   function mobileDays(d, ids, pi) {
     return `<ul class="rt-dlist">${d.days.map((x) => {
@@ -130,7 +123,6 @@
       return `<li${x.offset === 0 ? ' class="today"' : ""}><div class="r1"><b>${esc(dlab(x.date))}</b><span>${esc(x.wf || x.sky || "")}${x.pop != null ? ` · ${x.pop}%` : ""}</span></div><div class="r2"><span>최고 <b>${x.max ?? "–"}</b> ${x.max != null ? df(x.maxCmp) : ""}</span><span>최저 <b>${x.min ?? "–"}</b> ${x.min != null ? df(x.minCmp) : ""}</span></div><small>${esc(x.maxSource || x.minSource || x.wxSource || "")} ${esc(hm(x.maxBase || x.minBase || x.wxBase))}${x.nearRecord ? ` · <span class="up">과거 최고 ${x.nearRecord.record.value}℃ 근접(예상)</span>` : ""}</small></li>`;
     }).join("")}</ul><p class="rt-note rt-mob">차이는 ${ids.map((id) => esc(d.periods[pi(id)].label.replace(" 평균", ""))).join(" · ")} 평균 대비(℃).</p>`;
   }
-  const seqTxt = (a0) => { const a = changesOnly(a0); return a.length ? a.slice(-6).map((x, i, arr) => `<span title="${esc(x.source)}">${esc(hm(x.base))} <b${i && x.value !== arr[i - 1].value ? ` class="${cls(x.value - arr[i - 1].value)}"` : ""}>${x.value}</b>${x.source === "중기예보" ? "<sup>중기</sup>" : ""}</span>`).join(" → ") + (a0.length > a.length ? ` <small>(발표 ${a0.length}회 중 값이 바뀐 회차만)</small>` : "") : "–"; };
   function hourlyTable(d, ids) {
     const hrs = d.hours.slice(0, 72);
     if (!hrs.length) return "";
