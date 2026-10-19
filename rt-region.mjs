@@ -1,5 +1,6 @@
 // 지역 이야기(astra 13장, 4단계): 8개 지점을 같은 공통 정시·같은 기준(basis)으로 맞춰 세 가지 후보를 만든다. 새 모듈.
-//   1) 평소와 가장 다른 곳: U2 = |백분위−50|/50 순(부호·실황값·표본수 함께). U2 ≥ topMinU 일 때만 후보.
+//   1) 평소와 가장 다른 곳: U2 = |백분위−50|/50 순, 둘 다 백분위 끝(97 이상·3 이하)이면 |z|(평소 변동폭 대비 차이)로 가름(rt-story-facts unusualOrder).
+//      U2 ≥ topMinU 일 때만 후보. 이 이야기의 그래프도 같은 순서(chartUnusual)·고른 지점 강조라 제목·문장·그래프 맨 위가 늘 같다.
 //   2) 지역 간 기온차 D = max − min(공통시각 유효 지점 집합 S). 과거는 같은 날짜창(±7일)·같은 정시·같은 집합 S 모든 지점 값이 있는 날만.
 //      N ≥ 60 + 유효연도 조건 + p(D) ≥ 0.90 일 때 후보. 6개 미만이면 뺌. 집합이 바뀌면 stationSetHash 가 바뀜(캐시 키).
 //   3) 같이 따뜻하거나 쌀쌀한 곳: 같은 기준 대비 +3℃ 이상 / −3℃ 이하 지점 수 — '관측 가능한 N개 중 k개'. k ≥ 절반일 때 후보.
@@ -7,6 +8,7 @@
 import { hval, ymdToDn } from "./stats-engine.mjs";
 import { derivedCompare } from "./rt-baseline.mjs";
 import { REGION_RULES } from "./rt-story-rules.mjs";
+import { unusualOrder } from "./rt-story-facts.mjs";
 
 const hAt = (hs, dn, h) => { const i = (dn - hs.base) * 24 + h; return hs && i >= 0 && i < hs.n && hs.src[i] ? hval(hs.ta, i) : NaN; };
 const BI = { all: 0, r10: 1, r5: 2 };
@@ -26,8 +28,7 @@ export function regionFacts({ rows, time, basis = "all", hsOf, R = REGION_RULES 
   if (!time) return { ...out, enough: false };
   const ymd = time.slice(0, 10), hour = +time.slice(11, 13);
   // 1) 평소와 가장 다른 곳
-  const dev = S.filter((r) => r.pcts?.[basis] != null).map((r) => ({ id: r.id, name: r.name, temp: r.temp, diff: r.diffs?.[basis] ?? null, percentile: r.pcts[basis], samples: r.samples?.[basis] ?? null, U2: Math.round((Math.abs(r.pcts[basis] - 50) / 50) * 1000) / 1000 }))
-    .sort((a, b) => b.U2 - a.U2 || Math.abs(b.diff ?? 0) - Math.abs(a.diff ?? 0));
+  const dev = unusualOrder(S, basis, R);
   out.top = dev[0] || null;
   out.deviation = dev;
   // 2) 지역 간 기온차
@@ -51,6 +52,11 @@ export function regionFacts({ rows, time, basis = "all", hsOf, R = REGION_RULES 
   out.together = { N: withDiff.length, warm: withDiff.filter((r) => r.diffs[basis] >= R.togetherDelta).map((r) => r.name), cold: withDiff.filter((r) => r.diffs[basis] <= -R.togetherDelta).map((r) => r.name), delta: R.togetherDelta };
   // 8행 가로 점그래프 자료(0 = 평소)
   out.chart = { type: "regions", time, basis, unit: "℃", rows: S.map((r) => ({ id: r.id, name: r.name, temp: r.temp, diff: r.diffs?.[basis] ?? null, percentile: r.pcts?.[basis] ?? null, samples: r.samples?.[basis] ?? null })).sort((a, b) => (b.diff ?? -99) - (a.diff ?? -99)), N: S.length };
+  // 드문 순 그래프('평소와 가장 다른 곳'·'평소에서 벗어난 정도' 이야기용): 순서 = dev 순서, 백분위 없는 지점은 맨 뒤(차이 순)
+  const rowOf = (r) => ({ id: r.id, name: r.name, temp: r.temp, diff: r.diffs?.[basis] ?? null, percentile: r.pcts?.[basis] ?? null, samples: r.samples?.[basis] ?? null, z: r.zs?.[basis] ?? null });
+  const byId = new Map(S.map((r) => [r.id, r]));
+  const rest = S.filter((r) => r.pcts?.[basis] == null).sort((a, b) => (b.diffs?.[basis] ?? -99) - (a.diffs?.[basis] ?? -99));
+  out.chartUnusual = { ...out.chart, order: "unusual", rows: [...dev.map((d) => rowOf(byId.get(d.id))), ...rest.map(rowOf)] };
   return out;
 }
 // 후보(이야기 선별 입력) — sid = 지금 보는 지점(강조용), U 계산은 각 규칙에서
@@ -62,7 +68,13 @@ export function regionCands(F, { sid, nm, tv, LIFE_VALUE, basisId, R = REGION_RU
   const hhmm = F.time.slice(11, 16);
   const sg = (d) => (d > 0 ? `+${d}` : `${d}`);
   const t = F.top;
-  if (t && t.U2 >= R.topMinU) C.push({ key: "region-top", ruleId: "G01", eventId: `G01|${F.time.slice(0, 10)}|${t.id}|${t.diff > 0 ? "hi" : "lo"}|${F.stationSetHash}`, topic: "region", path: "stat", phenomenon: "평소와 가장 다른 곳", kind: "관측", basisId, U: t.U2, A: t.id === sid ? 0.7 : 0.3, T: tv(F.time), material: { id: t.id, dir: t.diff > 0 ? 1 : -1 }, samples: t.samples ?? 0, minSamples: 60, exclude: why, title: `지금 평소와 가장 다른 곳은 ${t.name}(${sg(t.diff)}℃)`, text: `${hhmm} 같은 시각 관측 가능한 ${F.N}개 지점 중 ${t.name}${iga(t.name)} 같은 시기 평균에서 가장 멀어요 — 지금 ${t.temp}℃, 평균 대비 ${sg(t.diff)}℃, 백분위 ${t.percentile}(표본 ${t.samples}개).`, method: "공통 최신 정시의 지점별 |백분위−50|/50 순. 실황은 격자, 과거는 ASOS 정시라 참고 비교예요.", basis: `같은 실황 시각 ${hhmm} · ${F.N}개 지점`, facts: { name: t.name, id: t.id, diff: t.diff, percentile: t.percentile, U2: t.U2, N: F.N, mine: t.id === sid }, chart });
+  if (t && t.U2 >= R.topMinU) {
+    // 2위도 백분위 끝이라 |z| 로 가렸으면 그 사실과 두 값을 문장에 밝힘
+    const r2 = F.deviation?.[1];
+    const tie = t.byZ && r2?.byZ ? ` ${r2.name}${iga(r2.name)} 백분위 ${r2.percentile}로 거의 같아, 평소 변동폭(같은 시기 표준편차) 대비 차이로 가렸어요 — ${t.name} ${Math.abs(t.z)}배, ${r2.name} ${Math.abs(r2.z)}배.` : "";
+    const tChart = { ...(F.chartUnusual || F.chart), highlight: t.id, mine: sid };
+    C.push({ key: "region-top", ruleId: "G01", eventId: `G01|${F.time.slice(0, 10)}|${t.id}|${t.diff > 0 ? "hi" : "lo"}|${F.stationSetHash}`, topic: "region", path: "stat", phenomenon: "평소와 가장 다른 곳", kind: "관측", basisId, U: t.U2, A: t.id === sid ? 0.7 : 0.3, T: tv(F.time), material: { id: t.id, dir: t.diff > 0 ? 1 : -1 }, samples: t.samples ?? 0, minSamples: 60, exclude: why, title: `지금 평소와 가장 다른 곳은 ${t.name}(${sg(t.diff)}℃)`, text: `${hhmm} 같은 시각 관측 가능한 ${F.N}개 지점 중 ${t.name}${iga(t.name)} 같은 시기 평소 분포에서 가장 드문 쪽이에요 — 지금 ${t.temp}℃, 평균 대비 ${sg(t.diff)}℃, 백분위 ${t.percentile}(표본 ${t.samples}개).${tie}`, method: `공통 최신 정시의 지점별 '평소에서 드문 정도' 순 — 백분위가 50에서 먼 순(|백분위−50|/50). 두 곳 이상이 백분위 ${Math.round(50 + 50 * R.extremeU)} 이상(또는 ${Math.round(50 - 50 * R.extremeU)} 이하)이면 백분위가 표본 몇 개 차이라, 평소 변동폭(같은 시기 표본의 표준편차) 대비 차이로 가려요. 그래프도 같은 순서(위가 더 드묾)이고, 오른쪽 숫자는 평균 대비 차이와 백분위예요. 실황은 격자, 과거는 ASOS 정시라 참고 비교예요.`, basis: `같은 실황 시각 ${hhmm} · ${F.N}개 지점`, facts: { name: t.name, id: t.id, diff: t.diff, percentile: t.percentile, U2: t.U2, z: t.z, byZ: t.byZ, runnerUp: r2 ? { name: r2.name, id: r2.id, diff: r2.diff, percentile: r2.percentile, z: r2.z } : null, N: F.N, mine: t.id === sid }, chart: tChart });
+  }
   const sp = F.spread;
   if (sp?.cmp && sp.cmp.p != null && sp.cmp.p >= R.spreadP) C.push({ key: "region-spread", ruleId: "G02", eventId: `G02|${F.time.slice(0, 10)}|${F.stationSetHash}`, topic: "region", path: "stat", phenomenon: "지역 간 기온차", kind: "관측", basisId, U: Math.max(0, 2 * sp.cmp.p - 1), A: 0.3, T: tv(F.time), material: { D: Math.round(sp.D) }, samples: sp.cmp.samples, minSamples: 60, exclude: why, title: `지금은 지역 간 기온 차가 평소보다 큰 시간이에요(${sp.D}℃)`, text: `${hhmm} 관측 가능한 ${F.N}개 지점 중 가장 따뜻한 ${sp.hi?.name} ${sp.hi?.temp}℃, 가장 쌀쌀한 ${sp.lo?.name} ${sp.lo?.temp}℃ — 차이 ${sp.D}℃. 같은 ${F.N}개 지점의 ${sp.cmp.range}년 같은 시기·같은 시각 평균 차이 ${sp.cmp.mean}℃, 백분위 ${sp.cmp.percentile}.`, method: "같은 지점 집합의 모든 지점 값이 있는 과거 날만 같은 정시 max−min 을 계산(표본 60개 이상, 유효 해 80%).", basis: `같은 실황 시각 ${hhmm} · 지점 집합 ${F.stationSetHash}`, facts: { D: sp.D, mean: sp.cmp.mean, percentile: sp.cmp.percentile, N: F.N }, chart });
   const tg = F.together;

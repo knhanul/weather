@@ -20,7 +20,8 @@ function world(seed = 7) {
   const hs = createHourlyStore("1", 2026); addHourlyRows(hs, rows);
   return { hs, store: buildDailyStore("1", daily) };
 }
-const J = (x) => JSON.stringify(x);
+// sd·z(평소 변동폭, 지역 '드문 순' 끝 구간 가름용)는 4단계 뒤에 더한 필드라 같음 비교에서만 뺌
+const J = (x) => JSON.stringify(x, (k, v) => (k === "sd" || k === "z" ? undefined : v));
 test("분포 분리: hourly/daily/derived 가 4단계 결과와 바이트 단위로 같음(JSON 왕복 포함)", () => {
   const { hs, store } = world();
   let n = 0, ranked = 0;

@@ -74,7 +74,7 @@ export const SEASON_EVENTS = {
 };
 
 // 지역 비교(1-2·13장)
-export const REGION_RULES = { minStationsStory: 6, deviationDigits: 3, topMinU: 0.9, spreadP: 0.9, togetherDelta: 3, togetherShare: 0.5 };
+export const REGION_RULES = { minStationsStory: 6, deviationDigits: 3, topMinU: 0.9, extremeU: 0.94, spreadP: 0.9, togetherDelta: 3, togetherShare: 0.5 };
 
 // 예보 문구(1-4·6장) — 화면(public/rt-forecast-visual.js·rt-home.js)도 같은 값을 쓴다(값을 바꾸면 그쪽 RULES 도 같이)
 export const FORECAST_RULES = { popHigh: 60, drop3h: 4, dayJump: 5, releaseJump: 3, fullHours: 72 };

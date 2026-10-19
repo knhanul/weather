@@ -226,7 +226,8 @@
     const ds = rows.map((r) => r.diff).filter(fin), m = Math.max(3, ...ds.map((v) => Math.abs(v))) + 0.6;
     const L = 46, R = 70, T = 16, rh = 20, H = T + rows.length * rh + 18;
     const x = (v) => L + ((v + m) / (2 * m)) * (width - L - R);
-    const label = `같은 시각 ${String(c.time || "").slice(11, 16)} 지점별 같은 시기 평균과의 차이: ${rows.map((r) => `${r.name} ${fin(r.diff) ? `${r.diff > 0 ? "+" : ""}${r.diff}℃` : "비교 데이터 부족"}`).join(", ")}.`;
+    const un = c.order === "unusual"; // 드문 순(백분위, 끝 구간은 평소 변동폭 대비) — 오른쪽 = 차이·백분위
+    const label = `같은 시각 ${String(c.time || "").slice(11, 16)} 지점별 같은 시기 평균과의 차이${un ? "(평소에서 드문 순, 백분위 함께)" : ""}: ${rows.map((r) => `${r.name} ${fin(r.diff) ? `${r.diff > 0 ? "+" : ""}${r.diff}℃` : "비교 데이터 부족"}${un && fin(r.percentile) ? ` 백분위 ${r.percentile}` : ""}`).join(", ")}.`;
     const o = svgOpen(width, H, label);
     let s = o.s;
     for (const v of [-3, 3]) if (Math.abs(v) < m) s += `<line x1="${x(v)}" x2="${x(v)}" y1="${T - 4}" y2="${H - 16}" stroke="${C.grid}" stroke-dasharray="3 3"/><text x="${x(v)}" y="${H - 4}" font-size="9.5" text-anchor="middle" fill="${C.muted}">${v > 0 ? "+" : "−"}3</text>`;
@@ -237,10 +238,11 @@
       s += `<line x1="${L}" x2="${width - R}" y1="${yy}" y2="${yy}" stroke="${C.grid}"/><text x="${L - 6}" y="${yy + 4}" font-size="11" text-anchor="end" font-weight="${me ? 700 : 400}" fill="${C.obs}">${esc(r.name)}</text>`;
       if (fin(r.diff)) { const col = r.diff >= 3 ? C.warn : r.diff <= -3 ? "#2f5bd3" : C.obs; s += `<line x1="${x(0)}" x2="${x(r.diff)}" y1="${yy}" y2="${yy}" stroke="${col}" stroke-width="2" opacity=".5"/><circle cx="${x(r.diff)}" cy="${yy}" r="${me ? 6 : 5}" fill="${col}"/>`; }
       else s += `<rect x="${x(0) - 14}" y="${yy - 5}" width="28" height="10" rx="2" fill="url(#${o.id}h)"/>`;
-      s += `<text x="${width - R + 6}" y="${yy + 4}" font-size="10.5" fill="${C.obs}" font-weight="${me ? 700 : 400}">${fin(r.diff) ? `${r.diff > 0 ? "+" : r.diff < 0 ? "−" : "±"}${Math.abs(r.diff)}` : "–"}</text><text x="${width - 4}" y="${yy + 4}" font-size="9.5" text-anchor="end" fill="${C.muted}">${f1(r.temp)}℃</text>`;
+      s += `<text x="${width - R + 6}" y="${yy + 4}" font-size="10.5" fill="${C.obs}" font-weight="${me ? 700 : 400}">${fin(r.diff) ? `${r.diff > 0 ? "+" : r.diff < 0 ? "−" : "±"}${Math.abs(r.diff)}` : "–"}</text><text x="${width - 4}" y="${yy + 4}" font-size="9.5" text-anchor="end" fill="${C.muted}">${un ? (fin(r.percentile) ? r.percentile : "–") : `${f1(r.temp)}℃`}</text>`;
     });
+    if (un) s += `<text x="${width - 4}" y="${T - 8}" font-size="9" text-anchor="end" fill="${C.muted}">차이 · 백분위</text>`;
     s += `</svg>`;
-    return fig(s, `<span class="vz-key">점 = 지금 차이(℃), 0 = 같은 시기·시각 평균</span><span class="vz-key">오른쪽 = 차이 · 실황</span><span class="vz-key">${String(c.time || "").slice(11, 16)} 같은 시각 ${rows.length}개 지점 · 실황은 격자, 과거는 ASOS(참고 비교)</span>`, "vz-reg");
+    return fig(s, `<span class="vz-key">점 = 지금 차이(℃), 0 = 같은 시기·시각 평균</span>${un ? `<span class="vz-key">위에서부터 평소에서 드문 순 · 오른쪽 = 차이 · 백분위</span>` : `<span class="vz-key">오른쪽 = 차이 · 실황</span>`}<span class="vz-key">${String(c.time || "").slice(11, 16)} 같은 시각 ${rows.length}개 지점 · 실황은 격자, 과거는 ASOS(참고 비교)</span>`, "vz-reg");
   }
   // ---------------------------------------------------------------- 13) 이번 주 막대(7일): 관측 = 채움, 예보 = 점선 테, 회색 = 같은 시기 평균 최저~최고
   function week(c, { width = 340 } = {}) {

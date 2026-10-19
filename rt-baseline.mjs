@@ -151,6 +151,13 @@ export function evaluateValue(ref, value) {
     out.outside = value > out.p90 ? round(value - out.p90, digits) : value < out.p10 ? round(value - out.p10, digits) : 0;
     out.newHigh = value > ref.max[0];
     out.newLow = value < ref.min[0];
+    // 평소 변동폭: 도수표(같은 시기 표본)의 표준편차 · z = (지금 − 평균)/표준편차 — 백분위가 끝(97 이상·3 이하)에서 겹칠 때 '얼마나 드문가'를 가르는 데 씀
+    if (ref.vals?.length) {
+      let n = 0, s1 = 0, s2 = 0;
+      for (let i = 0; i < ref.vals.length; i++) { const v = ref.vals[i], c = ref.cnts[i]; n += c; s1 += v * c; s2 += v * v * c; }
+      const sd = n > 1 ? Math.sqrt(Math.max(0, (s2 - (s1 * s1) / n) / (n - 1))) : NaN;
+      if (Number.isFinite(sd) && sd > 0) { out.sd = round(sd, 2); out.z = round((value - mean) / sd, 2); }
+    }
   } else out.rankNote = "표본 부족 — 순위·백분위 표시 안 함";
   return out;
 }

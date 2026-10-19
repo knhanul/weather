@@ -45,6 +45,22 @@ export function commonTime(rows) {
   for (const [t, n] of cnt) if (!best || n > best.n || (n === best.n && t > best.t)) best = { t, n };
   return best?.t ?? null;
 }
+// '평소에서 얼마나 드문가' 한 가지 잣대(지역 순위·'평소와 가장 다른 곳'·지역 그래프 순서가 모두 이것을 씀)
+//   U2 = |백분위−50|/50. 둘 다 백분위 끝(U2 ≥ extremeU, 백분위 97 이상·3 이하)이면 백분위는 표본 몇 개 차이라 겹치므로
+//   평소 변동폭 대비 차이 |z| = |지금−평균|/표준편차 로 가른다. 점수: 끝 구간 = 2 + |z|/10(항상 위), 그 밖 = U2.
+export function unusualScore(pct, z, R = REGION_RULES) {
+  if (pct == null || !Number.isFinite(pct)) return null;
+  const U2 = Math.abs(pct - 50) / 50;
+  const byZ = U2 >= R.extremeU && Number.isFinite(z);
+  return { U2: Math.round(U2 * 1000) / 1000, byZ, score: byZ ? 2 + Math.min(Math.abs(z), 9.99) / 10 : U2 };
+}
+// rows(regions 행) → 드문 순 [{ id, name, temp, diff, percentile, samples, z, sd, U2, byZ, score }] (같은 점수면 |차이| 큰 쪽)
+export function unusualOrder(rows, b = "all", R = REGION_RULES) {
+  return rows.filter((r) => r.pcts?.[b] != null).map((r) => {
+    const z = r.zs?.[b] ?? null, u = unusualScore(r.pcts[b], z, R);
+    return { id: r.id, name: r.name, temp: r.temp, diff: r.diffs?.[b] ?? null, percentile: r.pcts[b], samples: r.samples?.[b] ?? null, z, sd: r.sds?.[b] ?? null, ...u };
+  }).sort((a, c) => c.score - a.score || Math.abs(c.diff ?? 0) - Math.abs(a.diff ?? 0));
+}
 // rows: [{ id, name, time, temp, diffs{all,r10,r5}, pcts{all,r10,r5}, samples{...} }]
 export function rankRegions(rows, basisIds = ["all", "r10", "r5"]) {
   const t0 = commonTime(rows.filter((r) => r.temp != null));
@@ -55,8 +71,8 @@ export function rankRegions(rows, basisIds = ["all", "r10", "r5"]) {
     const withDiff = same.filter((r) => r.diffs?.[b] != null);
     const aboveAvg = competitionRank(withDiff, (r) => r.diffs[b], 1).map(({ r, rank }) => ({ rank, of: withDiff.length, id: r.id, name: r.name, diff: r.diffs[b], percentile: r.pcts?.[b] ?? null }));
     const withPct = same.filter((r) => r.pcts?.[b] != null);
-    const dev = (r) => Math.abs(r.pcts[b] - 50) / 50;
-    const deviation = competitionRank(withPct, dev, REGION_RULES.deviationDigits).map(({ r, rank }) => ({ rank, of: withPct.length, id: r.id, name: r.name, deviation: Math.round(dev(r) * 1000) / 1000, direction: r.pcts[b] > 50 ? "high" : r.pcts[b] < 50 ? "low" : "mid", directionText: r.pcts[b] > 50 ? "평소보다 높은 쪽" : r.pcts[b] < 50 ? "평소보다 낮은 쪽" : "평소 가운데", diff: r.diffs?.[b] ?? null, percentile: r.pcts[b], samples: r.samples?.[b] ?? null }));
+    const U = new Map(unusualOrder(withPct, b).map((u) => [u.id, u]));
+    const deviation = competitionRank(withPct, (r) => U.get(r.id).score, REGION_RULES.deviationDigits).map(({ r, rank }) => ({ rank, of: withPct.length, id: r.id, name: r.name, deviation: U.get(r.id).U2, byZ: U.get(r.id).byZ, z: U.get(r.id).z, direction: r.pcts[b] > 50 ? "high" : r.pcts[b] < 50 ? "low" : "mid", directionText: r.pcts[b] > 50 ? "평소보다 높은 쪽" : r.pcts[b] < 50 ? "평소보다 낮은 쪽" : "평소 가운데", diff: r.diffs?.[b] ?? null, percentile: r.pcts[b], samples: r.samples?.[b] ?? null }));
     rankings[b] = { aboveAvg, deviation, comparable: { aboveAvg: withDiff.length, deviation: withPct.length } };
   }
   const excluded = rows.filter((r) => r.temp != null && r.time !== t0).map((r) => ({ id: r.id, name: r.name, time: r.time, reason: `실황 시각이 달라(${String(r.time).slice(11, 16)}) 같은 순위표에서 뺌` }));
