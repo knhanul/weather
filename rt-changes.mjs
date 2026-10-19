@@ -18,6 +18,9 @@ const CR = CHANGE_RULES;
 const fin = (v) => v != null && Number.isFinite(+v);
 const r1 = (v) => Math.round(v * 10) / 10;
 const hh = (t) => `${+t.slice(11, 13)}시`;
+// 변화량(Δ)은 절대값처럼 보이지 않게 부호 대신 말로: '7℃ 하강'·'30%p 상승'. 절대값(기온·최저 등)만 '8℃' 꼴로 쓴다
+export const deltaWord = (d, unit = "℃") => `${Math.abs(d)}${unit} ${d > 0 ? "상승" : "하강"}`;
+const arrow = (d) => (d > 0 ? "↑" : "↓");
 const dayWord = (d, today) => { const n = Math.round((Date.parse(`${d}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 864e5); return n === 0 ? "오늘" : n === 1 ? "내일" : n === 2 ? "모레" : `${+d.slice(5, 7)}/${+d.slice(8, 10)}`; };
 const plus = (t, h) => { const d = new Date(Date.parse(`${t.slice(0, 10)}T${t.slice(11, 16)}:00Z`) + h * 3600e3); return `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 16)}`; };
 // 3시간 간격 비교: 같은 묶음(이어진 시각들) 안에서 가장 큰 것 하나
@@ -42,11 +45,11 @@ export function bigChanges({ hours = [], days = [], today, nowW }) {
   const C = [];
   const src = (h) => h.items?.ta?.source || h.source;
   // 1) 3시간 기온
-  C.push(...threeHour(H, "ta", (d, a) => Math.abs(d) >= need(CR.rise3h.delta, d, a.time), ({ a, b, d }) => ({ kind: "ta3h", M: Math.min(1, Math.abs(d) / CR.rise3h.ref), delta: d, unit: "℃", startW: a.time.slice(0, 16), endW: b.time.slice(0, 16), title: `${dayWord(a.time.slice(0, 10), today)} ${hh(a.time)}→${hh(b.time)} 기온 ${d > 0 ? "상승" : "하강"} ${Math.abs(d)}℃`, sub: `${a.ta}℃ → ${b.ta}℃(3시간)`, source: src(b) })));
+  C.push(...threeHour(H, "ta", (d, a) => Math.abs(d) >= need(CR.rise3h.delta, d, a.time), ({ a, b, d }) => ({ kind: "ta3h", M: Math.min(1, Math.abs(d) / CR.rise3h.ref), delta: d, unit: "℃", startW: a.time.slice(0, 16), endW: b.time.slice(0, 16), title: `${dayWord(a.time.slice(0, 10), today)} ${hh(a.time)}→${hh(b.time)} 기온 ${deltaWord(d)}`, sub: `${a.ta}℃ → ${b.ta}℃(3시간)`, short: `기온 ${a.ta}→${b.ta}℃ (${Math.abs(d)}℃${arrow(d)})`, source: src(b) })));
   // 2) 풍속
-  C.push(...threeHour(H, "ws", (d, a, b) => d >= CR.wind.delta && b.ws >= CR.wind.min, ({ a, b, d }) => ({ kind: "wind", M: Math.min(1, d / CR.wind.ref), delta: d, unit: "m/s", startW: a.time.slice(0, 16), endW: b.time.slice(0, 16), title: `${dayWord(a.time.slice(0, 10), today)} ${hh(b.time)}쯤 바람 강해짐`, sub: `풍속 ${a.ws}→${b.ws}m/s(3시간, 평균 풍속 예보)`, source: b.items?.ws?.source || b.source })));
+  C.push(...threeHour(H, "ws", (d, a, b) => d >= CR.wind.delta && b.ws >= CR.wind.min, ({ a, b, d }) => ({ kind: "wind", M: Math.min(1, d / CR.wind.ref), delta: d, unit: "m/s", startW: a.time.slice(0, 16), endW: b.time.slice(0, 16), title: `${dayWord(a.time.slice(0, 10), today)} ${hh(b.time)}쯤 바람 강해짐`, sub: `풍속 ${a.ws}→${b.ws}m/s(3시간, 평균 풍속 예보)`, short: `풍속 ${a.ws}→${b.ws}m/s`, source: b.items?.ws?.source || b.source })));
   // 3) 습도
-  C.push(...threeHour(H, "hm", (d, a) => Math.abs(d) >= need(CR.rh.delta, d, a.time, -1), ({ a, b, d }) => ({ kind: "rh", M: Math.min(1, Math.abs(d) / CR.rh.ref), delta: d, unit: "%p", startW: a.time.slice(0, 16), endW: b.time.slice(0, 16), title: `${dayWord(a.time.slice(0, 10), today)} ${hh(a.time)}→${hh(b.time)} 습도 ${Math.abs(d)}%p ${d > 0 ? "상승" : "하강"}`, sub: `${a.hm}% → ${b.hm}%(3시간)`, source: b.items?.hm?.source || b.source })));
+  C.push(...threeHour(H, "hm", (d, a) => Math.abs(d) >= need(CR.rh.delta, d, a.time, -1), ({ a, b, d }) => ({ kind: "rh", M: Math.min(1, Math.abs(d) / CR.rh.ref), delta: d, unit: "%p", startW: a.time.slice(0, 16), endW: b.time.slice(0, 16), title: `${dayWord(a.time.slice(0, 10), today)} ${hh(a.time)}→${hh(b.time)} 습도 ${deltaWord(d, "%p")}`, sub: `${a.hm}% → ${b.hm}%(3시간)`, short: `습도 ${a.hm}→${b.hm}% (${Math.abs(d)}%p${arrow(d)})`, source: b.items?.hm?.source || b.source })));
   // 4) 강수형태: 각 형태가 2시간 이상 이어진 두 묶음이 바로 붙어 있을 때(빈 시각에서 끊음)
   const runs = [];
   for (const h of H) {
@@ -67,10 +70,10 @@ export function bigChanges({ hours = [], days = [], today, nowW }) {
   const D = days.filter((d) => d.date >= today).slice(0, 4);
   for (let i = 1; i < D.length; i++) {
     const a = D[i - 1], b = D[i];
-    if (fin(a.min) && fin(b.min) && Math.abs(b.min - a.min) >= CR.tmn.delta) { const d = r1(b.min - a.min); C.push({ kind: "tmn", M: Math.min(1, Math.abs(d) / CR.tmn.ref), delta: d, unit: "℃", startW: `${b.date} 03:00`, endW: `${b.date} 08:00`, title: `${dayWord(b.date, today)} 아침 최저 ${d > 0 ? "+" : "−"}${Math.abs(d)}℃`, sub: `${dayWord(a.date, today)} ${a.min}℃ → ${dayWord(b.date, today)} ${b.min}℃`, source: b.minSource }); }
+    if (fin(a.min) && fin(b.min) && Math.abs(b.min - a.min) >= CR.tmn.delta) { const d = r1(b.min - a.min); C.push({ kind: "tmn", M: Math.min(1, Math.abs(d) / CR.tmn.ref), delta: d, unit: "℃", startW: `${b.date} 03:00`, endW: `${b.date} 08:00`, title: `${dayWord(b.date, today)} 아침 최저 ${b.min}℃, ${deltaWord(d)}`, sub: `${dayWord(a.date, today)} 최저 ${a.min}℃ → ${dayWord(b.date, today)} ${b.min}℃`, short: `최저 ${a.min}→${b.min}℃ (${Math.abs(d)}℃${arrow(d)})`, source: b.minSource }); }
     if (i === 1 && fin(a.max) && fin(a.min) && fin(b.max) && fin(b.min)) {
       const da = r1(a.max - a.min), db = r1(b.max - b.min);
-      if (db >= CR.range.min && db - da >= CR.range.up) C.push({ kind: "range", M: Math.min(1, (db - da) / CR.range.ref), delta: r1(db - da), unit: "℃", startW: `${b.date} 05:00`, endW: `${b.date} 16:00`, title: `${dayWord(b.date, today)} 일교차 ${db}℃(전날보다 ${r1(db - da)}℃ 큼)`, sub: `최저 ${b.min}℃ · 최고 ${b.max}℃`, source: b.maxSource });
+      if (db >= CR.range.min && db - da >= CR.range.up) C.push({ kind: "range", M: Math.min(1, (db - da) / CR.range.ref), delta: r1(db - da), unit: "℃", startW: `${b.date} 05:00`, endW: `${b.date} 16:00`, title: `${dayWord(b.date, today)} 일교차 ${db}℃(전날보다 ${r1(db - da)}℃ 큼)`, sub: `최저 ${b.min}℃ · 최고 ${b.max}℃`, short: `일교차 ${da}→${db}℃`, source: b.maxSource });
     }
   }
   // 7) 주말: 토·일 중 하루만 활동 조건 2시간 이상 연속

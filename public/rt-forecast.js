@@ -9,7 +9,7 @@
   const hm = (w) => (w ? `${+w.slice(5, 7)}/${+w.slice(8, 10)} ${w.slice(11, 16)}` : "");
   const COLORS = { all: "#8a4b00", r10: "#0e7a3e", r5: "#c0262d", fc: "#026ef8" };
   const state = { station: null, data: null, stations: [], show: { all: true, r10: true, r5: true }, bcSel: null };
-  const hlOf = () => { const it = state.bcSel != null ? state.data?.bigChanges?.items?.[state.bcSel] : null; return it ? { startW: it.startW, endW: it.endW, label: it.title.length > 18 ? `${it.title.slice(0, 18)}…` : it.title } : null; };
+  const hlOf = () => { const it = state.bcSel != null ? state.data?.bigChanges?.items?.[state.bcSel] : null; return it ? { startW: it.startW, endW: it.endW, label: it.short || (it.title.length > 18 ? `${it.title.slice(0, 18)}…` : it.title) } : null; };
   // 강조 구간이 보이게 가로 스크롤·카드 위치 맞춤
   function focusHl() {
     const host = $("fcChartHost"), sc = host?.querySelector(".rt-hscroll"), r = host?.querySelector(".fv-hl");

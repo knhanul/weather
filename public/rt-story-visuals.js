@@ -112,7 +112,7 @@
     const path = (kind) => { let d = "", pen = false, pt = null; for (const p of ps) { if (p.kind !== kind || !fin(p.ta)) { pen = false; pt = null; continue; } const gap = pt && ms(p.time) - ms(pt) > 36e5; d += `${pen && !gap ? "L" : "M"}${x(p.time).toFixed(1)},${y(p.ta).toFixed(1)}`; pen = true; pt = p.time; } return d; };
     let label;
     if (c.type === "night") { const lowP = ps.filter((p) => fin(p.ta)).reduce((a, b) => (b.ta < a.ta ? b : a)); label = `${hh(ps[0].time)}시~다음 날 ${hh(ps.at(-1).time)}시 기온, 가장 낮은 ${hh(lowP.time)}시 ${lowP.ta}℃ — ${c.threshold}℃ 선 위(추정).`; }
-    else { const a = ps.find((p) => p.time === c.hl?.[0]), b = ps.find((p) => p.time === c.hl?.[1]); label = a && b ? `${hh(a.time)}시 ${a.ta}℃에서 ${hh(b.time)}시 ${b.ta}℃로 3시간 ${c.d > 0 ? "+" : ""}${c.d}℃${fin(c.usual) ? `(같은 시각 평소 변화 평균 ${c.usual > 0 ? "+" : ""}${c.usual}℃)` : ""}.` : "시간별 기온"; }
+    else { const a = ps.find((p) => p.time === c.hl?.[0]), b = ps.find((p) => p.time === c.hl?.[1]); label = a && b ? `${hh(a.time)}시 ${a.ta}℃에서 ${hh(b.time)}시 ${b.ta}℃로 3시간에 ${Math.abs(c.d)}℃ ${c.d > 0 ? "상승" : "하강"}${fin(c.usual) ? `(같은 시각 평소 변화 평균 ${c.usual > 0 ? "+" : ""}${c.usual}℃)` : ""}.` : "시간별 기온"; }
     const o = svgOpen(width, H, label);
     let s = o.s;
     const step = hi - lo > 10 ? 4 : 2;

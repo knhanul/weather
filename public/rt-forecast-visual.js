@@ -74,12 +74,12 @@
     let best = null;
       const byT = new Map(hs.map((x) => [x.time, x])), plus3 = (t) => { const d0 = new Date(`${t.replace(" ", "T")}+09:00`); d0.setTime(d0.getTime() + 3 * 36e5); const k = new Date(d0.getTime() + 9 * 36e5).toISOString(); return `${k.slice(0, 10)} ${k.slice(11, 13)}:00:00`; };
       for (let i = 0; i < hs.length; i++) { const nx = byT.get(plus3(hs[i].time)); if (!nx) continue; const a = hs[i].ta, b = nx.ta; if (a != null && b != null && a - b >= R.drop3h && (!best || a - b > best.dv)) best = { dv: Math.round((a - b) * 10) / 10, a: hs[i], b: nx }; }
-      if (best) out.push({ ico: "drop", t: `${dayWord(best.a.time.slice(0, 10), d.date)} ${hh(best.a.time)}시→${hh(best.b.time)}시 기온 ${best.a.ta}℃ → ${best.b.ta}℃ (${sg(-best.dv)})`, sub: "3시간 사이 가장 큰 하강", src: `${best.b.source} ${hm(best.b.base)} 발표` });
+      if (best) out.push({ ico: "drop", t: `${dayWord(best.a.time.slice(0, 10), d.date)} ${hh(best.a.time)}시→${hh(best.b.time)}시 기온 ${best.a.ta}℃ → ${best.b.ta}℃ (${Math.abs(best.dv)}℃ 하강)`, sub: "3시간 사이 가장 큰 하강", src: `${best.b.source} ${hm(best.b.base)} 발표` });
     }
     const ds = (d.days || []).filter((x) => !x.none && x.max != null);
     let jump = null;
     for (let i = 1; i < ds.length; i++) { if (Math.round((Date.parse(ds[i].date) - Date.parse(ds[i - 1].date)) / 864e5) !== 1) continue; const dv = Math.round((ds[i].max - ds[i - 1].max) * 10) / 10; if (Math.abs(dv) >= R.dayJump && (!jump || Math.abs(dv) > Math.abs(jump.dv))) jump = { dv, a: ds[i - 1], b: ds[i] }; }
-    if (jump) out.push({ ico: jump.dv < 0 ? "drop" : "rise", t: `${dayWord(jump.b.date, d.date)} 최고기온 ${jump.b.max}℃ — 전날(${jump.a.max}℃)보다 ${sg(jump.dv)}`, sub: `이웃한 두 날 최고기온 차이가 가장 큰 날${jump.a.maxSource !== jump.b.maxSource ? ` (전날은 ${jump.a.maxSource}, 이날은 ${jump.b.maxSource} 값)` : ""}`, src: `${jump.b.maxSource} ${hm(jump.b.maxBase)} 발표` });
+    if (jump) out.push({ ico: jump.dv < 0 ? "drop" : "rise", t: `${dayWord(jump.b.date, d.date)} 최고기온 ${jump.b.max}℃ — 전날(${jump.a.max}℃)보다 ${Math.abs(jump.dv)}℃ ${jump.dv < 0 ? "낮아요" : "높아요"}`, sub: `이웃한 두 날 최고기온 차이가 가장 큰 날${jump.a.maxSource !== jump.b.maxSource ? ` (전날은 ${jump.a.maxSource}, 이날은 ${jump.b.maxSource} 값)` : ""}`, src: `${jump.b.maxSource} ${hm(jump.b.maxBase)} 발표` });
     return out;
   }
   // 4단계 '가장 큰 변화'(6장): 서버 bigChanges(크기 M 큰 순 3개 → 시간순) 를 시간선으로. 누르면 72시간 그래프에서 그 구간 강조
@@ -192,7 +192,7 @@
       const bar = x.max != null && x.min != null ? `<i class="fv-rng" style="left:${P(x.min).toFixed(1)}%;width:${Math.max(1.5, P(x.max) - P(x.min)).toFixed(1)}%"></i>` : x.max != null || x.min != null ? `<i class="fv-dot" style="left:${P(x.max ?? x.min).toFixed(1)}%"></i>` : "";
       const dm = x.maxCmp?.[pi]?.diff;
       return `<li${x.offset === 0 ? ' class="today"' : ""}><span class="fv-d"><b>${x.offset === 0 ? "오늘" : x.offset === 1 ? "내일" : `${+x.date.slice(8, 10)}일`}</b><small>${dow(x.date)}</small></span><span class="fv-i">${x.none ? "–" : iconSvg(k, false, 28, x.wf || x.sky || "")}</span><span class="fv-p">${x.pop == null ? "" : `<small class="${x.pop >= 60 ? "wet" : ""}">☂${x.pop}%</small>`}</span>
-        <span class="fv-v lo">${x.none ? "" : x.min ?? "–"}°</span><span class="fv-track">${base}${bar}</span><span class="fv-v hi">${x.none ? "" : x.max ?? "–"}°${dm != null && Math.abs(dm) >= 1 ? `<em class="${cls(dm)}">${sg(dm)}</em>` : ""}</span>${x.none ? `<span class="fv-none rt-ins">예보 없음</span>` : ""}<small class="fv-src">${esc((x.maxSource || x.minSource || x.wxSource || "").replace("예보", ""))}</small></li>`;
+        <span class="fv-v lo">${x.none ? "" : x.min ?? "–"}°</span><span class="fv-track">${base}${bar}</span><span class="fv-v hi">${x.none ? "" : x.max ?? "–"}°${dm != null && Math.abs(dm) >= 1 ? `<em class="${cls(dm)}" title="최고기온 평균 대비 ${sg(dm)}" aria-label="최고기온 평균 대비 ${sg(dm)}">${sg(dm)}</em>` : ""}</span>${x.none ? `<span class="fv-none rt-ins">예보 없음</span>` : ""}<small class="fv-src">${esc((x.maxSource || x.minSource || x.wxSource || "").replace("예보", ""))}</small></li>`;
     }).join("");
     return `<section class="card fv-pills" aria-label="10일 예보"><h2>${ds.length}일 예보 <span class="rt-badge fc">예보</span></h2><div class="rt-legend"><span><i class="fv-key rng"></i> 예보 최저~최고</span><span><i class="fv-key base"></i> ${esc(per ? `${per.label.replace(" 평균", "")}(${per.range}) 평균` : "기준 평균")} 같은 시기 최저~최고</span></div><ul>${rows}</ul>${window.InfoTip.note(`단기 → 중기(발표 ${esc(hm(d.releases?.midTa) || "없음")})`, `최고기온 옆 숫자 = 기준 평균 최고기온과의 차이(1℃ 이상만). 단기 = 단기예보(대략 3일), 중기 = 중기예보(발표 ${esc(hm(d.releases?.midTa) || "없음")}). 강수확률은 하루 중 가장 큰 값.`, { cls: "rt-note", label: "보는 법" })}</section>`;
   }

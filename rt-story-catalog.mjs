@@ -132,9 +132,9 @@ export const TPL = {
     { id: "c", title: "더운 밤 예상 — 잠자리 더위 대비", text: "밤사이(19~9시) 최저 {low}℃ 예상. 기상청 공식 열대야 판정이 아니라 시간별 값으로 본 추정이에요.{rareText}" },
   ],
   T03: [
-    { id: "a", title: "{whenWord} 기온이 빠르게 {dirWord}요", text: "{fromHour}시 {from}℃ → {toHour}시 {to}℃, 3시간에 {sd}℃({kindText}). 같은 시기 같은 시각 3시간 변화 {N}개 중 {sideText} {sidePct}%.{rangeNote}" },
+    { id: "a", title: "{whenWord} 기온이 빠르게 {dirWord}요", text: "{fromHour}시 {from}℃ → {toHour}시 {to}℃, 3시간에 {abs}℃ {dirWord}요({kindText}). 같은 시기 같은 시각 3시간 변화 {N}개 중 {sideText} {sidePct}%.{rangeNote}" },
     { id: "b", title: "{whenWord} 3시간 사이 {abs}℃ {dirShort}", text: "{fromHour}~{toHour}시 {from}→{to}℃({kindText}). 이맘때 같은 시각 3시간 변화 평균 {mean}℃.{rangeNote}" },
-    { id: "c", title: "{whenWord} 기온 변화 주의 — {dirAdvice}", text: "{fromHour}시부터 3시간 동안 {sd}℃({from}→{to}℃, {kindText}). 표본 {N}개 중 {sideText} {sidePct}%.{rangeNote}" },
+    { id: "c", title: "{whenWord} 기온 변화 주의 — {dirAdvice}", text: "{fromHour}시부터 3시간 동안 {abs}℃ {dirShort}({from}→{to}℃, {kindText}). 표본 {N}개 중 {sideText} {sidePct}%.{rangeNote}" },
   ],
   L01: [
     { id: "a", title: "{whenWord} {legWord}에 비 예보 — 우산 챙기세요", when: (f) => f.state === "pty", text: "{legWord}({span}) 강수형태 {ptyList} 예보 시간: {hoursText}.{popText} {source} {base} 발표." },
