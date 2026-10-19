@@ -4,7 +4,7 @@
   "short_name": "이날",
   "description": "이야기가 있는 날씨 — 1990년부터의 기상청 공식 ASOS 관측으로 보는 우리 동네 날씨 통계·시간별/일별 날씨",
   "lang": "ko",
-  "start_url": "/#/stats/overview",
+  "start_url": "/#/today",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
