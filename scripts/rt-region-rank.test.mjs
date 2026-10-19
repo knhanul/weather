@@ -8,7 +8,7 @@ import { evaluateValue } from "../rt-baseline.mjs";
 const T = "2026-10-19 09:00:00";
 const mk = (id, name, temp, diff, pct, z, n = 540) => ({ id, name, time: T, temp, diffs: { all: diff }, pcts: { all: pct }, samples: { all: n }, zs: { all: z }, sds: { all: z ? Math.abs(diff / z) : null } });
 // 운영 DB 값(1990~2025, ±7일, 09시 표본 540개) — z 는 배포 뒤 같은 표본 표준편차로 계산한 값
-const LIVE = [mk("108", "서울", 12.5, -0.5, 37.7, -0.17), mk("112", "인천", 12.7, -1, 33.3, -0.33, 538), mk("119", "수원", 14.1, 1, 60, 0.33), mk("133", "대전", 14.9, 2.5, 79.4, 0.83), mk("143", "대구", 19.7, 5.8, 97.9, 2.09), mk("156", "광주", 17.8, 3.6, 90.6, 1.27), mk("159", "부산", 22.5, 5.2, 98.1, 1.8), mk("184", "제주", 20.9, 2.3, 86.3, 1.0)];
+const LIVE = [mk("108", "서울", 12.5, -0.5, 37.7, -0.18), mk("112", "인천", 12.7, -1, 33.3, -0.34, 538), mk("119", "수원", 14.1, 1, 60, 0.3), mk("133", "대전", 14.9, 2.5, 79.4, 0.79), mk("143", "대구", 19.7, 5.8, 97.9, 2.03), mk("156", "광주", 17.8, 3.6, 90.6, 1.22), mk("159", "부산", 22.5, 5.2, 98.1, 1.81), mk("184", "제주", 20.9, 2.3, 86.3, 1.0)];
 const ctx = { sid: "108", nm: "서울", tv: () => 1, LIFE_VALUE: { info: 0.5 }, basisId: "all" };
 const top = (rows) => regionCands(regionFacts({ rows, time: T, basis: "all" }), ctx).find((c) => c.ruleId === "G01");
 
@@ -18,6 +18,8 @@ test("백분위 끝(97 이상)끼리는 평소 변동폭 대비(|z|)로 가름 �
   assert.match(c.title, /대구\(\+5\.8℃\)/);
   assert.match(c.text, /대구가 같은 시기 평소 분포에서 가장 드문 쪽/);
   assert.match(c.text, /부산이 백분위 98\.1로 거의 같아/);
+  assert.match(c.text, /대구 2\.0배, 부산 1\.8배/);
+  assert.deepEqual(c.chart.rows.map((r) => r.name), ["대구", "부산", "광주", "제주", "대전", "인천", "서울", "수원"]);
   assert.doesNotMatch(c.text, /가장 멀어요/);
 });
 
