@@ -329,6 +329,8 @@ export function createRtApi({ rt: rtSrc, statsHourly, statsData, stations, json,
     });
     const obsDays = week.filter((w) => w.source === "관측").length, fcDays = week.filter((w) => w.source && w.source !== "관측").length;
     out.week = { from: weekStart, to: addDays(weekStart, 6), days: week, anomaly: anom, obsDays, fcDays, note: `관측 ${obsDays}일 + 예보 ${fcDays}일. 최고·최저기온 각각의 (값 − 같은 시기 평균)을 평균한 것` };
+    // 예전 화면(브라우저에 남은 옛 rt-forecast.js)이 d.changes.length 를 읽음 — 발표 흐름은 뺐지만 빈 배열은 남겨 둔다
+    out.changes = [];
     out.bigChanges = bigChanges({ hours, days, today: k.ymd, nowW: k.text });
     out.outlook = await midOutlook(rt, g, k, nowMs).catch(() => ({ text: null, note: "중기전망을 불러오지 못함" }));
     return out;

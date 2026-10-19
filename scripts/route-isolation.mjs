@@ -176,6 +176,50 @@ for (const v of VIEWS) {
     await c2.close();
   }
   if (errs.length) fails.push(`${v} 스크립트 오류: ${[...new Set(errs)].slice(0, 5).join(" | ")}`);
+  // 6) 모든 주요 화면 × 지점(저장한 지점): 빨간 오류 상자(스크립트 오류 문구)·섹션 '그리지 못함'·페이지 오류가 없어야 함
+  //    (2026-10-19 내일 날씨 광주: "Cannot read properties of undefined (reading 'length')" 로 화면 전체가 비었던 회귀)
+  const ALL_ST = await fetch(`${BASE}/api/stations`).then((r) => r.json()).then((r) => (Array.isArray(r) ? r : r.data || []).filter((x) => x.enabled !== false).map((x) => String(x.station_id))).catch(() => ["108", "156", "159"]);
+  const SCREENS = [["/today", "#today", true], ["/forecast", "#forecast", true], ["/stats/overview", "#dash", false], ["/stats/yearly", "#dash", false], ["/stats/region", "#dash", false], ["/stats/life", "#dash", false], ["/stats/records", "#dash", false], ["/stories/day", "#sday", false], ["/stories/battle", "#sbattle", false], ["/questions", "#dash", false], ["/hourly-weather", "#hourly", false], ["/daily-weather", "#daily", false], ["/my", "#mysettings", false]];
+  const JS_ERR = /Cannot read|undefined|is not a function|is not defined|TypeError|ReferenceError|SyntaxError|\[object Object\]|NaN/;
+  for (const [path, sel, every] of SCREENS) for (const sid of every ? ALL_ST : ALL_ST.filter((x) => ["108", "156", "159"].includes(x))) {
+    const c3 = await browser.newContext({ viewport: { width: w, height: h }, isMobile: mob, hasTouch: mob, locale: "ko-KR", timezoneId: "Asia/Seoul" });
+    await c3.addInitScript((id) => localStorage.setItem("nw.station", JSON.stringify({ id, why: "manual", at: Date.now() })), sid);
+    const p3 = await c3.newPage();
+    const bad = [];
+    p3.on("pageerror", (e) => bad.push(`페이지 오류 ${e.message}`));
+    await p3.goto(`${BASE}/#${path}`, { waitUntil: "load" }).catch(() => {});
+    await p3.waitForFunction((q) => { const el = document.querySelector(q); return el && !/불러오는 중|준비 중/.test(el.innerText); }, sel, { timeout: 15000 }).catch(() => {});
+    await p3.waitForTimeout(800);
+    const r = await p3.evaluate((q) => ({ red: [...document.querySelectorAll(`${q} .result.bad, ${q} .bad.card`)].map((e) => e.innerText.trim()).filter(Boolean), sec: [...document.querySelectorAll(`${q} [data-sec-err]`)].map((e) => e.dataset.secErr), errs: (window.NWSectionErrors || []).map((x) => `${x.name}: ${x.message}`) }), sel);
+    checks++;
+    for (const t of r.red) if (JS_ERR.test(t)) bad.push(`빨간 오류 상자 "${t.slice(0, 90)}"`);
+    if (r.sec.length) bad.push(`그리지 못한 섹션 [${r.sec}] ${r.errs.slice(0, 2).join(" | ")}`);
+    if (bad.length) fails.push(`${v} 화면 ${path} 지점 ${sid}: ${[...new Set(bad)].join("; ")}`);
+    await c3.close();
+  }
+  // 7) 내일 날씨가 자료 일부가 빠진 응답(옛 서버·새 서버 엇갈림)에도 화면 전체가 비지 않아야 함
+  {
+    const c4 = await browser.newContext({ viewport: { width: w, height: h }, isMobile: mob, hasTouch: mob, locale: "ko-KR", timezoneId: "Asia/Seoul" });
+    await c4.route(/\/api\/rt\/forecast\?/, async (route) => { const res = await route.fetch(); const j = await res.json(); for (const k of ["changes", "week", "bigChanges", "outlook", "revisions"]) delete j[k]; j.days = (j.days || []).map((x, i) => (i === 2 ? { ...x, maxCmp: undefined } : x)); await route.fulfill({ response: res, json: j }); });
+    const p4 = await c4.newPage();
+    const pe = [];
+    p4.on("pageerror", (e) => pe.push(e.message));
+    await p4.goto(`${BASE}/#/forecast`, { waitUntil: "load" }).catch(() => {});
+    await p4.waitForSelector("#fcOut .fv-hero", { timeout: 15000 }).catch(() => {});
+    await p4.waitForTimeout(800);
+    const r = await p4.evaluate(() => ({ hero: !!document.querySelector("#fcOut .fv-hero"), cards: document.querySelectorAll("#fcOut > .card, #fcOut > section, #fcOut > details").length, red: [...document.querySelectorAll("#fcOut .result.bad")].map((e) => e.innerText) }));
+    checks++;
+    if (!r.hero || r.cards < 4 || r.red.some((t) => JS_ERR.test(t)) || pe.length) fails.push(`${v} 내일 날씨 빠진 자료: hero=${r.hero} 카드 ${r.cards}개 빨간 [${r.red.join(" / ").slice(0, 120)}] ${pe.slice(0, 2).join(" | ")}`);
+    await c4.close();
+  }
+}
+// 8) 캐시 무효화: index.html 의 스크립트·스타일 ?v= 는 내용 해시(고친 파일을 옛 숫자로 내보내 1년 캐시에 갇히지 않게)
+{
+  const html = await fetch(`${BASE}/`).then((r) => r.text());
+  const refs = [...html.matchAll(/(?:src|href)="(\/[\w\-./]+\.(?:js|css|mjs))\?v=([^"]*)"/g)];
+  checks++;
+  const notHash = refs.filter((m) => !/^[\w-]{10}$/.test(m[2])).map((m) => `${m[1]}?v=${m[2]}`);
+  if (!refs.length || notHash.length) fails.push(`캐시 무효화: 내용 해시가 아닌 ?v= ${notHash.slice(0, 5).join(", ") || "(참조 없음)"}`);
 }
 await browser.close();
 console.log(`ROUTE-ISOLATION ${BASE} views=${VIEWS} checks=${checks} fails=${fails.length}`);

@@ -71,7 +71,7 @@
       // 바람 띠(읽기 전용 추가 자료): 받으면 그래프만 다시
       const ws = state.station;
       fetch(`/api/rt/forecast-wind?station=${encodeURIComponent(ws)}`).then((r) => r.json()).then((w) => { if (my !== seq || ws !== state.station || !w.ok || !w.hours?.length) return; state.wind = w.hours; render(); }).catch(() => {});
-    } catch (e) { if (my === seq) $("fcOut").innerHTML = `<div class="card result bad">${esc(e.message)}</div>`; }
+    } catch (e) { if (my === seq) { console.error("[내일 날씨]", e); $("fcOut").innerHTML = `<div class="card result bad">예보를 ${state.data ? "그리지" : "불러오지"} 못했어요${e instanceof TypeError ? "" : ` — ${esc(e.message)}`}. 잠시 뒤 다시 열어 주세요.</div>`; } }
   }
   function render() {
     const d = state.data;
@@ -83,11 +83,19 @@
     if (d.message) h += `<div class="card result bad">${esc(d.message)}</div>`;
     if (stale.length) h += `<div class="card result bad">예보 발표가 늦어지고 있습니다(${stale.map((x) => `${esc(hm(x.base))} 발표 · ${esc(x.freshness.text)}`).join(" / ")}). 최신 예보가 아닐 수 있습니다.</div>`;
     const V = window.RTFV;
+    // 섹션마다 따로 그림: 한 섹션이 깨져도(자료 모양이 바뀌었거나 빠졌을 때) 나머지는 그대로, 그 자리에만 '그리지 못함'
+    const sec = (name, fn) => {
+      try { return fn() || ""; } catch (e) {
+        console.error(`[내일 날씨] ${name}`, e);
+        (window.NWSectionErrors ||= []).push({ screen: "forecast", name, message: String(e && e.message || e) });
+        return `<section class="card fv-err" data-sec-err="${esc(name)}"><h2>${esc(name)}</h2><p class="rt-ins">이 부분은 자료가 부족하거나 형식이 맞지 않아 보여 드리지 못했어요. 다른 항목은 그대로 볼 수 있어요.</p></section>`;
+      }
+    };
     let weekH = "";
     // 그림 중심: 히어로 → 가장 큰 변화 → 72시간 그래프 → 10일 알약 → 기상청 중기전망(접힘)
-    h += V.hero(d) + V.changeCard(d, state.bcSel) + chart72Card(d, ids) + V.pills(d, ids.length > 1 ? "all" : ids[0]) + (V.outlookFold ? V.outlookFold(d) : "");
+    h += sec("지금부터의 날씨", () => V.hero(d)) + sec("가장 큰 변화", () => V.changeCard(d, state.bcSel)) + sec("72시간 그래프", () => chart72Card(d, ids)) + sec("10일 예보", () => V.pills(d, ids.length > 1 ? "all" : ids[0])) + sec("기상청 중기전망", () => (V.outlookFold ? V.outlookFold(d) : ""));
     // 접힌 표: 이번 주 이맘때 평균 대비
-    if (d.week) {
+    if (d.week) weekH = sec("이번 주, 이맘때 평균 대비", () => {
       const w = d.week;
       const main = w.anomaly[0];
       const word = main.diff == null ? "비교 데이터 부족" : Math.abs(main.diff) < 1 ? "이맘때 평균과 비슷할 전망" : main.diff > 0 ? "이맘때 평균보다 더울 전망" : "이맘때 평균보다 추울 전망";
@@ -95,25 +103,25 @@
         <div class="rt-cmp">${w.anomaly.filter((a) => ids.includes(a.id)).map((a) => `<div class="rt-cmp-i"><span>${esc(a.label)}<small>${esc(a.range)}</small></span><b class="${cls(a.diff)}">${a.diff == null ? `<em class="rt-ins">비교 데이터 부족</em>` : sg(a.diff)}</b><i></i></div>`).join("")}</div>
         <div class="rt-week">${w.days.map((x) => `<div class="rt-wd ${x.date === d.date ? "today" : ""}"><b>${+x.date.slice(8, 10)}(${DOW[new Date(`${x.date}T00:00:00Z`).getUTCDay()]})</b><span>${x.max ?? "–"}</span><span>${x.min ?? "–"}</span><small class="src-${x.source === "관측" ? "obs" : "fc"}">${esc(x.source === "관측" ? "관측" : x.source ? (x.source.startsWith("중기") ? "중기" : "예보") : "없음")}</small></div>`).join("")}</div>
         ${window.InfoTip.note("같은 시기(±7일) 평균과 비교", `${esc(w.note)}. 각 날짜의 같은 시기(±7일) 공식 일자료 최고·최저기온 평균과 비교.`, { cls: "rt-note" })}</section></details>`;
-    }
+      return weekH;
+    });
     h += weekH;
     // 접힌 표: 주간 예보
-    h += `<details class="card rh-fold fv-fold"><summary>주간 예보 표와 과거 평균</summary><section><div class="tbl-wrap rt-desk"><table class="rt-tbl"><thead><tr><th>날짜</th><th>날씨</th><th>강수확률</th><th>예상 강수량</th><th>최고</th><th>최저</th><th>출처·발표</th></tr></thead><tbody>${d.days.map((x) => {
+    h += sec("주간 예보 표", () => `<details class="card rh-fold fv-fold"><summary>주간 예보 표와 과거 평균</summary><section><div class="tbl-wrap rt-desk"><table class="rt-tbl"><thead><tr><th>날짜</th><th>날씨</th><th>강수확률</th><th>예상 강수량</th><th>최고</th><th>최저</th><th>출처·발표</th></tr></thead><tbody>${d.days.map((x) => {
       if (x.none) return `<tr><th scope="row">${esc(dlab(x.date))}</th><td colspan="6" class="rt-ins">예보 없음</td></tr>`;
       const cell = (v, cmp) => `${v == null ? "–" : `<b>${v}℃</b>`}${ids.map((id) => { const c = cmp[pi(id)]; return `<br><small>${esc(c.label.replace(" 평균", ""))} ${c.mean == null ? "부족" : `${c.mean}℃${v == null ? "" : ` <span class="${cls(c.diff)}">${sg(c.diff)}</span>`}`}</small>`; }).join("")}`;
       const rain = x.rain ? (x.rain.rainHours ? `${x.rain.mm ? `${x.rain.mm}mm` : ""}${x.rain.rangeHours ? `${x.rain.mm ? " + " : ""}1mm 미만 ${x.rain.rangeHours}시간` : ""}` : "강수 없음") : "–";
       return `<tr${x.offset === 0 ? ' class="today"' : ""}><th scope="row">${esc(dlab(x.date))}${x.offset === 0 ? " 오늘" : ""}</th><td>${esc(x.wf || x.sky || "–")}</td><td>${x.pop == null ? "–" : `${x.pop}%`}</td><td>${esc(rain)}</td><td>${cell(x.max, x.maxCmp)}${x.nearRecord ? `<br><small class="up">같은 시기 과거 최고 ${x.nearRecord.record.value}℃(${esc(x.nearRecord.record.date)})에 근접 — 예상</small>` : ""}</td><td>${cell(x.min, x.minCmp)}</td><td><small>${esc(x.maxSource || x.minSource || x.wxSource || "")} ${esc(hm(x.maxBase || x.minBase || x.wxBase))}</small></td></tr>`;
-    }).join("")}</tbody></table></div>${mobileDays(d, ids, pi)}${window.InfoTip.note("단기예보 → 중기예보", "단기예보가 있는 날은 단기예보, 그 뒤(대략 4일 이후)는 중기예보. 강수확률은 하루 중 가장 큰 값이며 더하지 않습니다. 예상 강수량은 숫자로 나온 시간만 더하고 '1mm 미만'은 시간 수로 따로 적습니다.", { cls: "rt-note" })}</section></details>`;
+    }).join("")}</tbody></table></div>${mobileDays(d, ids, pi)}${window.InfoTip.note("단기예보 → 중기예보", "단기예보가 있는 날은 단기예보, 그 뒤(대략 4일 이후)는 중기예보. 강수확률은 하루 중 가장 큰 값이며 더하지 않습니다. 예상 강수량은 숫자로 나온 시간만 더하고 '1mm 미만'은 시간 수로 따로 적습니다.", { cls: "rt-note" })}</section></details>`);
     // 접힌 표: 시간별 표
-    h += hourlyTable(d, ids);
-    h += `<details class="card rt-method"><summary>계산 기준</summary><ul><li>${esc(d.method.rule)}</li><li>${esc(d.method.note)}</li><li>${esc(d.mapping?.note || "")}</li><li>최신 발표: 단기 ${esc(hm(d.releases?.vilage?.base) || "없음")}, 초단기 ${esc(hm(d.releases?.ultra?.base) || "없음")}, 중기기온 ${esc(hm(d.releases?.midTa) || "없음")}, 중기육상 ${esc(hm(d.releases?.midLand) || "없음")}.</li><li>시간별 기온 비교 = 같은 날짜 ±7일·같은 정시 ASOS 평균, 일별 = 공식 일자료 최고·최저기온 평균. 예보값으로 기록 경신을 확정하지 않습니다.</li></ul></details>`;
+    h += sec("시간별 표", () => hourlyTable(d, ids));
+    h += sec("계산 기준", () => `<details class="card rt-method"><summary>계산 기준</summary><ul><li>${esc(d.method.rule)}</li><li>${esc(d.method.note)}</li><li>${esc(d.mapping?.note || "")}</li><li>최신 발표: 단기 ${esc(hm(d.releases?.vilage?.base) || "없음")}, 초단기 ${esc(hm(d.releases?.ultra?.base) || "없음")}, 중기기온 ${esc(hm(d.releases?.midTa) || "없음")}, 중기육상 ${esc(hm(d.releases?.midLand) || "없음")}.</li><li>시간별 기온 비교 = 같은 날짜 ±7일·같은 정시 ASOS 평균, 일별 = 공식 일자료 최고·최저기온 평균. 예보값으로 기록 경신을 확정하지 않습니다.</li></ul></details>`);
     const out = $("fcOut"), wasOpen = new Set([...out.querySelectorAll("details[open] > summary")].map((x) => x.textContent.slice(0, 12)));
     const sx = out.querySelector("#fcChartHost .rt-hscroll")?.scrollLeft || 0;
     out.innerHTML = h;
     for (const sm of out.querySelectorAll("details > summary")) if (wasOpen.has(sm.textContent.slice(0, 12))) sm.parentElement.open = true;
     const sc = out.querySelector("#fcChartHost .rt-hscroll"); if (sc) sc.scrollLeft = sx;
-    bindFull();
-    bindDayTag();
+    try { bindFull(); bindDayTag(); } catch (e) { console.error("[내일 날씨] 그래프 연결", e); }
   }
   // 좁은 화면: 날짜마다 한 줄 카드(표 가로 스크롤 대신)
   function mobileDays(d, ids, pi) {

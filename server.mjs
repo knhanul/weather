@@ -1,3 +1,4 @@
+import { createVersioner } from "./static-version.mjs";
 import http from "node:http";
 import fs from "node:fs";
 import crypto from "node:crypto";
@@ -1120,10 +1121,13 @@ const STATIC_TYPES = {
 };
 const COMPRESSIBLE = new Set([".html", ".css", ".js", ".mjs", ".svg", ".json", ".webmanifest", ".ico"]);
 const staticCache = new Map();
+// ?v= 참조는 내용 해시로(static-version.mjs) — 고친 파일은 숫자를 안 올려도 새 주소
+const staticVer = createVersioner((u) => { const f = path.join(PUBLIC, path.normalize(u).replace(/^(\.\.(\/|\\|$))+/, "")); if (!f.startsWith(PUBLIC)) return null; try { return fs.readFileSync(f); } catch { return null; } });
 function staticEntry(full) {
   if (staticCache.has(full)) return staticCache.get(full);
   let buf;
-  try { buf = fs.readFileSync(full); } catch { staticCache.set(full, null); return null; }
+  try { buf = full.startsWith(PUBLIC + path.sep) ? staticVer.content("/" + path.relative(PUBLIC, full).split(path.sep).join("/")) : fs.readFileSync(full); } catch { buf = null; }
+  if (!buf) { staticCache.set(full, null); return null; }
   const ext = path.extname(full);
   const e = { buf, type: STATIC_TYPES[ext] || "application/octet-stream", etag: `"${crypto.createHash("sha1").update(buf).digest("base64url").slice(0, 22)}"` };
   if (COMPRESSIBLE.has(ext) && buf.length > 512) {

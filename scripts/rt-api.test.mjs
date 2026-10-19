@@ -192,6 +192,7 @@ test("4단계: stories 기준(basis) 연동·계절 신호·30일 비 달력, fo
   const f = (await call(api, "/api/rt/forecast?station=108")).body;
   assert.ok(f.bigChanges && Array.isArray(f.bigChanges.items) && f.bigChanges.items.length <= 3);
   assert.equal(f.revisions, undefined);
+  assert.deepEqual(f.changes, []); // 옛 화면 호환(d.changes.length)
   assert.equal(f.popRevision, undefined);
   assert.equal(f.outlook.text, null); // 지점에 mid_stn_id 없음 → 원문 없음(만들지 않음)
 });
