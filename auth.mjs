@@ -373,7 +373,8 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
     const id = `${NUNI_PREFIX}${claims.sub}`;
     const admin = nuniRoleIsAdmin(claims);
     // 역할 스냅샷: approved(관리) / pending(조회 전용). 누니 ID 에서 권한이 바뀌면 다음 로그인 때 반영
-    let user = await store.upsertLogin({ kakaoId: id, nickname: null, profileImage: null });
+    // 닉네임은 로그인할 때마다 누니 ID 값으로 덮어쓴다(누니 ID 에서 지우면 null 로)
+    let user = await store.upsertLogin({ kakaoId: id, nickname: claims.nickname || null, profileImage: null });
     const want = admin ? "approved" : "pending";
     if (user.status !== want) user = await store.setStatus(id, want, "nuni-id");
     const old = parseCookies(req.headers.cookie)[SESSION_COOKIE];
@@ -406,7 +407,7 @@ export function createAuth({ env = process.env, store, log = console.log, fetchI
       const u = await sessionUser(req);
       if (nuni) {
         const links = { provider: "nuni-id", loginUrl: "/auth/nuni/login", accountUrl: `${nuni.cfg.issuer}/me`, adminConsoleUrl: `${nuni.cfg.issuer}/admin/users` };
-        return json(res, u ? { authEnabled: true, loggedIn: true, ...links, nuniUserId: String(u.kakao_id).slice(NUNI_PREFIX.length), role: roleOf(u) } : { authEnabled: true, loggedIn: false, role: "none", ...links }), true;
+        return json(res, u ? { authEnabled: true, loggedIn: true, ...links, nuniUserId: String(u.kakao_id).slice(NUNI_PREFIX.length), nickname: u.nickname || null, role: roleOf(u) } : { authEnabled: true, loggedIn: false, role: "none", ...links }), true;
       }
       return json(res, u ? { authEnabled: true, loggedIn: true, ...userJson(u) } : { authEnabled: true, loggedIn: false, role: "none" }), true;
     }

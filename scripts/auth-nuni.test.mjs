@@ -216,6 +216,15 @@ test("staff → admin; platform_admin → admin; customer → 조회 only with c
   assert.equal((await req(app, v2.cj, "/api/me")).data.role, "admin");
 });
 
+test("nickname claim: shown in /api/me, refreshed each login, null when absent", async () => {
+  const a = await login(app, { sub: SUB.viewer, brand_role: "customer", nickname: "맑은하늘", preferred_username: "맑은하늘" });
+  assert.equal((await req(app, a.cj, "/api/me")).data.nickname, "맑은하늘");
+  const b = await login(app, { sub: SUB.viewer, brand_role: "customer", nickname: "비온뒤" });
+  assert.equal((await req(app, b.cj, "/api/me")).data.nickname, "비온뒤");
+  const c = await login(app, { sub: SUB.viewer, brand_role: "customer" });
+  assert.equal((await req(app, c.cj, "/api/me")).data.nickname, null);
+});
+
 test("id_token checks: bad signature / wrong nonce / wrong brand / wrong aud / state mismatch / error=access_denied", async () => {
   op.tamper = "signature";
   let r = await login(app, { sub: SUB.admin, brand_role: "brand_admin" });

@@ -97,7 +97,9 @@ export function createNuniClient(cfg, { fetchImpl = fetch } = {}) {
     if (!UUID_RE.test(String(p.sub || ""))) throw fail("sub");
     if (p.brand_id !== cfg.brand) throw fail("brand");
     if (accessToken && p.at_hash && p.at_hash !== b64u(crypto.createHash("sha256").update(accessToken).digest().subarray(0, 16))) throw fail("at_hash");
-    return { sub: p.sub, brandRole: p.brand_role ?? null, platformAdmin: p.platform_admin === true, authTime: p.auth_time ?? null };
+    // 닉네임: 누니 ID 에서 정했을 때만 들어온다(없으면 null)
+    const nick = typeof p.nickname === "string" && p.nickname.trim() ? p.nickname.trim().slice(0, 40) : typeof p.preferred_username === "string" && p.preferred_username.trim() ? p.preferred_username.trim().slice(0, 40) : null;
+    return { sub: p.sub, nickname: nick, brandRole: p.brand_role ?? null, platformAdmin: p.platform_admin === true, authTime: p.auth_time ?? null };
   }
 
   // forceLogin: 명시적 로그아웃 직후 첫 로그인 — prompt=login 으로 카카오 계정을 다시 묻는다(일반 로그인에는 붙이지 않음)

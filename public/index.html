@@ -2053,7 +2053,8 @@
       if (!me.loggedIn) { box.innerHTML = kakaoBtn(); return; }
       if (isNuni()) {
         const ntag = me.role === "admin" ? "" : me.role === "blocked" ? `<em class="blk">차단됨</em>` : `<em>조회 전용</em>`;
-        box.innerHTML = `<span class="me" title="회원 ID ${esc(me.nuniUserId || "")}">${avatarHtml(null, "카카오 사용자")}<b>${me.role === "admin" ? "관리자" : "카카오 사용자"}</b>${ntag}</span><button type="button" class="logout" id="btnLogout">로그아웃</button>`;
+        const nname = me.nickname || "누니 회원";
+        box.innerHTML = `<span class="me" title="누니 회원${me.role === "admin" ? " · 관리자" : ""}">${avatarHtml(null, nname)}<b>${esc(nname)}</b>${me.role === "admin" ? `<em>관리자</em>` : ntag}</span><button type="button" class="logout" id="btnLogout">로그아웃</button>`;
         $("btnLogout").onclick = logout;
         return;
       }
@@ -2146,7 +2147,7 @@
           u.status === "approved" ? btn("pending", "승인 취소", "sec") : "",
           u.status !== "blocked" ? btn("blocked", "차단", "sec") : btn("pending", "차단 해제", "sec"),
         ].join("");
-        return `<tr><td><span class="u-name">${avatarHtml(u.profileImage, u.nickname)}<b>${esc(u.nickname || "카카오 사용자")}</b></span></td>
+        return `<tr><td><span class="u-name">${avatarHtml(u.profileImage, u.nickname)}<b>${esc(u.nickname || (String(u.kakaoId || "").startsWith("nuni:") ? "누니 회원" : "카카오 사용자"))}</b></span></td>
           <td class="nw">${esc(u.kakaoId)}</td>
           <td class="nw"><span class="badge ${c}">${t}</span>${u.envAdmin ? ` <span class="badge off" title="ADMIN_KAKAO_IDS 환경변수">기본 관리자</span>` : ""}</td>
           <td class="nw">${esc(isoKst(u.createdAt))}</td><td class="nw">${esc(isoKst(u.lastLoginAt))}</td>
