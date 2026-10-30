@@ -132,7 +132,7 @@
     }).join("")}</ul><p class="rt-note rt-mob">차이는 ${ids.map((id) => esc(d.periods[pi(id)].label.replace(" 평균", ""))).join(" · ")} 평균 대비(℃).</p>`;
   }
   function hourlyTable(d, ids) {
-    const hrs = d.hours.slice(0, 72);
+    const hrs = window.RTFV.within72(d.hours);
     if (!hrs.length) return "";
     const rows = hrs.map((x) => `<tr><th scope="row">${esc(hm(x.time))}</th><td>${esc(x.pty && x.pty !== "없음" ? x.pty : x.sky || "–")}</td><td><b>${x.ta ?? "–"}℃</b> ${ids.map((id) => `<small class="${cls(x.diff[id])}">${sg(x.diff[id])}</small>`).join(" ")}</td><td>${popCell(x)}</td><td>${esc(x.pcp ?? "–")}</td><td>${x.hm ?? "–"}%</td><td>${x.ws ?? "–"}m/s${windAt(x.time)}</td><td><small>${esc(x.source)} ${esc(hm(x.base))}</small></td></tr>`).join("");
     return `<details class="card rh-fold fv-fold"><summary>시간별 표 (${hrs.length}시간)</summary><div class="tbl-wrap"><table class="rt-tbl"><thead><tr><th>시각</th><th>하늘·강수</th><th>기온 (기준별 차이)</th><th>강수확률</th><th>강수량</th><th>습도</th><th>바람</th><th>출처·발표</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
@@ -141,13 +141,13 @@
   const windAt = (t) => { const w = state.wind?.find((x) => x.time === t); return w && w.vec != null ? ` <small>${DIR[Math.round(w.vec / 22.5) % 16]}풍</small>` : ""; };
   const chartW = (n) => Math.max(Math.min(1100, ($("fcOut")?.clientWidth || 360) - 34), n * 10);
   function chart72Card(d, ids) {
-    const hrs = d.hours.slice(0, 72);
+    const hrs = window.RTFV.within72(d.hours);
     if (!hrs.length) return `<section class="card"><h2>72시간 예보</h2><p class="rt-ins">예보 자료가 없습니다</p></section>`;
     const lines = ["all", "r10", "r5"].filter((k) => ids.includes(k) && state.show[k]);
     const names = Object.fromEntries(d.periods.map((p) => [p.id, p.label]));
     const legend = `<div class="rt-legend"><span class="lg-fc">┅ 예보기온</span>${["all", "r10", "r5"].filter((k) => ids.includes(k)).map((k) => `<button type="button" data-line="${k}" aria-pressed="${state.show[k]}" style="--c:${COLORS[k]}" class="${state.show[k] ? "on" : ""}">${esc(names[k])}</button>`).join("")}<span class="fv-k"><i style="background:#9cc2fb"></i>강수확률 <i style="background:#0d3b8c"></i>강수량(mm) <i style="background:#eef2fa;border:1px solid #d0daea"></i>밤 18~6시</span></div>`;
-    const svg = window.RTFV.chart72(hrs, lines, COLORS, state.wind, chartW(hrs.length), 330, null, hlOf());
-    return `<section class="card rt-chart fv-72"><h2>${hrs.length}시간 예보 <span class="rt-badge fc">예보</span></h2>${legend}<div class="rt-hwrap" id="fcChartHost"><div class="rt-hscroll">${svg}</div>${window.ChartFull ? window.ChartFull.button() : ""}</div><div class="rt-tip" id="fcTip72"></div>${window.InfoTip.note(`초단기 ${esc(hm(d.releases?.ultra?.base) || "없음")} · 단기 ${esc(hm(d.releases?.vilage?.base) || "없음")} 발표`, `위 = 3시간마다 날씨, 가운데 = 예보기온(점선)과 같은 날짜 ±7일·같은 정시 과거 평균(${lines.map((k) => esc(names[k])).join(", ") || "선 숨김"}), 아래 = 강수확률 막대·숫자로 나온 강수량(점 = 1mm 미만), 맨 아래 = 바람(화살표 = 불어 가는 쪽, 숫자 m/s${state.wind ? "" : " · 불러오는 중이거나 자료 없음"}). 6시간 안은 초단기예보(발표 ${esc(hm(d.releases?.ultra?.base) || "없음")}), 그 뒤는 단기예보(발표 ${esc(hm(d.releases?.vilage?.base) || "없음")}).`, { cls: "rt-note", label: "그래프 보는 법" })}</section>`;
+    const svg = window.RTFV.chart72(hrs, lines, COLORS, state.wind, chartW(72), 330, null, hlOf());
+    return `<section class="card rt-chart fv-72"><h2>72시간 예보 <span class="rt-badge fc">예보</span></h2>${legend}<div class="rt-hwrap" id="fcChartHost"><div class="rt-hscroll">${svg}</div>${window.ChartFull ? window.ChartFull.button() : ""}</div><div class="rt-tip" id="fcTip72"></div>${window.InfoTip.note(`초단기 ${esc(hm(d.releases?.ultra?.base) || "없음")} · 단기 ${esc(hm(d.releases?.vilage?.base) || "없음")} 발표`, `위 = 3시간마다 날씨, 가운데 = 예보기온(점선)과 같은 날짜 ±7일·같은 정시 과거 평균(${lines.map((k) => esc(names[k])).join(", ") || "선 숨김"}), 아래 = 강수확률 막대·숫자로 나온 강수량(점 = 1mm 미만), 맨 아래 = 바람(화살표 = 불어 가는 쪽, 숫자 m/s${state.wind ? "" : " · 불러오는 중이거나 자료 없음"}). 6시간 안은 초단기예보(발표 ${esc(hm(d.releases?.ultra?.base) || "없음")}), 그 뒤는 단기예보(발표 ${esc(hm(d.releases?.vilage?.base) || "없음")}).`, { cls: "rt-note", label: "그래프 보는 법" })}</section>`;
   }
   // 강수확률은 단기예보에만 있음: 비·눈은 초단기인데 확률은 단기(다른 발표)면 발표를 붙여 섞지 않게
   const popCell = (x) => { if (x.pop == null) return "–"; const r = window.RTArt?.rainOf?.(x); return r?.mismatch ? `${x.pop}% <small title="${esc(r.tip)}">(${esc(x.items?.pop?.source || "")} ${esc(hm(x.items?.pop?.base))})</small>` : `${x.pop}%`; };
@@ -159,13 +159,13 @@
   function bindDayTag() {
     const host = $("fcChartHost"), sc = host?.querySelector(".rt-hscroll"), svg = sc?.querySelector("svg.fv-svg");
     if (!sc || !svg) return;
-    const hrs = state.data.hours.slice(0, 72), n = hrs.length, W = +svg.getAttribute("width"), H = +svg.getAttribute("height");
+    const hrs = window.RTFV.within72(state.data.hours), n = hrs.length, W = +svg.getAttribute("width"), H = +svg.getAttribute("height");
     let tag = host.querySelector(".fv-daytag");
     if (!tag) { tag = document.createElement("span"); tag.className = "fv-daytag"; tag.setAttribute("aria-hidden", "true"); host.appendChild(tag); }
     tag.style.top = `${Math.round(H * 0.58) + 2}px`;
     const upd = () => {
       if (sc.scrollLeft < 8) { tag.hidden = true; return; }
-      const i = window.RTFV.idxAt((sc.scrollLeft + 40) / W, n, W), ymd = hrs[Math.max(0, Math.min(n - 1, i))]?.time.slice(0, 10);
+      const i = window.RTFV.idxAt((sc.scrollLeft + 40) / W, n, W, hrs), ymd = hrs[Math.max(0, Math.min(n - 1, i))]?.time.slice(0, 10);
       tag.textContent = ymd ? window.RTFV.dlab(ymd) : ""; tag.hidden = !ymd;
     };
     sc.addEventListener("scroll", upd, { passive: true });
@@ -174,7 +174,7 @@
   function bindFull() {
     const host = $("fcChartHost");
     const svg = host?.querySelector("svg.fv-svg"), tip = $("fcTip72");
-    if (svg && tip) { const d = state.data, ids = NWBasis.ids(NWBasis.get()), hrs = d.hours.slice(0, 72), W = +svg.getAttribute("width"); let last = -1; const pick = (ev) => { const r = svg.getBoundingClientRect(); const i = window.RTFV.idxAt((ev.clientX - r.left) / r.width, hrs.length, W); if (i === last) return; last = i; tip.innerHTML = fcTip(hrs[i], ids); }; svg.addEventListener("pointermove", pick); svg.addEventListener("pointerdown", pick); tip.innerHTML = fcTip(hrs[0], ids); }
+    if (svg && tip) { const d = state.data, ids = NWBasis.ids(NWBasis.get()), hrs = window.RTFV.within72(d.hours), W = +svg.getAttribute("width"); let last = -1; const pick = (ev) => { const r = svg.getBoundingClientRect(); const i = window.RTFV.idxAt((ev.clientX - r.left) / r.width, hrs.length, W, hrs); if (i === last) return; last = i; tip.innerHTML = fcTip(hrs[i], ids); }; svg.addEventListener("pointermove", pick); svg.addEventListener("pointerdown", pick); tip.innerHTML = fcTip(hrs[0], ids); }
     if (!host || !window.ChartFull || !window.RTFull) return;
     window.ChartFull.register(host, {
       hostClass: "rt-fs",
@@ -184,9 +184,9 @@
       source: () => "자료: 기상청 초단기·단기예보, 과거 평균 ASOS · 시간대 Asia/Seoul",
       render: (el, size) => {
         const d = state.data, ids = NWBasis.ids(NWBasis.get());
-        const hrs = d.hours.slice(0, 72), n = hrs.length, W = size.width;
+        const hrs = window.RTFV.within72(d.hours), n = hrs.length, W = size.width;
         const lines = ["all", "r10", "r5"].filter((k) => ids.includes(k) && state.show[k]);
-        window.RTFull.draw(el, window.RTFV.chart72(hrs, lines, COLORS, state.wind, W, size.height, 0, hlOf()), (fr) => window.RTFV.idxAt(fr, n, W), (i) => window.RTFV.xOf(i, n, W).toFixed(1), (i) => fcTip(hrs[i], ids), 0);
+        window.RTFull.draw(el, window.RTFV.chart72(hrs, lines, COLORS, state.wind, W, size.height, 0, hlOf()), (fr) => window.RTFV.idxAt(fr, n, W, hrs), (i) => window.RTFV.xOf(i, n, W, hrs).toFixed(1), (i) => fcTip(hrs[i], ids), 0);
       },
     });
   }

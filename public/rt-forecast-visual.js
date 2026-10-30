@@ -119,25 +119,37 @@
   }
   // 3) 72시간 그래프: 위 날씨 그림 띠, 가운데 기온선(예보 점선)+기준 평균선, 아래 강수확률 막대·강수량, 맨 아래 바람 화살표. 밤(18~6시) 음영
   const PAD = { L: 34, R: 10 };
-  const xOf = (i, n, W) => PAD.L + (i / Math.max(1, n - 1)) * (W - PAD.L - PAD.R);
-  const idxAt = (fr, n, W) => Math.max(0, Math.min(n - 1, Math.round(((fr * W - PAD.L) / (W - PAD.L - PAD.R)) * Math.max(1, n - 1))));
+  // 가로축은 실제 시각 비례(hrs 를 주면): 기상청 단기예보는 모레 24시 뒤로 3시간 간격이라 칸 순서로 그리면 3시간이 1시간처럼 보임
+  const tMs = (t) => Date.parse(`${t.slice(0, 10)}T${t.slice(11, 19) || "00:00:00"}Z`);
+  const hOff = (hrs, i) => (tMs(hrs[i].time) - tMs(hrs[0].time)) / 3600000;
+  const spanH = (hrs) => Math.max(1, hOff(hrs, hrs.length - 1));
+  const xOf = (i, n, W, hrs) => PAD.L + (hrs && hrs.length > 1 ? hOff(hrs, i) / spanH(hrs) : i / Math.max(1, n - 1)) * (W - PAD.L - PAD.R);
+  const idxAt = (fr, n, W, hrs) => {
+    const f = (fr * W - PAD.L) / (W - PAD.L - PAD.R);
+    if (!hrs || hrs.length < 2) return Math.max(0, Math.min(n - 1, Math.round(f * Math.max(1, n - 1))));
+    const h = f * spanH(hrs); let best = 0, bd = Infinity;
+    for (let i = 0; i < hrs.length; i++) { const d = Math.abs(hOff(hrs, i) - h); if (d < bd) { bd = d; best = i; } }
+    return best;
+  };
+  // 첫 칸부터 72시간 안의 칸만(칸 수가 아니라 시각으로 자름)
+  const within72 = (hours) => { if (!hours?.length) return []; const t0 = tMs(hours[0].time); return hours.filter((x) => tMs(x.time) - t0 < 72 * 3600000); };
   function chart72(hrs, lines, colors, wind, W, H, sel, hl = null) {
-    const n = hrs.length, X = (i) => xOf(i, n, W);
+    const n = hrs.length, X = (i) => xOf(i, n, W, hrs);
     const iconH = 30, tT = iconH + 8, tB = Math.round(H * 0.58), pT = tB + 22, pB = H - (wind ? 52 : 22), wY = H - 30;
     const vals = []; for (const x of hrs) { if (x.ta != null) vals.push(x.ta); for (const k of lines) if (x.avg?.[k] != null) vals.push(x.avg[k]); }
     if (!vals.length) return `<p class="rt-ins">기온 자료 없음</p>`;
     const lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1), Y = (v) => tT + (1 - (v - lo) / (hi - lo)) * (tB - tT);
-    const mmMax = Math.max(5, ...hrs.map((x) => x.pcpMm || 0)), step = W / n;
+    const mmMax = Math.max(5, ...hrs.map((x) => x.pcpMm || 0)), step = (W - PAD.L - PAD.R) / spanH(hrs), gapH = (i) => (i < n - 1 ? hOff(hrs, i + 1) - hOff(hrs, i) : 1), seg = (i) => step * gapH(i);
     const path = (g) => { let s = "", pen = false; hrs.forEach((x, i) => { const v = g(x); if (v == null) { pen = false; return; } s += `${pen ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`; pen = true; }); return s; };
     let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" class="rt-svg-h fv-svg" style="width:${W}px;height:${H}px" role="img" aria-label="72시간 예보: 날씨, 기온, 강수확률·강수량${wind ? ", 바람" : ""}">`;
     // 밤 음영
-    hrs.forEach((x, i) => { if (night(hh(x.time))) s += `<rect x="${(X(i) - step / 2).toFixed(1)}" y="0" width="${(step + 0.6).toFixed(1)}" height="${H}" fill="#eef2fa"/>`; });
+    hrs.forEach((x, i) => { if (night(hh(x.time))) s += `<rect x="${(X(i) - step / 2).toFixed(1)}" y="0" width="${(seg(i) + 0.6).toFixed(1)}" height="${H}" fill="#eef2fa"/>`; });
     // 강조 구간(가장 큰 변화에서 고른 것): startW~endW 정시 칸
     if (hl) {
       const key = (w) => String(w).slice(0, 13);
       let a = hrs.findIndex((x) => key(x.time) >= key(hl.startW)), b = -1;
       for (let i = hrs.length - 1; i >= 0; i--) if (key(hrs[i].time) <= key(hl.endW)) { b = i; break; }
-      if (a >= 0 && b >= a) s += `<rect class="fv-hl" x="${(X(a) - step / 2).toFixed(1)}" y="0" width="${(X(b) - X(a) + step).toFixed(1)}" height="${H}" fill="#fff1c2" stroke="#c98a00" stroke-width="1.4" opacity=".9"/><text x="${(X(a) - step / 2 + 3).toFixed(1)}" y="${H - 3}" font-size="10.5" font-weight="700" fill="#8a4b00">${esc(hl.label || "")}</text>`;
+      if (a >= 0 && b >= a) s += `<rect class="fv-hl" x="${(X(a) - step / 2).toFixed(1)}" y="0" width="${(X(b) - X(a) + seg(b)).toFixed(1)}" height="${H}" fill="#fff1c2" stroke="#c98a00" stroke-width="1.4" opacity=".9"/><text x="${(X(a) - step / 2 + 3).toFixed(1)}" y="${H - 3}" font-size="10.5" font-weight="700" fill="#8a4b00">${esc(hl.label || "")}</text>`;
     }
     for (let t = Math.ceil(lo / 2) * 2; t <= hi; t += 2) s += `<line x1="${PAD.L}" x2="${W - PAD.R}" y1="${Y(t)}" y2="${Y(t)}" stroke="#e0e8f4"/><text x="${PAD.L - 5}" y="${Y(t) + 4}" text-anchor="end" font-size="11" fill="#5e7090">${t}</text>`;
     // 날짜 표시: 0시 + 그래프 첫 칸(0시가 아니면 첫 날짜가 안 보이던 문제). 날짜 글자와 겹치는 'N시' 는 뺌(5단계)
@@ -147,7 +159,7 @@
       if (h !== 0 && i !== 0) return;
       const lab = dlab(x.time.slice(0, 10)), x0 = h === 0 ? X(i) + 4 : Math.max(2, X(i) - step / 2 + 2);
       if (h === 0) s += `<line x1="${X(i)}" x2="${X(i)}" y1="0" y2="${H}" stroke="#b9c8de"/>`;
-      else if (hrs.some((y, j) => j > 0 && j * step < 64 && hh(y.time) === 0)) return; // 곧 0시 날짜가 나오면 첫 칸 날짜는 생략
+      else if (hrs.some((y, j) => j > 0 && X(j) - X(0) < 64 && hh(y.time) === 0)) return; // 곧 0시 날짜가 나오면 첫 칸 날짜는 생략
       s += `<text class="fv-day" x="${x0.toFixed(1)}" y="${tB + 14}" font-size="11" font-weight="700" fill="#0d1b3d">${esc(lab)}</text>`;
       dayX.push([x0 - 2, x0 + lab.length * 6.6 + 4]);
     });
@@ -160,7 +172,7 @@
     hrs.forEach((x, i) => { if (x.ta != null && hh(x.time) % 6 === 0) s += `<text x="${X(i)}" y="${Y(x.ta) - 6}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${colors.fc}">${x.ta}°</text>`; });
     // 강수확률 막대 + 강수량
     s += `<text x="${PAD.L - 5}" y="${pT + 4}" text-anchor="end" font-size="9.5" fill="#5e7090">100%</text><text x="${PAD.L - 5}" y="${pB}" text-anchor="end" font-size="9.5" fill="#5e7090">0</text><line x1="${PAD.L}" x2="${W - PAD.R}" y1="${pB}" y2="${pB}" stroke="#c9d6ea"/>`;
-    const bw = Math.max(2, step * 0.62);
+    const bw = Math.max(2, Math.min(step * 0.62, 7));
     hrs.forEach((x, i) => {
       if (x.pop == null) return;
       const ph = (x.pop / 100) * (pB - pT);
@@ -174,6 +186,9 @@
       s += `<text x="${PAD.L - 5}" y="${wY + 4}" text-anchor="end" font-size="9.5" fill="#5e7090">바람</text>`;
       hrs.forEach((x, i) => { if (hh(x.time) % 3 !== 0) return; const w = by.get(x.time); if (!w || w.vec == null) { s += `<text x="${X(i)}" y="${wY + 4}" text-anchor="middle" font-size="9" fill="#8a9bb5">–</text>`; return; } const sw = Math.min(3.2, 1 + (w.ws || 0) * 0.35); s += `<g transform="translate(${X(i).toFixed(1)},${wY}) rotate(${(w.vec + 180) % 360})"><title>${esc(hm(x.time))} 풍향 ${w.vec}° 풍속 ${w.ws ?? "–"}m/s</title><line x1="0" y1="7" x2="0" y2="-6" stroke="#36507a" stroke-width="${sw}" stroke-linecap="round"/><path d="M-4,-2 L0,-8 L4,-2z" fill="#36507a"/></g><text x="${X(i)}" y="${wY + 20}" text-anchor="middle" font-size="9" fill="#36507a">${w.ws ?? "–"}</text>`; });
     }
+    // 3시간 간격이 시작되는 곳 표시(기상청 단기예보는 모레 24시 뒤로 3시간 간격)
+    const g3 = hrs.findIndex((x, i) => i > 0 && hOff(hrs, i) - hOff(hrs, i - 1) >= 2);
+    if (g3 > 0) { const gx = (X(g3 - 1) + X(g3)) / 2; s += `<line class="fv-g3" x1="${gx.toFixed(1)}" x2="${gx.toFixed(1)}" y1="${iconH}" y2="${pB}" stroke="#8a9bb5" stroke-dasharray="3 3"/><text x="${(gx + 4).toFixed(1)}" y="${tB - 4}" font-size="10" fill="#5e7090">이후 3시간 간격</text>`; }
     if (sel != null) s += `<line class="rt-sel" x1="${X(sel).toFixed(1)}" x2="${X(sel).toFixed(1)}" y1="0" y2="${H}" stroke="#0d1b3d" opacity=".35"/>`;
     return s + `</svg>`;
   }
@@ -196,5 +211,5 @@
     }).join("");
     return `<section class="card fv-pills" aria-label="10일 예보"><h2>${ds.length}일 예보 <span class="rt-badge fc">예보</span></h2><div class="rt-legend"><span><i class="fv-key rng"></i> 예보 최저~최고</span><span><i class="fv-key base"></i> ${esc(per ? `${per.label.replace(" 평균", "")}(${per.range}) 평균` : "기준 평균")} 같은 시기 최저~최고</span></div><ul>${rows}</ul>${window.InfoTip.note(`단기 → 중기(발표 ${esc(hm(d.releases?.midTa) || "없음")})`, `최고기온 옆 숫자 = 기준 평균 최고기온과의 차이(1℃ 이상만). 단기 = 단기예보(대략 3일), 중기 = 중기예보(발표 ${esc(hm(d.releases?.midTa) || "없음")}). 강수확률은 하루 중 가장 큰 값.`, { cls: "rt-note", label: "보는 법" })}</section>`;
   }
-  window.RTFV = { hero, changeCard, outlookFold, chart72, pills, xOf, idxAt, iconSvg, kind, dlab };
+  window.RTFV = { hero, changeCard, outlookFold, chart72, pills, xOf, idxAt, within72, iconSvg, kind, dlab };
 })();
