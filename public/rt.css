@@ -373,3 +373,19 @@
   .ms-grid { grid-template-columns: 1fr; gap: 2px; }
   .ms-grid > span:nth-child(odd) { font-weight: 600; margin-top: 6px; }
 }
+
+/* 72시간 예보 — 폰 전용(PC 는 그대로) */
+@media (max-width: 600px) {
+  .fv-72 .rt-legend { flex-wrap:nowrap; overflow-x:auto; gap:5px; font-size:11.5px; scrollbar-width:none; padding-bottom:2px; white-space:nowrap; }
+  .fv-72 .rt-legend::-webkit-scrollbar { display:none; }
+  .fv-72 .rt-legend button { height:24px; min-height:0; min-width:0; padding:0 7px; line-height:1; font-size:11px; border-width:1.2px; flex:none; }
+  .fv-72 .rt-legend .lg-fc, .fv-72 .rt-legend .fv-k { flex:none; font-size:11px; }
+  .fv-72 .fv-swipe { margin:2px 0 4px; font-size:11.5px; color:#2f5fa8; font-weight:600; }
+  .fv-72 .fv-more { position:relative; }
+  .fv-72 .fv-more::after { content:""; position:absolute; top:0; right:0; bottom:0; width:28px; pointer-events:none; background:linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,.95)); transition:opacity .2s; }
+  .fv-72 .fv-more.fv-end::after { opacity:0; }
+  #fcTip72 { font-size:12.5px; line-height:1.55; padding:6px 9px; }
+  #fcTip72 .ft-l1, #fcTip72 .ft-l2, #fcTip72 .ft-l3 { display:block; }
+  #fcTip72 .ft-sep { display:none; }
+  #fcTip72 .ft-l3 { color:#5e7090; }
+}

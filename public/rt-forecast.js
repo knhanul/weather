@@ -146,14 +146,15 @@
     const lines = ["all", "r10", "r5"].filter((k) => ids.includes(k) && state.show[k]);
     const names = Object.fromEntries(d.periods.map((p) => [p.id, p.label]));
     const legend = `<div class="rt-legend"><span class="lg-fc">┅ 예보기온</span>${["all", "r10", "r5"].filter((k) => ids.includes(k)).map((k) => `<button type="button" data-line="${k}" aria-pressed="${state.show[k]}" style="--c:${COLORS[k]}" class="${state.show[k] ? "on" : ""}">${esc(names[k])}</button>`).join("")}<span class="fv-k"><i style="background:#9cc2fb"></i>강수확률 <i style="background:#0d3b8c"></i>강수량(mm) <i style="background:#eef2fa;border:1px solid #d0daea"></i>밤 18~6시</span></div>`;
-    const svg = window.RTFV.chart72(hrs, lines, COLORS, state.wind, chartW(72), 330, null, hlOf());
-    return `<section class="card rt-chart fv-72"><h2>72시간 예보 <span class="rt-badge fc">예보</span></h2>${legend}<div class="rt-hwrap" id="fcChartHost"><div class="rt-hscroll">${svg}</div>${window.ChartFull ? window.ChartFull.button() : ""}</div><div class="rt-tip" id="fcTip72"></div>${window.InfoTip.note(`초단기 ${esc(hm(d.releases?.ultra?.base) || "없음")} · 단기 ${esc(hm(d.releases?.vilage?.base) || "없음")} 발표`, `위 = 3시간마다 날씨, 가운데 = 예보기온(점선)과 같은 날짜 ±7일·같은 정시 과거 평균(${lines.map((k) => esc(names[k])).join(", ") || "선 숨김"}), 아래 = 강수확률 막대·숫자로 나온 강수량(점 = 1mm 미만), 맨 아래 = 바람(화살표 = 불어 가는 쪽, 숫자 m/s${state.wind ? "" : " · 불러오는 중이거나 자료 없음"}). 6시간 안은 초단기예보(발표 ${esc(hm(d.releases?.ultra?.base) || "없음")}), 그 뒤는 단기예보(발표 ${esc(hm(d.releases?.vilage?.base) || "없음")}).`, { cls: "rt-note", label: "그래프 보는 법" })}</section>`;
+    const phone = ($("fcOut")?.clientWidth || 360) < 600;
+    const svg = window.RTFV.chart72(hrs, lines, COLORS, state.wind, chartW(72), phone ? (state.wind ? 290 : 260) : 330, null, hlOf(), { compact: phone });
+    return `<section class="card rt-chart fv-72"><h2>72시간 예보 <span class="rt-badge fc">예보</span></h2>${legend}${phone ? `<p class="fv-swipe" id="fcSwipe">옆으로 밀면 3일치가 이어져요 →</p>` : ""}<div class="rt-hwrap${phone ? " fv-more" : ""}" id="fcChartHost"><div class="rt-hscroll">${svg}</div>${window.ChartFull ? window.ChartFull.button() : ""}</div><div class="rt-tip" id="fcTip72"></div>${window.InfoTip.note(`초단기 ${esc(hm(d.releases?.ultra?.base) || "없음")} · 단기 ${esc(hm(d.releases?.vilage?.base) || "없음")} 발표`, `위 = 3시간마다 날씨, 가운데 = 예보기온(점선)과 같은 날짜 ±7일·같은 정시 과거 평균(${lines.map((k) => esc(names[k])).join(", ") || "선 숨김"}), 아래 = 강수확률 막대·숫자로 나온 강수량(점 = 1mm 미만), 맨 아래 = 바람(화살표 = 불어 가는 쪽, 숫자 m/s${state.wind ? "" : " · 불러오는 중이거나 자료 없음"}). 6시간 안은 초단기예보(발표 ${esc(hm(d.releases?.ultra?.base) || "없음")}), 그 뒤는 단기예보(발표 ${esc(hm(d.releases?.vilage?.base) || "없음")}).`, { cls: "rt-note", label: "그래프 보는 법" })}</section>`;
   }
   // 강수확률은 단기예보에만 있음: 비·눈은 초단기인데 확률은 단기(다른 발표)면 발표를 붙여 섞지 않게
   const popCell = (x) => { if (x.pop == null) return "–"; const r = window.RTArt?.rainOf?.(x); return r?.mismatch ? `${x.pop}% <small title="${esc(r.tip)}">(${esc(x.items?.pop?.source || "")} ${esc(hm(x.items?.pop?.base))})</small>` : `${x.pop}%`; };
   function fcTip(x, ids) {
     if (!x) return "";
-    return `<b>${esc(hm(x.time))}</b> ${esc(x.pty && x.pty !== "없음" ? x.pty : x.sky || "")} · 기온 <b>${x.ta ?? "–"}℃</b> ${ids.map((id) => `<span class="${cls(x.diff[id])}">${sg(x.diff[id])}</span>`).join(" ")} · 강수확률 ${popCell(x)} · 강수량 ${esc(x.pcp ?? "–")} · 습도 ${x.hm ?? "–"}% · 풍속 ${x.ws ?? "–"}m/s${windAt(x.time)} <small>${esc(x.source)} ${esc(hm(x.base))}</small>`;
+    return `<span class="ft-l1"><b>${esc(hm(x.time))}</b> ${esc(x.pty && x.pty !== "없음" ? x.pty : x.sky || "")} · 기온 <b>${x.ta ?? "–"}℃</b> ${ids.map((id) => `<span class="${cls(x.diff[id])}">${sg(x.diff[id])}</span>`).join(" ")}</span><span class="ft-sep"> · </span><span class="ft-l2">강수확률 ${popCell(x)} · 강수량 ${esc(x.pcp ?? "–")} · 습도 ${x.hm ?? "–"}% · 풍속 ${x.ws ?? "–"}m/s${windAt(x.time)}</span> <small class="ft-l3">${esc(x.source)} ${esc(hm(x.base))}</small>`;
   }
   // 가로로 밀면 왼쪽에 지금 보이는 날짜 고정 표시(날짜 글자가 왼쪽 밖으로 잘리지 않게)
   function bindDayTag() {
@@ -168,6 +169,8 @@
       const i = window.RTFV.idxAt((sc.scrollLeft + 40) / W, n, W, hrs), ymd = hrs[Math.max(0, Math.min(n - 1, i))]?.time.slice(0, 10);
       tag.textContent = ymd ? window.RTFV.dlab(ymd) : ""; tag.hidden = !ymd;
     };
+    const hint = () => { const end = sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 8; host.classList.toggle("fv-end", end); const sw = $("fcSwipe"); if (sw && sc.scrollLeft > 20) sw.hidden = true; };
+    sc.addEventListener("scroll", hint, { passive: true }); hint();
     sc.addEventListener("scroll", upd, { passive: true });
     upd();
   }

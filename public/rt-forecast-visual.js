@@ -133,9 +133,11 @@
   };
   // 첫 칸부터 72시간 안의 칸만(칸 수가 아니라 시각으로 자름)
   const within72 = (hours) => { if (!hours?.length) return []; const t0 = tMs(hours[0].time); return hours.filter((x) => tMs(x.time) - t0 < 72 * 3600000); };
-  function chart72(hrs, lines, colors, wind, W, H, sel, hl = null) {
+  function chart72(hrs, lines, colors, wind, W, H, sel, hl = null, opt = {}) {
     const n = hrs.length, X = (i) => xOf(i, n, W, hrs);
-    const iconH = 30, tT = iconH + 8, tB = Math.round(H * 0.58), pT = tB + 22, pB = H - (wind ? 52 : 22), wY = H - 30;
+    const iconH = 30, tT = iconH + 8, pB = H - (wind ? 52 : 22), wY = H - 30;
+    // 폰(compact): 강수 띠를 낮게(48px) 붙여 기온 그래프와 사이 빈칸을 줄임. PC 는 예전 비율 그대로
+    const tB = opt.compact ? pB - 48 - 22 : Math.round(H * 0.58), pT = tB + 22;
     const vals = []; for (const x of hrs) { if (x.ta != null) vals.push(x.ta); for (const k of lines) if (x.avg?.[k] != null) vals.push(x.avg[k]); }
     if (!vals.length) return `<p class="rt-ins">기온 자료 없음</p>`;
     const lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1), Y = (v) => tT + (1 - (v - lo) / (hi - lo)) * (tB - tT);
