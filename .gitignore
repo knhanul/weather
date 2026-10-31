@@ -14,3 +14,6 @@ Thumbs.db
 # 로컬 개발용 로그인 사용자·세션 (운영은 Postgres)
 data/auth.json
 data/auth.json.*.tmp
+
+# 로컬 개발용 특정일 저장소(운영은 MySQL calendar_events)
+data/calendar-events.json

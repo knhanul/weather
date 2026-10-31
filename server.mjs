@@ -18,6 +18,8 @@ import { createPgStore, createMysqlStore, createJsonStore } from "./auth-store.m
 import { handleLayouts, createPgLayoutStore, createMysqlLayoutStore, createJsonLayoutStore } from "./layouts.mjs";
 import { withCoords } from "./station-coords.mjs";
 import { handlePrefs, createPgPrefsStore, createMysqlPrefsStore, createJsonPrefsStore } from "./view-prefs.mjs";
+import { createCalendarApi } from "./calendar-api.mjs";
+import { createPgEventStore, createMysqlEventStore, createJsonEventStore, seedRows as calendarSeedRows } from "./calendar-events.mjs";
 import { createStatsData } from "./stats-data.mjs";
 import { createStatsApi } from "./stats-api.mjs";
 import { createDateApi } from "./date-api.mjs";
@@ -41,6 +43,7 @@ const STATION_FILE = path.join(DATA, "stations.json");
 const AUTH_FILE = path.join(DATA, "auth.json"); // 로컬 개발(DATABASE_URL 없음)에서만 사용
 const LAYOUT_FILE = path.join(DATA, "export-layouts.json"); // 로컬 개발(DATABASE_URL 없음)에서만 사용
 const PREFS_FILE = path.join(DATA, "view-prefs.json"); // 로컬 개발에서만 사용
+const CALENDAR_FILE = path.join(DATA, "calendar-events.json"); // 로컬 개발(DATABASE_URL 없음)에서만 사용
 const PORT = Number(process.env.PORT || 8080);
 const KST_MS = 9 * 60 * 60 * 1000;
 
@@ -1308,6 +1311,7 @@ const handleRt = createRtApi({
 let auth = createAuth({ env: {} });
 let layoutStore = null;
 let prefsStore = null;
+let calendarStore = null;
 const presetIdsOf = (kind) => new Set(EXPORT_PRESETS.filter((p) => p.kind === kind).map((p) => p.id));
 const layoutKeys = (kind) => new Set(getExportCatalog(kind, { fullFields: true }).map((c) => c.key));
 // 공개 응답에서 관리자 전용 정보(인증키 일부, 수집 메시지)를 뺀다. 로그인 기능이 꺼져 있으면 그대로.
@@ -1321,12 +1325,18 @@ async function publicView(req, d) {
   };
 }
 
+// 특정일 캘린더 API(공개 조회 + 관리자 편집). 저장소는 DB 연결 뒤(ready)에 만들므로 핸들러도 그때 채운다(auth 와 같은 방식).
+// 응답 모양은 기존 json 헬퍼 그대로.
+let handleCalendar = async () => false;
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", `http://127.0.0.1:${PORT}`);
     const denied = await auth.guard(req, url);
     if (denied) return json(res, denied.body, denied.status);
     if (await auth.handle(req, res, url)) return;
+    // 특정일 캘린더(/api/calendar/*). auth.handle 뒤에 두는 이유: 누니 ID 모드의 /api/admin/* 404 처리·세션 쿠키 해석과
+    // 순서가 엉키지 않게 기존 관리자 경로와 같은 자리에서 처리하고, 쓰기는 auth.guard 가 이미 관리자만 통과시킨다.
+    if (await handleCalendar(req, res, url)) return;
     if (await handleLayouts(req, res, url, { store: layoutStore, ownerOf: (r) => auth.ownerOf(r), allowedKeys: layoutKeys, readBody, json })) return;
     if (await handlePrefs(req, res, url, { store: prefsStore, layoutStore, ownerOf: (r) => auth.ownerOf(r), presetIds: presetIdsOf, readBody, json, knownStation: async (id) => (await stations()).some((x) => String(x.station_id) === id) })) return;
     if (req.method === "GET" && url.pathname === "/api/view") {
@@ -1597,6 +1607,18 @@ const ready = (async () => {
   auth = createAuth({ env: process.env, store });
   layoutStore = kind === "mysql" ? createMysqlLayoutStore(db.getPool()) : kind === "postgresql" ? createPgLayoutStore(db.getPool()) : createJsonLayoutStore(LAYOUT_FILE);
   prefsStore = kind === "mysql" ? createMysqlPrefsStore(db.getPool()) : kind === "postgresql" ? createPgPrefsStore(db.getPool()) : createJsonPrefsStore(PREFS_FILE);
+  calendarStore = kind === "mysql" ? createMysqlEventStore(db.getPool()) : kind === "postgresql" ? createPgEventStore(db.getPool()) : createJsonEventStore(CALENDAR_FILE);
+  handleCalendar = createCalendarApi({ store: calendarStore, json, readBody, isAdmin: (r) => auth.isAdmin(r), log: (line) => console.log(line) });
+  // 첫 기동이면 기본 자료(역대 수능·학력고사·설날·추석)를 미리 채운다 — 관리 화면이 처음부터 채워져 있게.
+  // 표가 비어 있을 때만 넣으므로 관리자가 일부러 비운 표를 매 기동마다 되돌리지는 않는다(시드 id 가 고정이라 다시 눌러도 중복 없음).
+  try {
+    if ((await calendarStore.list()).length === 0) {
+      const { added } = await calendarStore.upsertMany(calendarSeedRows());
+      console.log(`calendar seed on first run added=${added}`);
+    }
+  } catch (err) {
+    console.error("calendar seed failed (관리 화면에서 '기본 자료 채우기'로 다시 시도)", err instanceof Error ? err.message : err);
+  }
   console.log(auth.startupLine);
   if (auth.enabled) {
     const n = await auth.cleanup();

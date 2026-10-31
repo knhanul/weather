@@ -58,3 +58,23 @@ CREATE TABLE IF NOT EXISTS hub_settings (
   k text PRIMARY KEY,
   v text
 );
+
+-- 특정일 캘린더(수능일·학력고사일·설날·추석 등). migrations/mysql/0009_calendar_events.sql 과 같은 표.
+-- year NULL = 해마다 되풀이되는 규칙(음력 1/1 설날), 값 = 그 해 한 번뿐인 날. 실제 양력 날짜는 조회 때 계산한다.
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id text PRIMARY KEY,
+  kind text NOT NULL,
+  label text NOT NULL,
+  cal text NOT NULL DEFAULT 'solar',
+  month smallint NOT NULL,
+  day smallint NOT NULL,
+  leap boolean NOT NULL DEFAULT false,
+  year smallint NULL,
+  year_label text NULL,
+  note text NULL,
+  source text NOT NULL DEFAULT 'admin',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS cal_ev_year ON calendar_events (year);
+CREATE INDEX IF NOT EXISTS cal_ev_kind ON calendar_events (kind);

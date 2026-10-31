@@ -1,6 +1,7 @@
 // 날씨 이야기 › 날짜로 보는 날씨(#/stories/day) v2(2026-10-18). 값·문장은 모두 /api/stats/date-weather 응답 그대로(화면에서 다시 계산하지 않음, 반올림·뺄셈 표시만).
 // 화면 모델: 날짜 하나(양력·음력 연월일) → ① 해마다 이날(그해 실제 관측 · 횟수·극값, 같은 날 평균 없음) ② 앞뒤 15일 날씨 통계(31일 창)
-//   ③ 고른 해의 시간별 관측(+겹쳐 볼 해 최대 2개, 평균 없음) ④ 연도 × 시간 히트맵(관측값) ⑤ 고른 해 그날 상세 ⑥ 짧은 이야기.
+//   ③ 고른 해의 시간별 관측(+겹쳐 볼 해 최대 2개, 평균 없음) ④ 연도 × 시간 히트맵(관측값) ⑤ 고른 해 그날 상세 ⑥ 짧은 이야기
+//   ⑦ 그해 특정일 — 관리 › 캘린더 관리(#/calendar)에 등록한 설날·추석·수능일 등을 그해 날짜 순으로(날씨 값과 무관, 표시만).
 // 주소 = 상태: station·cal·date(YYYY-MM-DD)·leap·cmp·period·to·from(+보기 hm·ym·hk). 예전 주소(m·d·year)도 그대로 읽는다.
 (() => {
   const V = window.DViz;
@@ -23,6 +24,8 @@
   let meta = null;
   let seq = 0;
   let D = null; // 일자료 응답(해마다 이날 · 앞뒤 15일 · 고른 해)
+  // 특정일(캘린더 관리에서 등록한 설날·추석·수능일). 날씨 계산과 섞지 않고 '보여 주기만' 한다 — 실패해도 본 화면은 그대로.
+  let CAL = { map: new Map(), list: [], ok: false, pending: false }; // map: 양력 날짜 → 그날 특정일들, list: 그해 것(날짜 순)
   let H = null; // 시간자료 응답
   const cache = new Map();
   const getJson = (url) => {
@@ -118,6 +121,7 @@
         <div class="ds-sub"><span class="ds-tools2" id="dsActs"></span></div>
         <div class="fav-row ds-favs" id="dsFav"></div><p class="ds-toast" id="dsToast" role="status" hidden></p></div>
       <div class="card" id="dsCard"></div>
+      <div class="card" id="dsEvents" data-sec="events"></div>
       <div class="card" id="dsYears" data-sec="yearly"></div>
       <div class="card" id="dsAround" data-sec="around"></div>
       <div class="card" id="dsHour" data-sec="hourly"></div>
@@ -217,6 +221,8 @@
     if (ds.hk) { st.hk = ds.hk; replaceView(); return renderHeat(); }
     if (ds.cmpdel) { st.cmp = st.cmp.filter((y) => y !== +ds.cmpdel); return go(); }
     if (ds.pick) { pickYear(+ds.pick); return; }
+    // 그해 특정일 → 그 양력 날짜로 화면을 옮긴다(기준은 양력으로 두고 연·월·일만 바꿈)
+    if (ds.calDate) { const [y, m, d] = ds.calDate.split("-").map(Number); Object.assign(st, { cal: "solar", y, m, d, leap: false }); st.cmp = st.cmp.filter((x) => x !== y); return go(); }
     if (ds.ov) { const y = +ds.ov; if (st.cmp.includes(y)) st.cmp = st.cmp.filter((x) => x !== y); else if (st.cmp.length < 2) st.cmp.push(y); else { toast("시간 그래프에는 자세히 볼 해 + 2개 해까지 겹칩니다. 하나를 빼고 고르세요"); return; } return go(); }
     if (b.id === "dsAll") { st.all = !st.all; return renderYears(); }
     if (b.id === "dsGo") { applyDate(); return; }
@@ -250,8 +256,43 @@
     try { await navigator.clipboard.writeText(url); toast("링크를 복사했습니다" + (withAlias ? " (별칭 포함)" : "")); } catch { prompt("이 주소를 복사하세요", url); }
   }
 
+  // ---------------------------------------------------------------- 특정일(관리 › 캘린더 관리 #/calendar)
+  // 서버가 해석한 양력 날짜를 그대로 쓴다(음력 규칙 → 양력 날짜 계산은 서버 calendar-resolver 가 한다). 화면에서는 다시 계산하지 않는다.
+  // 요청 범위는 통계 창(해마다 이날) + 고른 해다 — 고른 해가 창 밖(올해 등)일 수 있어 양옆으로 한 해씩 넓힌다.
+  // 연도 배지용 짧은 이름: 수능·학력고사는 줄여 쓰고, 직접 넣은 긴 이름은 12자에서 자른다(줄이 밀리지 않게).
+  const CAL_SHORT = (e) => (e.kind === "csat" ? "수능" : e.kind === "hakryeok" ? "학력고사" : [...String(e.label)].length > 12 ? `${[...String(e.label)].slice(0, 12).join("")}…` : e.label);
+  async function loadCalendar(win) {
+    // 창(해마다 이날) + 고른 해. 고른 해가 창 밖(올해 등)일 수 있어 양옆으로 한 해씩 넓힌다(음력 12월은 양력으로 해를 넘김).
+    const fromYear = Number.isInteger(win?.fromYear) ? win.fromYear : st.y - 10;
+    const toYear = Number.isInteger(win?.toYear) ? win.toYear : THIS_YEAR - 1;
+    const from = Math.max(1900, Math.min(fromYear, st.y - 1)), to = Math.min(2050, Math.max(toYear, st.y + 1));
+    const r = await getJson(`/api/calendar/events?from=${from}&to=${to}`);
+    const map = new Map();
+    for (const e of r.events || []) {
+      if (!e.solarDate) continue;
+      if (!map.has(e.solarDate)) map.set(e.solarDate, []);
+      map.get(e.solarDate).push(e);
+    }
+    // '그해 특정일' = 고른 해의 양력 날짜. 음력 12월처럼 양력으로 해를 넘기는 날이 있어 기준은 양력 날짜 연도로 둔다.
+    const list = (r.events || []).filter((e) => e.solarDate && e.solarDate.slice(0, 4) === String(st.y));
+    return { map, list, ok: true };
+  }
+  const calOf = (ymd) => (ymd && CAL.map.get(ymd)) || [];
+  function renderEvents() {
+    const el = $("dsEvents");
+    if (!el) return;
+    if (!CAL.ok) { el.innerHTML = `<h3 class="ds-h">그해 특정일</h3><p class="sx-state">특정일을 불러오지 못했습니다. <a href="#/calendar">캘린더 관리</a></p>`; return; }
+    const list = CAL.list;
+    const head = `<h3 class="ds-h">그해 특정일 ${window.InfoTip.sub(`${st.y}년 · 설날·추석·수능일 등`, `관리 › 캘린더 관리에 등록한 특정일 · 양력 날짜 순 · 날씨 값과 무관합니다`, { label: "기준" })}</h3>`;
+    if (CAL.pending) { el.innerHTML = `${head}<p class="sx-state">특정일을 불러오는 중…</p>`; return; }
+    el.innerHTML = `${head}
+      ${list.length
+        ? `<div class="ds-evs">${list.map((e) => `<button type="button" class="ds-evchip" data-cal-date="${E(e.solarDate)}" title="${E(e.label)}${e.note ? ` · ${E(e.note)}` : ""} — 이 날짜로 보기"><b>${E(md(e.solarDate))}</b> <span>${E(e.label)}</span>${e.note ? ` <small>${E(e.note)}</small>` : ""}</button>`).join("")}</div>`
+        : `<p class="ds-note">이 해에 등록된 특정일이 없습니다. <a href="#/calendar">캘린더 관리</a>에서 설날·추석·수능일을 넣어 두면 여기와 '고른 날짜' 카드에 함께 나옵니다.</p>`}`;
+  }
+
   // ---------------------------------------------------------------- 불러오기(일자료 먼저, 시간자료 따로)
-  const DAILY_SECS = ["dsCard", "dsYears", "dsAround", "dsSel", "dsStory"];
+  const DAILY_SECS = ["dsCard", "dsEvents", "dsYears", "dsAround", "dsSel", "dsStory"];
   async function load() {
     const my = ++seq;
     D = null; H = null;
@@ -266,7 +307,18 @@
       const d = await getJson(dUrl);
       if (my !== seq) return;
       D = d;
-      renderCard(); renderYears(); renderAround(); renderSel(); renderStories();
+      // 특정일은 덧붙이는 정보라 본 화면을 막지 않는다 — 따로 불러와 그 카드·배지·한 줄만 다시 그린다(6초 뒤 포기).
+      // 먼저 '불러오는 중'으로 두고 그리는 이유: 이전 요청의 옛 결과나 실패 문구가 한 번 번쩍이지 않게.
+      CAL = { map: new Map(), list: [], ok: false, pending: true };
+      renderCard(); renderEvents(); renderYears(); renderAround(); renderSel(); renderStories();
+      Promise.race([
+        loadCalendar(d.window),
+        new Promise((resolve) => setTimeout(() => resolve({ map: new Map(), list: [], ok: false }), 6000)),
+      ]).catch(() => ({ map: new Map(), list: [], ok: false })).then((c) => {
+        if (my !== seq) return; // 그사이 다른 날짜를 골랐으면 버린다
+        CAL = c;
+        renderCard(); renderEvents(); renderYears();
+      });
     } catch (e) {
       if (my !== seq) return;
       for (const id of DAILY_SECS) $(id).innerHTML = `<div class="sx-state err">조회 실패 · ${E(e.message)} <button type="button" id="dsRetry" class="sec">다시 시도</button></div>`;
@@ -300,7 +352,10 @@
     let when = `<b>${E(selWhen(s))}</b>`;
     if (s.dateStatus === "ok" && st.cal === "solar" && cal?.lunar) when += ` · ${E(cal.lunar.text)}`;
     const warn = s.dateStatus === "future" ? `<p class="sx-warn">${E(STATUS("future"))} — 그해 칸만 비워 두고, 지난 해들은 그대로 보여 줍니다.</p>` : s.dateStatus === "ongoing" ? `<p class="sx-warn">${E(STATUS("ongoing"))} — 오늘 하루 자료는 내일 공식 일자료가 들어오면 채워집니다.</p>` : s.dateStatus === "pending" ? `<p class="sx-warn">${E(STATUS("pending"))} — 지난 날이지만 아직 공식 일자료가 들어오지 않았습니다(최신 ${dot(stn.dailyLast)}).</p>` : "";
-    $("dsCard").innerHTML = `<div class="ds-card"><div><p class="ds-k">고른 날짜</p><h3 class="ds-title">${title}</h3><p>${when}</p>${warn}</div>
+    // 그날 특정일(수능일·설날 등). 그해에 없는 날짜(nodate)면 s.solarDate 가 없으니 자연히 표시하지 않는다.
+    const evs = calOf(s.solarDate);
+    const evLine = evs.length ? `<p class="ds-evline">${evs.map((e) => `<b>${E(e.label)}</b>${e.note ? ` <small>${E(e.note)}</small>` : ""}`).join(" <span class=\"ds-evdot\">·</span> ")}</p>` : "";
+    $("dsCard").innerHTML = `<div class="ds-card"><div><p class="ds-k">고른 날짜</p><h3 class="ds-title">${title}</h3>${evLine}<p>${when}</p>${warn}</div>
       <dl class="ds-dl"><div><dt>관측지점</dt><dd>${E(stn.station_name)} (${E(stn.station_id)})${stn.region ? ` · ${E(stn.region)}` : ""} <small>지점 한 곳의 관측</small></dd></div><div><dt>해마다 볼 날</dt><dd>${E(specLabel())} <small>· ${E(D.window.label)} ${D.dateCounts.requested}개 해${D.dateCounts.nodate ? ` (그 날짜가 있는 해 ${D.dateCounts.exists}개)` : ""}</small></dd></div><div><dt>자료 범위</dt><dd>일자료 ${D.dailyFrom.slice(0, 4)}~${dot(stn.dailyLast)} / 시간자료 ${D.hourlyFrom.slice(0, 4)}~ ${window.InfoTip.btn("'전체'는 이 서비스가 가진 범위이며 기상청 전체 역사가 아닙니다.", { label: "자료 범위" })}</dd></div></dl></div>`;
   }
 
@@ -332,9 +387,12 @@
     if (r.dateStatus !== "ok") body = `<span class="dy-st">${E(STATUS(r.dateStatus))}</span>`;
     else if (!r.rowPresent) body = `<span class="dy-st">자료 없음</span>`;
     else body = `<span class="dy-t"><b class="dy-hi" title="최고기온">${tv(v.max)}°</b><span class="dy-sl">/</span><b class="dy-lo" title="최저기온">${tv(v.min)}°</b><small>평균 ${tv(v.avg)}℃</small></span><span class="dy-r">${rainText(r)}</span><span class="dy-w"><small>바람 ${tv(v.wind)}m/s${fin(v.gust) ? ` · 순간 ${tv(v.gust)}` : ""}${fin(v.sun) ? ` · 일조 ${tv(v.sun)}시간` : ""}</small></span>`;
+    // 그 해 그 날짜에 특정일이 있으면 연도 옆에 작은 배지(첫 이름 + '외 n'). 날씨 값과 무관한 표시다.
+    const evs = calOf(r.solarDate);
+    const evBadge = evs.length ? ` <span class="dy-ev" title="${E(evs.map((e) => e.label).join(" · "))}">${E(CAL_SHORT(evs[0]))}${evs.length > 1 ? ` 외 ${evs.length - 1}` : ""}</span>` : "";
     const canOv = ok && y >= 1990 && y !== st.y && !outside;
     const ov = st.cmp.includes(y);
-    return `<li class="dy-row${chosen ? " sel" : ""}${ok ? "" : " na"}"><button type="button" class="dy-pick" data-pick="${y}" aria-pressed="${chosen}" aria-label="${y}년 이날 자세히 보기"><span class="dy-ic">${obsIcon(r)}</span><span class="dy-yr"><b>${y}</b><small>${date}${chosen ? ` <em class="dy-tag">${outside ? "고른 해 · 기간 밖" : "고른 해"}</em>` : ""}</small></span>${body}</button>${canOv ? `<button type="button" class="dy-ov${ov ? " on" : ""}" data-ov="${y}" aria-pressed="${ov}" title="시간 그래프에 겹쳐 보기">${ov ? "✓ 겹침" : "+ 시간"}</button>` : `<span class="dy-ov-sp"></span>`}</li>`;
+    return `<li class="dy-row${chosen ? " sel" : ""}${ok ? "" : " na"}"><button type="button" class="dy-pick" data-pick="${y}" aria-pressed="${chosen}" aria-label="${y}년 이날 자세히 보기"><span class="dy-ic">${obsIcon(r)}</span><span class="dy-yr"><b>${y}${evBadge}</b><small>${date}${chosen ? ` <em class="dy-tag">${outside ? "고른 해 · 기간 밖" : "고른 해"}</em>` : ""}</small></span>${body}</button>${canOv ? `<button type="button" class="dy-ov${ov ? " on" : ""}" data-ov="${y}" aria-pressed="${ov}" title="시간 그래프에 겹쳐 보기">${ov ? "✓ 겹침" : "+ 시간"}</button>` : `<span class="dy-ov-sp"></span>`}</li>`;
   }
   // ---- ① 해마다 이날
   function renderYears() {

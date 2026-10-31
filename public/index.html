@@ -139,6 +139,28 @@
     .login-note button { height:28px; padding:0 10px; font-size:12px; background:transparent; color:var(--warn); border:1px solid currentColor; }
     .login-note button:hover:not(:disabled) { background:rgba(138,75,0,.08); }
     #uBody td { vertical-align:middle; }
+    /* 캘린더 관리(#/calendar): 기존 화면과 같은 카드·표·버튼만 쓰고, 여기서는 배치 몇 가지만 */
+    #calendar td.nw, #calendar th { white-space:nowrap; }
+    #calendar td { vertical-align:middle; }
+    .cal-acts { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:end; margin-top:10px; }
+    .cal-acts .muted { flex:1 1 240px; min-width:0; margin:0; align-self:center; }
+    .cal-imp { margin-top:12px; padding-top:12px; border-top:1px dashed var(--line); display:grid; gap:8px; }
+    .cal-imp[hidden] { display:none; }
+    .cal-imp textarea { width:100%; box-sizing:border-box; min-height:120px; padding:9px 11px; border:1px solid #d3deee; border-radius:10px; font:inherit; font-size:13.5px; line-height:1.55; resize:vertical; background:#fff; color:var(--fg); }
+    .cal-imp textarea:focus-visible { outline:none; border-color:var(--pri); box-shadow:0 0 0 3px rgba(2,110,248,.18); }
+    .cal-imp input[type=file] { max-width:100%; font-size:13px; color:var(--muted); }
+    .cal-imp input[type=file]::file-selector-button { margin-right:8px; padding:6px 12px; border:1px solid #d3deee; border-radius:9px; background:#fff; color:var(--fg); font:inherit; font-size:13px; cursor:pointer; }
+    .cal-imp-help { margin:0; line-height:1.6; }
+    .cal-form { align-items:end; }
+    .cal-form .cal-wide { flex:2 1 260px; }
+    .cal-leap { margin-top:8px; }
+    .cal-leap[hidden] { display:none; }
+    .cal-filters { margin:6px 0 10px; }
+    .cal-filters select { height:34px; }
+    .cal-sum { margin:0 0 10px; font-size:13px; line-height:1.7; color:var(--fg); }
+    .cal-sum:empty { display:none; }
+    .cal-sum-i b { font-variant-numeric:tabular-nums; color:#8a3d06; }
+    #calMsg.bad, #calFormMsg.bad { color:var(--bad); }
     #users td.nw, #users th { white-space:nowrap; }
     .u-name { display:flex; align-items:center; gap:8px; }
     .u-name img, .u-name .av { width:28px; height:28px; border-radius:50%; object-fit:cover; background:var(--soft); color:var(--pri); display:inline-grid; place-items:center; font-weight:700; font-size:12px; flex:none; }
@@ -581,6 +603,7 @@
           <a href="#/stations" data-page="stations">관측지점</a>
           <a href="#/provider" data-page="provider">공급원</a>
           <a href="#/users" data-page="users" id="navUsers" hidden>사용자</a>
+          <a href="#/calendar" data-page="calendar">캘린더 관리</a>
         </div>
       </nav>
       <div class="dr-auth" id="drAuth"></div>
@@ -819,6 +842,57 @@
             <p class="muted" id="uHelp">카카오로 로그인한 사용자 목록입니다. 처음 로그인하면 <b>승인 대기</b>로 등록되고, 승인한 사용자만 관리 메뉴(자료수집·미적재 현황·수집이력·관측지점·공급원)를 쓸 수 있습니다. 차단하면 로그인 세션도 바로 끊깁니다.</p>
             <p class="muted" id="uMsg"></p>
             <div style="overflow:auto" id="uTable"><table><thead><tr><th>사용자</th><th>카카오 회원번호</th><th>상태</th><th>처음 로그인</th><th>최근 로그인</th><th>관리</th></tr></thead><tbody id="uBody"></tbody></table></div>
+          </div>
+        </section>
+        <section class="page" id="calendar">
+          <div class="card">
+            <div class="card-head"><h2>특정일 캘린더</h2><a href="#/stories/day">날짜로 보는 날씨 ›</a></div>
+            <p class="muted">설날·추석·수능일 같은 특정일을 등록합니다. '날짜로 보는 날씨'에 표시됩니다.</p>
+            <p class="muted">설날·추석은 음력 규칙(음력 1/1, 8/15)으로 저장되어 해마다 자동 계산됩니다. 수능일처럼 해마다 달라지는 날은 그 해 날짜를 한 번씩 넣습니다.</p>
+            <div class="cal-acts">
+              <button type="button" id="calSeed">기본 자료 채우기</button>
+              <button type="button" class="sec" id="calImpToggle" aria-expanded="false" aria-controls="calImpBox">가져오기</button>
+              <span class="muted" id="calMsg" role="status"></span>
+            </div>
+            <div class="cal-imp" id="calImpBox" hidden>
+              <label for="calImpText">가져오기 — 한 줄에 하루, 또는 캘린더 파일(.ics) 내용</label>
+              <textarea id="calImpText" rows="6" spellcheck="false" placeholder="2026-11-19 2027학년도 수능&#10;11월 19일 수능&#10;음력 8월 15일 추석&#10;음력 윤 4월 15일 윤달&#10;(또는 캘린더 앱에서 내려받은 .ics 파일 내용 전체)"></textarea>
+              <p class="muted cal-imp-help">날짜 뒤 나머지 전체가 이름입니다. <b>2026-11-19 이름</b> = 그날 한 번 · <b>11-19 이름</b> = 해마다 양력 · <b>음력 8월 15일 이름</b> = 해마다 음력(<b>음력 윤</b> = 윤달). 점·빗금·한글 표기(<b>2026년 11월 19일</b>)도 됩니다. 빈 줄과 <b>#</b> 으로 시작하는 줄은 건너뜁니다.</p>
+              <p class="muted cal-imp-help">구글·아이폰 캘린더에서 내려받은 <b>.ics</b> 파일은 아래 '파일 열기'로 넣으면 일정 이름·날짜가 그대로 들어옵니다. 해마다 되풀이되는 일정(반복 규칙)은 '매년'으로, 한 번뿐인 일정은 그해 날짜로 들어갑니다.</p>
+              <div class="cal-acts">
+                <div><label for="calImpFile">캘린더 파일</label><input id="calImpFile" type="file" accept=".ics,text/calendar,text/plain" /></div>
+                <div><label for="calImpKind">종류</label><select id="calImpKind"></select></div>
+                <button type="button" id="calImpGo">가져오기</button>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2 id="calFormTitle">특정일 추가</h2></div>
+            <div class="row cal-form">
+              <div><label for="calKind">종류</label><select id="calKind"></select></div>
+              <div class="cal-wide"><label for="calLabel">이름 (필수)</label><input id="calLabel" maxlength="120" autocomplete="off" placeholder="예: 2027학년도 대학수학능력시험" /></div>
+              <div><label for="calCal">기준</label><select id="calCal"><option value="solar">양력</option><option value="lunar">음력</option></select></div>
+              <div><label for="calMonth">월</label><input id="calMonth" type="number" min="1" max="12" inputmode="numeric" /></div>
+              <div><label for="calDay">일</label><input id="calDay" type="number" min="1" max="31" inputmode="numeric" /></div>
+              <div><label for="calYear">연도 (비우면 매년)</label><input id="calYear" type="number" min="1900" max="2050" inputmode="numeric" placeholder="예: 2026" /></div>
+              <div><label for="calYearLabel">학년도 표기 (선택)</label><input id="calYearLabel" maxlength="24" autocomplete="off" placeholder="예: 2027학년도" /></div>
+              <div class="cal-wide"><label for="calNote">비고 (선택)</label><input id="calNote" maxlength="255" autocomplete="off" placeholder="예: 포항 지진으로 1주 연기" /></div>
+            </div>
+            <label class="sx-check cal-leap" id="calLeapWrap"><input type="checkbox" id="calLeap" /> 윤달 (음력일 때)</label>
+            <div class="cal-acts">
+              <button type="button" id="calSave">추가</button>
+              <button type="button" class="sec" id="calCancel" hidden>취소</button>
+              <span class="muted" id="calFormMsg" role="status"></span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>등록된 특정일</h2><span class="muted" id="calCount"></span></div>
+            <div class="controls cal-filters">
+              <div class="ctl"><span>연도</span><select id="calFilterYear"></select></div>
+              <div class="ctl"><span>종류</span><select id="calFilterKind"></select></div>
+            </div>
+            <p class="cal-sum" id="calYearSum"></p>
+            <div style="overflow:auto"><table><thead><tr><th>날짜</th><th>이름</th><th>종류</th><th>비고</th><th>관리</th></tr></thead><tbody id="calBody"></tbody></table></div>
           </div>
         </section>
         <section class="page" id="provider">
@@ -1970,6 +2044,7 @@
       stations: ["관리", "관측지점", "등록된 관측지점과 사용 여부"],
       provider: ["관리", "공급원", "자료를 받아오는 곳과 인증키 상태"],
       users: ["관리", "사용자", "카카오 로그인 사용자 승인과 차단"],
+      calendar: ["관리", "캘린더 관리", "설날·추석·수능일 같은 특정일 등록 — 날짜로 보는 날씨에 표시"],
     };
     function setPageHead(name) {
       let [g, t, d] = PAGE_HEAD[name] || PAGE_HEAD.dash;
@@ -2000,7 +2075,7 @@
     }
     // ---------- 카카오 로그인 (서버에 키가 설정된 경우에만 켜짐) ----------
     let me = { authEnabled: false, loggedIn: false, role: "none" };
-    const ADMIN_PAGES = new Set(["collect", "gaps", "jobs", "stations", "provider", "users"]);
+    const ADMIN_PAGES = new Set(["collect", "gaps", "jobs", "stations", "provider", "users", "calendar"]);
     const canAdmin = () => !me.authEnabled || me.role === "admin";
     const isNuni = () => me.provider === "nuni-id";
     const isLockedPage = (name) => ADMIN_PAGES.has(name) && !canAdmin();
@@ -2164,6 +2239,268 @@
       if (!r.ok) $("uMsg").textContent = d.message || "바꾸지 못했습니다.";
       await loadUsers();
     });
+    // ---------- 캘린더 관리(#/calendar): 설날·추석·수능일 같은 특정일 등록
+    // 저장 모델은 서버(calendar-events.mjs)와 같다 — year 가 비면 '해마다 규칙', 값이 있으면 '그 해 한 번뿐인 날'.
+    // 음력 규칙은 날짜를 박지 않고 규칙으로 두어 해마다 자동 계산되게 한다(표를 매년 손보지 않게).
+    const CAL = { rows: [], kinds: [], filterYear: "", filterKind: "", editing: null, ready: false, busy: false };
+    const calDateText = (r) => (r.year != null
+      ? `${r.year}.${String(r.month).padStart(2, "0")}.${String(r.day).padStart(2, "0")}${r.cal === "lunar" ? ` <small>음력 ${r.leap ? "윤" : ""}${r.month}.${r.day}</small>` : ""}`
+      : `매년 ${r.cal === "lunar" ? `음력 ${r.leap ? "윤" : ""}${r.month}.${r.day}` : `${r.month}.${r.day}`}`);
+    const calKindLabel = (k) => (CAL.kinds.find((x) => x.id === k) || { label: k }).label;
+    function calSay(el, text, bad = false) {
+      const t = $(el);
+      if (!t) return;
+      t.textContent = text || "";
+      t.classList.toggle("bad", !!bad);
+    }
+    // 서버 오류 메시지를 화면 안에서만 알린다(alert 안 씀 — 기존 관리 화면 관례)
+    async function calFetch(url, init) {
+      const r = await fetch(url, init);
+      const d = await r.json().catch(() => ({ ok: false, message: `응답을 읽지 못했습니다(${r.status})` }));
+      if (!r.ok || !d.ok) throw new Error(d.message || `요청을 처리하지 못했습니다(${r.status})`);
+      return d;
+    }
+    function calFillSelects() {
+      const kindOpts = CAL.kinds.map((k) => `<option value="${esc(k.id)}">${esc(k.label)}</option>`).join("");
+      for (const id of ["calKind", "calImpKind"]) {
+        const sel = $(id);
+        if (!sel) continue;
+        const keep = sel.value;
+        sel.innerHTML = kindOpts;
+        if ([...sel.options].some((o) => o.value === keep)) sel.value = keep;
+      }
+      const fs = $("calFilterKind"); // 목록 필터는 '전체'가 필요하다
+      if (fs) {
+        const keep = CAL.filterKind;
+        fs.innerHTML = `<option value="">전체</option>${kindOpts}`;
+        fs.value = keep;
+        if (fs.value !== keep) { CAL.filterKind = ""; fs.value = ""; }
+      }
+    }
+    function calFillYearFilter() {
+      const sel = $("calFilterYear");
+      if (!sel) return;
+      // 등록된 연도 + 올해·다음 해 — 등록된 날이 없는 해도 '그 해에 설날·추석이 언제인지' 확인할 수 있게(규칙은 해마다 계산된다).
+      const thisYear = new Date(Date.now() + 9 * 3600000).getUTCFullYear();
+      const years = [...new Set([...CAL.rows.map((r) => r.year).filter((y) => y != null), thisYear, thisYear + 1])].sort((a, b) => b - a);
+      const opts = [`<option value="">전체</option>`, `<option value="rule">매년 규칙</option>`, ...years.map((y) => `<option value="${y}">${y}년</option>`)].join("");
+      sel.innerHTML = opts;
+      sel.value = CAL.filterYear;
+      if (sel.value !== CAL.filterYear) { CAL.filterYear = ""; sel.value = ""; }
+    }
+    function calFormReset() {
+      CAL.editing = null;
+      $("calFormTitle").textContent = "특정일 추가";
+      $("calKind").value = "custom";
+      $("calLabel").value = "";
+      $("calCal").value = "solar";
+      const t = new Date(Date.now() + 9 * 3600000);
+      $("calMonth").value = t.getUTCMonth() + 1;
+      $("calDay").value = t.getUTCDate();
+      $("calYear").value = "";
+      $("calYearLabel").value = "";
+      $("calNote").value = "";
+      $("calLeap").checked = false;
+      $("calSave").textContent = "추가";
+      $("calCancel").hidden = true;
+      calSyncCalFields();
+      calSay("calFormMsg", "");
+    }
+    // 양력에는 윤달이 없다 → 음력일 때만 체크상자를 보여 준다.
+    function calSyncCalFields() {
+      const lunar = $("calCal").value === "lunar";
+      $("calLeapWrap").hidden = !lunar;
+      $("calDay").max = lunar ? 30 : 31;
+    }
+    function calEdit(r) {
+      CAL.editing = r.id;
+      $("calFormTitle").textContent = "특정일 수정";
+      $("calKind").value = r.kind;
+      $("calLabel").value = r.label;
+      $("calCal").value = r.cal;
+      $("calMonth").value = r.month;
+      $("calDay").value = r.day;
+      $("calYear").value = r.year == null ? "" : r.year;
+      $("calYearLabel").value = r.yearLabel || "";
+      $("calNote").value = r.note || "";
+      $("calLeap").checked = !!r.leap;
+      $("calSave").textContent = "저장";
+      $("calCancel").hidden = false;
+      calSyncCalFields();
+      calSay("calFormMsg", "");
+      $("calFormTitle").scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    // 해를 고르면 그 해 것 + 매년 규칙(그 해에도 있는 날)을 함께 보여 준다 — 규칙만 '해당 없음'으로 빠지면 오해하기 쉽다.
+    // 그 해 실제 양력 날짜는 서버 조회(/api/calendar/events?from=Y&to=Y) 결과를 위에 요약으로 붙인다(화면에서 음력을 다시 계산하지 않음).
+    let calYearSummary = null;
+    function calRender() {
+      calFillYearFilter();
+      const want = CAL.filterYear;
+      const rows = CAL.rows.filter((r) => {
+        if (want === "rule") { if (r.year != null) return false; }
+        else if (want) { if (r.year != null && String(r.year) !== want) return false; }
+        if (CAL.filterKind && r.kind !== CAL.filterKind) return false;
+        return true;
+      });
+      // 최근 날짜부터 보는 게 편하다 — 매년 규칙은 맨 위, 한 번뿐인 날은 연도 내림차순
+      rows.sort((a, b) => (a.year == null ? -1 : b.year == null ? 1 : b.year - a.year) || a.month - b.month || a.day - b.day || String(a.label).localeCompare(String(b.label), "ko"));
+      const nOne = CAL.rows.filter((r) => r.year != null).length;
+      $("calCount").textContent = CAL.rows.length ? `${CAL.rows.length}개 (매년 규칙 ${CAL.rows.length - nOne} · 한 번뿐인 날 ${nOne})` : "";
+      const sum = $("calYearSum");
+      if (sum) {
+        sum.innerHTML = want && want !== "rule" ? (calYearSummary && calYearSummary.year === want ? calYearSummary.html : `<span class="muted">${want}년 날짜를 계산하는 중…</span>`) : "";
+      }
+      $("calBody").innerHTML = rows.length
+        ? rows.map((r) => `<tr><td class="nw">${calDateText(r)}</td><td>${esc(r.label)}${r.yearLabel && !String(r.label).includes(r.yearLabel) ? ` <small class="muted">${esc(r.yearLabel)}</small>` : ""}</td><td class="nw">${esc(calKindLabel(r.kind))}</td><td>${r.note ? esc(r.note) : `<span class="muted">–</span>`}</td><td class="nw"><span class="u-acts"><button type="button" class="sec" data-cal-edit="${esc(r.id)}">수정</button><button type="button" class="sec" data-cal-del="${esc(r.id)}">삭제</button></span></td></tr>`).join("")
+        : `<tr><td colspan="5" class="muted">${CAL.rows.length ? "조건에 맞는 특정일이 없습니다." : "등록된 특정일이 없습니다. '기본 자료 채우기'로 역대 수능·학력고사·설날·추석을 넣거나, 아래에서 직접 추가하세요."}</td></tr>`;
+    }
+    // 고른 해의 실제 양력 날짜 요약("2.17 설날 · 9.25 추석 · 11.19 2027학년도 대학수학능력시험"). 실패해도 목록은 그대로.
+    async function calLoadYearSummary() {
+      const y = CAL.filterYear;
+      if (!y || y === "rule" || !/^\d{4}$/.test(y)) { calYearSummary = null; calRender(); return; }
+      try {
+        const d = await calFetch(`/api/calendar/events?from=${y}&to=${y}`);
+        const list = (d.events || []).filter((e) => !CAL.filterKind || e.kind === CAL.filterKind);
+        const html = list.length
+          ? `<b>${y}년</b> ${list.map((e) => `<span class="cal-sum-i"><b>${esc(String(+e.solarDate.slice(5, 7)))}.${esc(String(+e.solarDate.slice(8, 10)))}</b> ${esc(e.label)}</span>`).join(" · ")}`
+          : `<span class="muted">${y}년에 해당하는 특정일이 없습니다.</span>`;
+        calYearSummary = { year: y, html };
+      } catch {
+        calYearSummary = { year: y, html: `<span class="muted">${y}년 날짜를 계산하지 못했습니다.</span>` };
+      }
+      calRender();
+    }
+    async function loadCalendar() {
+      calSay("calMsg", "불러오는 중…");
+      try {
+        const d = await calFetch("/api/calendar/events?all=1");
+        CAL.rows = d.events || [];
+        CAL.kinds = d.kinds || [];
+        calFillSelects();
+        calRender();
+        calLoadYearSummary();
+        calSay("calMsg", CAL.rows.length ? "" : "아직 등록된 특정일이 없습니다.");
+      } catch (e) {
+        CAL.rows = [];
+        calRender();
+        calSay("calMsg", `목록을 불러오지 못했습니다 · ${e.message}`, true);
+      }
+    }
+    function initCalendar() {
+      if (!CAL.ready) {
+        CAL.ready = true;
+        calFillSelects();
+        calFillYearFilter();
+        calFormReset();
+        $("calSeed").onclick = async () => {
+          if (CAL.busy) return;
+          CAL.busy = true;
+          calSay("calMsg", "기본 자료를 넣는 중…");
+          try {
+            const d = await calFetch("/api/calendar/seed", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+            await loadCalendar();
+            calSay("calMsg", `기본 자료를 채웠습니다 — 새로 ${d.added}개, 지금 ${d.total}개.`);
+          } catch (e) {
+            calSay("calMsg", `기본 자료를 넣지 못했습니다 · ${e.message}`, true);
+          } finally { CAL.busy = false; }
+        };
+        $("calImpToggle").onclick = () => {
+          const box = $("calImpBox");
+          box.hidden = !box.hidden;
+          $("calImpToggle").setAttribute("aria-expanded", String(!box.hidden));
+          if (!box.hidden) $("calImpText").focus();
+        };
+        // .ics 파일을 고르면 내용을 상자에 채운다(서버로 바로 보내지 않고, 넣을 내용을 먼저 보여 준다).
+        $("calImpFile").onchange = async () => {
+          const f = $("calImpFile").files && $("calImpFile").files[0];
+          if (!f) return;
+          if (f.size > 2 * 1024 * 1024) { calSay("calMsg", "2MB 까지 가져올 수 있습니다.", true); $("calImpFile").value = ""; return; }
+          try {
+            $("calImpText").value = await f.text();
+            calSay("calMsg", `${f.name} 내용을 읽었습니다. '가져오기'를 누르면 저장합니다.`);
+          } catch (e) {
+            calSay("calMsg", `파일을 읽지 못했습니다 · ${e.message}`, true);
+          }
+        };
+        $("calImpGo").onclick = async () => {
+          if (CAL.busy) return;
+          const text = $("calImpText").value;
+          if (!text.trim()) { calSay("calMsg", "가져올 내용을 붙여넣어 주세요.", true); return; }
+          CAL.busy = true;
+          calSay("calMsg", "가져오는 중…");
+          try {
+            const d = await calFetch("/api/calendar/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, kind: $("calImpKind").value }) });
+            await loadCalendar();
+            const bad = (d.errors || []).length;
+            let msg = `${d.format === "ics" ? "캘린더 파일" : "붙여넣은 글"}에서 ${d.added}개 추가, ${d.updated}개 갱신`;
+            if (bad) msg += `, 잘못된 줄 ${bad}개`;
+            if (bad) msg += ` — ${d.errors.slice(0, 3).map((x) => `${x.line}행: ${x.message}`).join(" / ")}${bad > 3 ? " …" : ""}`;
+            calSay("calMsg", msg + (d.added + d.updated ? "" : " (저장한 줄이 없습니다)"), bad > 0 && !d.added && !d.updated);
+            if (d.added + d.updated) $("calImpText").value = "";
+          } catch (e) {
+            calSay("calMsg", `가져오지 못했습니다 · ${e.message}`, true);
+          } finally { CAL.busy = false; }
+        };
+        $("calCal").onchange = calSyncCalFields;
+        $("calFilterYear").onchange = () => { CAL.filterYear = $("calFilterYear").value; calRender(); calLoadYearSummary(); };
+        $("calFilterKind").onchange = () => { CAL.filterKind = $("calFilterKind").value; calRender(); };
+        $("calCancel").onclick = () => calFormReset();
+        $("calSave").onclick = async () => {
+          if (CAL.busy) return;
+          const body = {
+            kind: $("calKind").value,
+            label: $("calLabel").value,
+            cal: $("calCal").value,
+            month: Number($("calMonth").value),
+            day: Number($("calDay").value),
+            leap: $("calCal").value === "lunar" && $("calLeap").checked,
+            year: $("calYear").value === "" ? null : Number($("calYear").value),
+            yearLabel: $("calYearLabel").value,
+            note: $("calNote").value,
+          };
+          if (!String(body.label).trim()) { calSay("calFormMsg", "이름을 입력해 주세요.", true); $("calLabel").focus(); return; }
+          if (!Number.isInteger(body.month) || body.month < 1 || body.month > 12) { calSay("calFormMsg", "월은 1~12 사이입니다.", true); return; }
+          if (!Number.isInteger(body.day) || body.day < 1) { calSay("calFormMsg", "일을 확인해 주세요.", true); return; }
+          if (body.year !== null && (!Number.isInteger(body.year) || body.year < 1900 || body.year > 2050)) { calSay("calFormMsg", "연도는 비우거나 1900~2050 사이로 넣어 주세요.", true); return; }
+          CAL.busy = true;
+          calSay("calFormMsg", "저장 중…");
+          try {
+            const edited = CAL.editing;
+            if (edited) await calFetch(`/api/calendar/events/${encodeURIComponent(edited)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+            else await calFetch("/api/calendar/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+            calFormReset();
+            await loadCalendar(); // 목록을 다시 읽은 뒤에 알린다(loadCalendar 가 calMsg 를 비우므로 순서가 중요)
+            calSay("calMsg", edited ? "특정일을 고쳤습니다." : "특정일을 추가했습니다.");
+          } catch (e) {
+            calSay("calFormMsg", e.message, true);
+          } finally { CAL.busy = false; }
+        };
+        $("calBody").addEventListener("click", async (e) => {
+          const eb = e.target.closest("button[data-cal-edit]");
+          const db = e.target.closest("button[data-cal-del]");
+          if (eb) {
+            const r = CAL.rows.find((x) => x.id === eb.dataset.calEdit);
+            if (r) calEdit(r);
+            return;
+          }
+          if (!db) return;
+          const r = CAL.rows.find((x) => x.id === db.dataset.calDel);
+          if (!r) return;
+          if (!confirm(`'${r.label}' 특정일을 지울까요?`)) return;
+          db.disabled = true;
+          try {
+            await calFetch(`/api/calendar/events/${encodeURIComponent(r.id)}`, { method: "DELETE" });
+            if (CAL.editing === r.id) calFormReset();
+            await loadCalendar();
+            calSay("calMsg", "특정일을 지웠습니다.");
+          } catch (err) {
+            db.disabled = false;
+            calSay("calMsg", `지우지 못했습니다 · ${err.message}`, true);
+          }
+        });
+      }
+      loadCalendar();
+    }
     function show(name) {
       setPageHead(name);
       const target = isLockedPage(name) ? "locked" : name === "questions" ? "dash" : name; // 질문으로 보는 날씨 = 날씨 통계 화면 안의 패널
@@ -2183,6 +2520,7 @@
       renderAuth(); // 로그인 버튼의 돌아올 화면(next) 갱신
       if (target === "locked") { renderLocked(name); return; }
       if (name === "users") loadUsers();
+      if (name === "calendar") initCalendar();
       if (name === "hourly") queryHourly();
       if (name === "daily") queryDaily();
       if (name === "download") initDownload();
@@ -2197,7 +2535,7 @@
     }
     // 예전 주소(#/hourly, #/daily, #/download)는 새 주소로 바꿔 계속 쓸 수 있게(뒤에 붙은 ?조건은 그대로)
     const ROUTE_ALIAS = { "/hourly": "/hourly-weather", "/daily": "/daily-weather", "/download": "/view-settings" };
-    const ROUTE_KNOWN = new Set(["/stats/overview", "/questions", "/today", "/forecast", "/stats/yearly", "/stats/region", "/stats/life", "/stats/records", "/hourly-weather", "/daily-weather", "/view-settings", "/collect", "/gaps", "/jobs", "/stations", "/provider", "/users", "/stories/day", "/stories/battle", "/my", ...Object.keys(ROUTE_ALIAS)]);
+    const ROUTE_KNOWN = new Set(["/stats/overview", "/questions", "/today", "/forecast", "/stats/yearly", "/stats/region", "/stats/life", "/stats/records", "/hourly-weather", "/daily-weather", "/view-settings", "/collect", "/gaps", "/jobs", "/stations", "/provider", "/users", "/calendar", "/stories/day", "/stories/battle", "/my", ...Object.keys(ROUTE_ALIAS)]);
     let lastRoutePath = null;
     function route() {
       {
@@ -2239,7 +2577,7 @@
       }
       const h = location.hash.replace("#", "").split("?")[0] || "/";
       const statsTab = { "/": "overview", "/stats/overview": "overview", "/stats/yearly": "yearly", "/stats/region": "region", "/stats/life": "life", "/stats/records": "records", "/questions": "questions" }[h] || (h.startsWith("/stats/") ? "overview" : null);
-      const map = { "/": "dash", "/stats/overview": "dash", "/questions": "questions", "/today": "today", "/forecast": "forecast", "/stats/yearly": "dash", "/stats/region": "dash", "/stats/life": "dash", "/stats/records": "dash", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/users": "users", "/stories/day": "sday", "/stories/battle": "sbattle", "/my": "mysettings" };
+      const map = { "/": "dash", "/stats/overview": "dash", "/questions": "questions", "/today": "today", "/forecast": "forecast", "/stats/yearly": "dash", "/stats/region": "dash", "/stats/life": "dash", "/stats/records": "dash", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/users": "users", "/calendar": "calendar", "/stories/day": "sday", "/stories/battle": "sbattle", "/my": "mysettings" };
       let name = map[h] || "dash";
       if (name === "users" && !me.authEnabled) name = "dash";
       show(name);
@@ -2881,7 +3219,7 @@
     try { history.scrollRestoration = "manual"; } catch (e) {}
     // 메뉴를 누르면(지금 화면 메뉴를 다시 눌러도) 맨 위에서 시작
     document.querySelector("aside nav").addEventListener("click", (e) => { if (e.target.closest('a[href^="#/"]')) window.scrollTo(0, 0); }, true);
-    setPageHead(({ "/today": "today", "/forecast": "forecast", "/questions": "questions", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/stories/day": "sday", "/stories/battle": "sbattle", "/my": "mysettings" })[location.hash.replace("#", "").split("?")[0]] || "dash");
+    setPageHead(({ "/today": "today", "/forecast": "forecast", "/questions": "questions", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/calendar": "calendar", "/stories/day": "sday", "/stories/battle": "sbattle", "/my": "mysettings" })[location.hash.replace("#", "").split("?")[0]] || "dash");
     showLoginNote();
     // 대시보드 자료가 늦거나 실패해도 다른 화면은 그대로 뜨게
     // 기본 지점(geo.js): 지금 화면의 지점, 나중에 정해진 기본 지점(위치·내 계정) 반영 — 주소에 지점을 넣었거나 직접 고른 뒤에는 바꾸지 않음
