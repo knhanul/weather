@@ -183,6 +183,58 @@
     svg.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); const i = it.cur(); if (i >= 0 && o.onPick) o.onPick(o.rows[i].year); } });
   }
 
+  // ---------------------------------------------------------------- 특정일 · 해마다 실제 시행일(두 줄: 최고·최저)
+  // x = 그해 실제 날짜 순서(연도 순서와 거의 같지만 날짜가 밀린 만큼 점 간격은 균등). 값 없음 = 선 끊김·빈 칸(빗금).
+  // o: { points: [{ label(학년도), year, solarDate, md, values: {max,min}, statusText }], series: [{key,label,color,mark}], unit, digits, aria, tip(i) }
+  function seriesChart(el, o) {
+    const W = widthOf(el);
+    const H = W < 520 ? 250 : 300;
+    const L = 38, R = 12, T = 12, B = 40;
+    const id = `dv${++uid}`;
+    const n = o.points.length;
+    const xs = (i) => (n <= 1 ? L + (W - L - R) / 2 : L + (i / (n - 1)) * (W - L - R));
+    const vals = [];
+    for (const p of o.points) for (const s of o.series) vals.push(p.values?.[s.key]);
+    const [lo, hi] = niceRange(vals, { pad: 0.12 });
+    const ys = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+    let g = `<svg class="dv-svg" viewBox="0 0 ${W} ${H}" role="img" tabindex="0" aria-label="${esc(o.aria || "해마다 실제 날짜의 기온")}"><defs>${hatch(`${id}h`)}</defs>`;
+    for (const t of ticks(lo, hi)) g += `<line class="dv-grid" x1="${L}" x2="${W - R}" y1="${ys(t)}" y2="${ys(t)}"/><text class="dv-ax" x="${L - 5}" y="${ys(t) + 4}" text-anchor="end">${t}</text>`;
+    // 값이 없는 점(자료 없음)은 세로 빗금 — 다른 날 값으로 이어 붙이지 않는다는 표시
+    for (const [a, b] of runs(n, (i) => o.series.every((s) => !fin(o.points[i].values?.[s.key])))) {
+      const x0 = Math.max(L, xs(a) - (W - L - R) / (n * 2) * 0.9);
+      const x1 = Math.min(W - R, xs(b) + (W - L - R) / (n * 2) * 0.9);
+      g += `<rect x="${x0}" y="${T}" width="${Math.max(1.5, x1 - x0)}" height="${H - T - B}" fill="url(#${id}h)" opacity=".55"><title>${esc(o.points[a].statusText || "자료 없음")}</title></rect>`;
+    }
+    for (const s of o.series) {
+      const okAt = (i) => fin(o.points[i].values?.[s.key]);
+      for (const [a, b] of runs(n, okAt)) {
+        if (a === b) g += `<circle cx="${xs(a)}" cy="${ys(o.points[a].values[s.key])}" r="2.8" fill="${s.color}"/>`;
+        else g += `<polyline fill="none" stroke="${s.color}" stroke-width="2.4" stroke-linejoin="round" points="${Array.from({ length: b - a + 1 }, (_, k) => `${xs(a + k)},${ys(o.points[a + k].values[s.key])}`).join(" ")}"/>`;
+      }
+      for (let i = 0; i < n; i++) if (okAt(i)) g += `<circle cx="${xs(i)}" cy="${ys(o.points[i].values[s.key])}" r="${n > 40 ? 2 : 3}" fill="#fff" stroke="${s.color}" stroke-width="1.8"/>`;
+    }
+    // x 라벨: 점이 많으면 솎아(2줄 — 위 학년도/연도, 아래 실제 월·일). 날짜가 밀린 것이 눈에 보이게.
+    const step = Math.max(1, Math.ceil(n / Math.max(2, Math.floor((W - L - R) / 44))));
+    o.points.forEach((p, i) => {
+      if (i % step !== 0 && i !== n - 1) return;
+      if (i !== n - 1 && n - 1 - i < step * 0.6) return; // 끝 라벨과 겹치지 않게
+      g += `<text class="dv-ax" x="${xs(i)}" y="${H - 22}" text-anchor="middle">${esc(p.axis || p.year)}</text>`;
+      if (p.md) g += `<text class="dv-ax dv-ax2" x="${xs(i)}" y="${H - 10}" text-anchor="middle">${esc(p.md)}</text>`;
+    });
+    g += `<line class="dv-hv" x1="0" x2="0" y1="${T}" y2="${H - B}" visibility="hidden"/></svg>`;
+    el.innerHTML = `${g}<div class="dv-tip" aria-live="polite">${esc(o.hint || "그래프를 누르거나 ← → 키로 그해 값을 확인하세요")}</div>`;
+    const svg = el.querySelector("svg");
+    const hv = svg.querySelector(".dv-hv");
+    const tip = el.querySelector(".dv-tip");
+    const it = interact(svg, n, xs, (i) => { hv.setAttribute("x1", xs(i)); hv.setAttribute("x2", xs(i)); hv.setAttribute("visibility", "visible"); tip.innerHTML = o.tip(i); });
+    if (o.onPick) {
+      svg.classList.add("dv-click");
+      svg.addEventListener("click", () => { const i = it.cur(); if (i >= 0) o.onPick(o.points[i]); });
+      svg.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); const i = it.cur(); if (i >= 0) o.onPick(o.points[i]); } });
+    }
+    return { svg, pick: it.pick };
+  }
+
   // ---------------------------------------------------------------- 강수 유무 칸(해마다 한 칸): 물방울 = 강수, 빈 원 = 강수 없음, 빗금 = 자료 없음, 흐린 × = 그해 없는 날짜·미래
   function rainCells(rows, { onPick = null, selected = [] } = {}) {
     return `<div class="dv-cells" role="list">${rows.map((r) => {
@@ -250,5 +302,5 @@
     });
     return { lo, hi };
   }
-  window.DViz = { esc, fin, rnd, fmt, sgn, SEL, CASE, MEAN, hourChart, yearChart, rainCells, heatmap, niceRange };
+  window.DViz = { esc, fin, rnd, fmt, sgn, SEL, CASE, MEAN, hourChart, yearChart, seriesChart, rainCells, heatmap, niceRange };
 })();

@@ -74,6 +74,14 @@
   // 날짜로 보는 날씨: '서울(108) · 양력 2025-10-18 · 최근 10년'
   SUM.sd = () => {
     const $ = (id) => document.getElementById(id);
+    // 특정일 모드(#/stories/day?...&ev=csat): '서울(108) · 수능일 · 1994년부터'
+    const evOn = document.querySelector("#dsCtl [data-evk].on");
+    if (evOn && !$("dsDate")) {
+      const stE = $("dsSt"), from = $("dsEvFrom"), sel = $("dsEvName");
+      const stT = stE && stE.selectedOptions[0] ? short(stE.selectedOptions[0].textContent).replace(/^(.+?) \((\d+)\).*$/, "$1($2)") : "";
+      const nm = sel && sel.value ? sel.value : short(evOn.textContent);
+      return [stT, nm, from && from.value ? `${from.value}년부터` : ""].filter(Boolean).map((t) => t.replace(/ /g, "\u00a0"));
+    }
     const stS = $("dsSt"), per = $("dsPer"), dt = $("dsDate");
     const cal = document.querySelector("#dsCtl [data-cal].on");
     const leap = $("dsLeap");

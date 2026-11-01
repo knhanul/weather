@@ -2,7 +2,10 @@
 // 화면 모델: 날짜 하나(양력·음력 연월일) → ① 해마다 이날(그해 실제 관측 · 횟수·극값, 같은 날 평균 없음) ② 앞뒤 15일 날씨 통계(31일 창)
 //   ③ 고른 해의 시간별 관측(+겹쳐 볼 해 최대 2개, 평균 없음) ④ 연도 × 시간 히트맵(관측값) ⑤ 고른 해 그날 상세 ⑥ 짧은 이야기
 //   ⑦ 그해 특정일 — 관리 › 캘린더 관리(#/calendar)에 등록한 설날·추석·수능일 등을 그해 날짜 순으로(날씨 값과 무관, 표시만).
-// 주소 = 상태: station·cal·date(YYYY-MM-DD)·leap·cmp·period·to·from(+보기 hm·ym·hk). 예전 주소(m·d·year)도 그대로 읽는다.
+//   ⑧ 특정일 모드(ev=csat|hakryeok|holiday|custom 또는 ev=holiday|추석) — 그 특정일이 해마다 '실제로 며칠이었는지'를 따라가며
+//      그해 그 날짜 하루의 날씨를 /api/stats/date-series 로 받아 보여 준다(수능일·학력고사일처럼 날짜가 해마다 바뀌는 날용).
+//      특정일 모드에서는 ①~⑥(고른 월·일 고정) 카드를 그리지 않고 그 자리를 특정일 카드가 대신한다.
+// 주소 = 상태: station·cal·date(YYYY-MM-DD)·leap·cmp·period·to·from(+보기 hm·ym·hk, +특정일 ev). 예전 주소(m·d·year)도 그대로 읽는다.
 (() => {
   const V = window.DViz;
   const { esc: E, fmt, sgn, fin } = V;
@@ -20,13 +23,17 @@
   const YM = { max: ["최고기온", "℃", 1, "line"], min: ["최저기온", "℃", 1, "line"], avg: ["평균기온", "℃", 1, "line"], rain: ["일강수량", "mm", 1, "bar"], wind: ["평균 풍속", "m/s", 1, "line"], gust: ["최대 순간풍속", "m/s", 1, "line"], sun: ["일조시간", "시간", 1, "bar"] };
   const PERIODS = [["recent5", "최근 5년"], ["recent10", "최근 10년"], ["recent20", "최근 20년"], ["recent30", "최근 30년"], ["all", "전체"], ["custom", "직접 지정"]];
   const today = kst();
-  const st = { station: "108", cal: "solar", y: +today.slice(0, 4), m: +today.slice(5, 7), d: +today.slice(8, 10), leap: false, cmp: [], period: "recent10", to: THIS_YEAR - 1, from: THIS_YEAR - 10, hm: "ta", ym: "max", hk: "ta", alias: "", all: false };
+  const st = { station: "108", cal: "solar", y: +today.slice(0, 4), m: +today.slice(5, 7), d: +today.slice(8, 10), leap: false, cmp: [], period: "recent10", to: THIS_YEAR - 1, from: THIS_YEAR - 10, hm: "ta", ym: "max", hk: "ta", alias: "", all: false, ev: "", evFrom: 1994 };
+  const EV_KINDS = [["csat", "수능일"], ["hakryeok", "학력고사일"], ["holiday", "명절·기념일"], ["custom", "직접 추가"]];
+  const EV_DEFAULT_FROM = { csat: 1994, hakryeok: 1981, holiday: 1990, custom: 1990 }; // 시드 첫 시행 학년도(창 기본값)
   let meta = null;
   let seq = 0;
   let D = null; // 일자료 응답(해마다 이날 · 앞뒤 15일 · 고른 해)
   // 특정일(캘린더 관리에서 등록한 설날·추석·수능일). 날씨 계산과 섞지 않고 '보여 주기만' 한다 — 실패해도 본 화면은 그대로.
   let CAL = { map: new Map(), list: [], ok: false, pending: false }; // map: 양력 날짜 → 그날 특정일들, list: 그해 것(날짜 순)
   let H = null; // 시간자료 응답
+  let EV = null; // 특정일 모드 응답(/api/stats/date-series) — 그 특정일이 해마다 실제로 며칠이었는지 + 그날 값
+  let EVI = null; // 특정일 이름 목록(종류별) — 이름 고르기 상자 채우기
   const cache = new Map();
   const getJson = (url) => {
     if (cache.has(url)) return cache.get(url);
@@ -80,6 +87,13 @@
     if (HM[q.get("hm")]) st.hm = q.get("hm");
     if (YM[q.get("ym")]) st.ym = q.get("ym");
     if (HM[q.get("hk")]) st.hk = q.get("hk");
+    // 특정일 모드(ev=kind 또는 ev=kind|이름) — 없으면 ''. 모르는 종류는 무시(주소를 손으로 고쳐도 화면이 깨지지 않게)
+    const evRaw = String(q.get("ev") || "");
+    const [evK, ...evL] = evRaw.split("|");
+    st.ev = EV_KINDS.some(([k]) => k === evK) ? (evL.join("|").trim() ? `${evK}|${evL.join("|").trim().slice(0, 60)}` : evK) : "";
+    // 기간 시작: 주소 값 → 그 종류의 기본(수능 1994·학력고사 1981·명절 1990) → 1990. 특정일 모드가 아니면 건드리지 않는다.
+    if (st.ev) st.evFrom = n("evfrom", 1900, 2050) ?? EV_DEFAULT_FROM[st.ev.split("|")[0]] ?? 1990;
+    if (st.evFrom > THIS_YEAR) st.evFrom = THIS_YEAR;
     const saved = (() => { try { return localStorage.getItem(aliasKey()) || ""; } catch { return ""; } })();
     st.alias = (q.get("alias") || saved || "").slice(0, 30);
   }
@@ -91,6 +105,8 @@
     if (st.to !== THIS_YEAR - 1 || !view) q.set("to", String(st.to));
     if (st.period === "custom") q.set("from", String(st.from));
     if (view) { if (st.hm !== "ta") q.set("hm", st.hm); if (st.ym !== "max") q.set("ym", st.ym); if (st.hk !== "ta") q.set("hk", st.hk); }
+    // 특정일 모드도 주소에 남긴다(새로고침·뒤로 가기·링크 공유가 같은 화면을 다시 연다)
+    if (st.ev) { q.set("ev", st.ev); q.set("evfrom", String(st.evFrom)); }
     if (alias && st.alias) q.set("alias", st.alias);
     return q;
   }
@@ -122,6 +138,7 @@
         <div class="fav-row ds-favs" id="dsFav"></div><p class="ds-toast" id="dsToast" role="status" hidden></p></div>
       <div class="card" id="dsCard"></div>
       <div class="card" id="dsEvents" data-sec="events"></div>
+      <div class="card" id="dsSeries" data-sec="series" hidden></div>
       <div class="card" id="dsYears" data-sec="yearly"></div>
       <div class="card" id="dsAround" data-sec="around"></div>
       <div class="card" id="dsHour" data-sec="hourly"></div>
@@ -133,11 +150,12 @@
     p.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.id === "dsDate") { e.preventDefault(); applyDate(); } });
     p.addEventListener("input", (e) => { if (e.target.id === "dsAlias") { st.alias = e.target.value.slice(0, 30); renderCard(); } });
     let rt = 0;
-    addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (document.body.dataset.page === "sday") { if (D) renderYearChart(); if (H) renderHour(); } }, 200); });
+    addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (document.body.dataset.page === "sday") { if (D) renderYearChart(); if (H) renderHour(); if (EV) renderEvChart(); } }, 200); });
   }
   const opt = (list, cur) => list.map(([v, l]) => `<option value="${E(v)}"${String(v) === String(cur) ? " selected" : ""}>${E(l)}</option>`).join("");
   const seg = (name, list, cur) => `<div class="seg ds-seg" role="group">${list.map(([v, l]) => `<button type="button" data-${name}="${v}" class="${String(v) === String(cur) ? "on" : ""}" aria-pressed="${String(v) === String(cur)}">${E(l)}</button>`).join("")}</div>`;
   function renderCtl() {
+    if (st.ev) return renderEvCtl();
     const stations = (meta?.stations || []).map((s) => [s.station_id, `${s.station_name} (${s.station_id})${s.region ? ` · ${s.region}` : ""}`]);
     const toYears = []; for (let y = THIS_YEAR; y >= 1971; y--) toYears.push([y, `${y}년`]);
     const pickVal = st.cal === "solar" && !(st.m === 2 && st.d === 29 && !isLeapY(st.y)) ? dateStr() : "";
@@ -204,6 +222,8 @@
     else if (t.id === "dsPer") { if (!PERIODS.some(([p]) => p === t.value)) return; st.period = t.value; }
     else if (t.id === "dsTo") { st.to = +t.value; if (st.from > st.to) st.from = st.to; }
     else if (t.id === "dsFrom") { const v = +t.value; if (!Number.isInteger(v) || v < 1900 || v > st.to) return; st.from = v; }
+    else if (t.id === "dsEvFrom") { const v = +t.value; if (!Number.isInteger(v) || v < 1900 || v > THIS_YEAR) return; st.evFrom = v; }
+    else if (t.id === "dsEvName") { const k = evKind(); st.ev = t.value ? `${k}|${t.value}` : k; }
     else if (t.id === "dsAliasSave") { try { if (t.checked && st.alias) localStorage.setItem(aliasKey(), st.alias); else localStorage.removeItem(aliasKey()); } catch {} return; }
     else if (t.id === "dsCmpAdd") { const y = +t.value; if (y && !st.cmp.includes(y) && y !== st.y && st.cmp.length < 2) st.cmp.push(y); }
     else return;
@@ -223,6 +243,12 @@
     if (ds.pick) { pickYear(+ds.pick); return; }
     // 그해 특정일 → 그 양력 날짜로 화면을 옮긴다(기준은 양력으로 두고 연·월·일만 바꿈)
     if (ds.calDate) { const [y, m, d] = ds.calDate.split("-").map(Number); Object.assign(st, { cal: "solar", y, m, d, leap: false }); st.cmp = st.cmp.filter((x) => x !== y); return go(); }
+    // 특정일 칩 → 그 특정일의 '해마다 실제 날짜' 모드(월·일을 고정하지 않는다)
+    // 수능·학력고사는 모든 시행일이 한 계열이므로 종류 전체로, 명절·직접 추가는 이름까지 좁혀서(설날/추석 구분) 연다.
+    if (ds.evGo) { const k = String(ds.evGo).split("|")[0]; return goEv(evTarget(ds.evGo, k)); }
+    // 종류 바꾸기(같은 화면에서 ev 만 바꾼다) — 이름은 종류가 다르면 지운다
+    if (ds.evk) return switchEvKind(ds.evk);
+    if (b.id === "dsEvBack" || b.dataset.evBack) return backToDay();
     if (ds.ov) { const y = +ds.ov; if (st.cmp.includes(y)) st.cmp = st.cmp.filter((x) => x !== y); else if (st.cmp.length < 2) st.cmp.push(y); else { toast("시간 그래프에는 자세히 볼 해 + 2개 해까지 겹칩니다. 하나를 빼고 고르세요"); return; } return go(); }
     if (b.id === "dsAll") { st.all = !st.all; return renderYears(); }
     if (b.id === "dsGo") { applyDate(); return; }
@@ -285,17 +311,28 @@
     const list = CAL.list;
     const head = `<h3 class="ds-h">그해 특정일 ${window.InfoTip.sub(`${st.y}년 · 설날·추석·수능일 등`, `관리 › 캘린더 관리에 등록한 특정일 · 양력 날짜 순 · 날씨 값과 무관합니다`, { label: "기준" })}</h3>`;
     if (CAL.pending) { el.innerHTML = `${head}<p class="sx-state">특정일을 불러오는 중…</p>`; return; }
+    // 칩 = 그 특정일의 '해마다 실제 날짜' 모드로(월·일 고정 화면으로 옮기지 않는다) — 수능일처럼 해마다 날짜가 바뀌는 날이 목적
+    const evKey = (e) => `${e.kind}|${e.label}`;
     el.innerHTML = `${head}
       ${list.length
-        ? `<div class="ds-evs">${list.map((e) => `<button type="button" class="ds-evchip" data-cal-date="${E(e.solarDate)}" title="${E(e.label)}${e.note ? ` · ${E(e.note)}` : ""} — 이 날짜로 보기"><b>${E(md(e.solarDate))}</b> <span>${E(e.label)}</span>${e.note ? ` <small>${E(e.note)}</small>` : ""}</button>`).join("")}</div>`
-        : `<p class="ds-note">이 해에 등록된 특정일이 없습니다. <a href="#/calendar">캘린더 관리</a>에서 설날·추석·수능일을 넣어 두면 여기와 '고른 날짜' 카드에 함께 나옵니다.</p>`}`;
+        ? `<div class="ds-evs">${list.map((e) => `<button type="button" class="ds-evchip" data-ev-go="${E(evKey(e))}" title="${E(e.label)}${e.note ? ` · ${E(e.note)}` : ""} — 해마다 실제 날짜의 날씨 보기"><b>${E(md(e.solarDate))}</b> <span>${E(e.label)}</span>${e.note ? ` <small>${E(e.note)}</small>` : ""}</button>`).join("")}</div>`
+        : `<p class="ds-note">이 해에 등록된 특정일이 없습니다. <a href="#/calendar">캘린더 관리</a>에서 설날·추석·수능일을 넣어 두면 여기와 '고른 날짜' 카드에 함께 나옵니다.</p>`}
+      <p class="ds-note">칩을 누르면 그 특정일이 <b>해마다 실제로 며칠이었는지</b>를 따라가며 그날 날씨를 봅니다(수능일·학력고사일처럼 해마다 날짜가 바뀌는 날용).</p>`;
   }
 
   // ---------------------------------------------------------------- 불러오기(일자료 먼저, 시간자료 따로)
   const DAILY_SECS = ["dsCard", "dsEvents", "dsYears", "dsAround", "dsSel", "dsStory"];
+  const DAY_CARDS = [...DAILY_SECS, "dsHour", "dsHeat"]; // 특정일 모드에서는 이 카드들을 숨기고 dsSeries 가 그 자리를 대신한다
+  function setEvMode(on) {
+    for (const id of DAY_CARDS) { const el = $(id); if (el) el.hidden = !!on; }
+    const el = $("dsSeries");
+    if (el) el.hidden = !on;
+  }
   async function load() {
     const my = ++seq;
-    D = null; H = null;
+    D = null; H = null; EV = null;
+    if (st.ev) return loadSeries(my);
+    setEvMode(false);
     renderCtl();
     for (const id of DAILY_SECS) $(id).innerHTML = `<div class="sx-state">불러오는 중…</div>`;
     for (const id of ["dsHour", "dsHeat"]) $(id).innerHTML = `<div class="sx-state">시간자료 불러오는 중…</div>`;
@@ -333,7 +370,159 @@
       for (const id of ["dsHour", "dsHeat"]) $(id).innerHTML = `<div class="sx-state err">시간자료 조회 실패 · ${E(e.message)} <button type="button" id="dsRetry" class="sec">다시 시도</button></div>`;
     }
   }
-  const STATUS = (s) => (D || H)?.statusText?.[s] || { partial: "자료 부족" }[s] || s;
+  // ---------------------------------------------------------------- ⑧ 특정일 모드(해마다 '실제 시행일'을 따라간다)
+  // 왜: '날짜로 보는 날씨'는 고른 월·일을 해마다 고정한다. 수능일·학력고사일은 해마다 양력 날짜가 바뀌므로(2024학년도 11/16,
+  // 2025학년도 11/14 …) 고정 월·일로는 그해 실제 날씨를 볼 수 없다. 이 모드는 특정일 표(calendar_events)가 해석한
+  // '그해 실제 양력 날짜'를 따라가며 하루씩 값을 받는다(/api/stats/date-series). 설날·추석도 같은 방법으로 본다.
+  const evKind = () => st.ev.split("|")[0];
+  const evLabel = () => st.ev.split("|")[1] || "";
+  const evText = () => (EV?.series?.name || evLabel() || (EV_KINDS.find(([k]) => k === evKind()) || [])[1] || "특정일");
+  const evQuery = () => {
+    const q = new URLSearchParams({ stn: st.station, kind: evKind(), from: String(st.evFrom), to: String(THIS_YEAR) });
+    if (evLabel()) q.set("label", evLabel());
+    return q;
+  };
+  const goEv = (ev) => { st.ev = ev; go(); };
+  // 종류가 바뀌면 기간 시작을 그 종류의 기본값으로(수능 1994 · 학력고사 1981 · 명절 1990). 같은 종류 안에서만 사용자가 고른 값을 지킨다.
+  function switchEvKind(k) {
+    const cur = st.ev.split("|")[0];
+    if (k !== cur) st.evFrom = EV_DEFAULT_FROM[k] ?? 1990;
+    goEv(evTarget(k, k));
+  }
+  // 칩/버튼이 가리키는 특정일 → 모드 키. 수능·학력고사는 시행일마다 이름이 달라(2027학년도 수능 …) 이름으로 좁히지 않는다.
+  function evDefaultFrom(kind) { if (!st.ev) st.evFrom = EV_DEFAULT_FROM[kind] ?? 1990; return st.evFrom; }
+  function evTarget(raw, kind) {
+    const k = kind || String(raw).split("|")[0];
+    const lab = String(raw).split("|").slice(1).join("|");
+    evDefaultFrom(k);
+    return lab && (k === "holiday" || k === "custom") ? `${k}|${lab}` : k;
+  }
+  function backToDay() { st.ev = ""; go(); }
+  // 이름 목록(추석·설날처럼 같은 kind 안에 여러 이름이 있을 때 고르기) — 실패해도 화면은 그대로(빈 목록)
+  async function loadEvNames(kind) {
+    if (EVI && EVI.kind === kind && Date.now() - EVI.at < 600000) return EVI.names;
+    const names = [];
+    try {
+      const r = await getJson(`/api/calendar/events?from=1900&to=2050`);
+      const seen = new Set();
+      for (const e of r.events || []) if (e.kind === kind && e.label && !seen.has(e.label)) { seen.add(e.label); names.push(e.label); }
+    } catch { /* 이름 목록은 덧붙이는 정보 */ }
+    EVI = { kind, names, at: Date.now() };
+    return names;
+  }
+  async function loadSeries(my) {
+    setEvMode(true);
+    renderCtl();
+    const host = $("dsSeries");
+    host.innerHTML = `<div class="sx-state">특정일 날씨를 불러오는 중…</div>`;
+    const namesP = loadEvNames(evKind());
+    try {
+      const r = await getJson(`/api/stats/date-series?${evQuery()}`);
+      if (my !== seq) return;
+      EV = r;
+      // 이름이 비어 있는데 같은 kind 에 이름이 여럿이면(예: holiday) 첫 이름으로 좁히지 않고 전체를 보여 준다 — 아래 '이름' 상자에서 고른다
+      renderEv();
+      // 이름 상자는 늦게 채워도 되므로 그린 뒤에 갱신(첫 그림이 늦어지지 않게)
+      namesP.then((names) => { if (my !== seq) return; const sel = $("dsEvName"); if (sel && names.length) { sel.innerHTML = `<option value="">전체 (${names.length}개)</option>${names.map((n) => `<option value="${E(n)}"${n === evLabel() ? " selected" : ""}>${E(n)}</option>`).join("")}`; sel.closest("div")?.removeAttribute("hidden"); } });
+    } catch (e) {
+      if (my !== seq) return;
+      host.innerHTML = `<div class="sx-state err">특정일 날씨를 불러오지 못했습니다 · ${E(e.message)} <button type="button" id="dsRetry" class="sec">다시 시도</button> <button type="button" class="sec ds-evback" id="dsEvBack">날짜로 돌아가기</button></div>`;
+    }
+  }
+  // 수능·학력고사는 '시행일', 명절·직접 추가는 '날짜'
+  const evWord = () => (evKind() === "csat" || evKind() === "hakryeok" ? "실제 시행일" : "실제 날짜");
+  const evPointDate = (p) => `${dot(p.solarDate)}(${dow(p.solarDate)})`;
+  function renderEvChart() {
+    const el = $("dsEvChart");
+    if (!EV || !el) return;
+    const pts = EV.points;
+    if (!pts.length) { el.innerHTML = ""; return; }
+    const SER = [{ key: "max", label: "최고기온", color: "#dc2626" }, { key: "min", label: "최저기온", color: "#2563eb" }];
+    V.seriesChart(el, {
+      unit: "℃", digits: 1, aria: `${evText()} 해마다 실제 날짜의 최고·최저기온`,
+      series: SER,
+      points: pts.map((p) => ({
+        year: p.yearLabel ? p.yearLabel.replace(/학년도$/, "") : String(p.year),
+        axis: p.yearLabel ? p.yearLabel.replace(/학년도$/, "") : String(p.year),
+        md: md(p.solarDate), solarDate: p.solarDate,
+        values: { max: p.dateStatus === "ok" ? p.values.max : null, min: p.dateStatus === "ok" ? p.values.min : null },
+        statusText: p.dateStatus === "ok" && !p.rowPresent ? "자료 없음" : STATUS(p.dateStatus),
+      })),
+      tip: (i) => { const p = pts[i]; const ok = p.dateStatus === "ok"; const st0 = ok && !p.rowPresent ? "자료 없음" : STATUS(p.dateStatus); return `<b>${E(p.yearLabel || `${p.year}년`)}</b> · ${E(evPointDate(p))}${p.lunarText ? `<br><span class="muted">${E(p.lunarText)}</span>` : ""}<br>${ok && fin(p.values.max) ? `<span style="color:#dc2626">최고 <b>${fmt(p.values.max)}℃</b></span> · <span style="color:#2563eb">최저 <b>${fmt(p.values.min)}℃</b></span>` : E(st0)}`; },
+      onPick: () => { /* 표에서 같은 줄을 강조하지는 않는다(그래프는 읽기용) */ },
+    });
+  }
+  // 특정일 모드의 조회 조건: 지점 · 특정일 종류 · 기간 시작 연도(날짜 고르기 칸은 쓰지 않는다)
+  function renderEvCtl() {
+    const stations = (meta?.stations || []).map((s) => [s.station_id, `${s.station_name} (${s.station_id})${s.region ? ` · ${s.region}` : ""}`]);
+    $("dsCtl").innerHTML = `
+      <div class="ds-f-st"><label for="dsSt">관측지점</label><select id="dsSt">${opt(stations, st.station)}</select></div>
+      <div class="ds-f-ev"><label>특정일</label>${seg2()}</div>
+      <div class="ds-f-evfrom"><label for="dsEvFrom">기간</label><span class="sx-inline"><input id="dsEvFrom" type="number" class="sx-num" min="1900" max="${THIS_YEAR}" value="${st.evFrom}" aria-label="시작 연도"><span class="tilde">~</span><span class="ds-evto">${THIS_YEAR}년</span></span></div>
+      <div class="ds-f-evname" hidden><label for="dsEvName">이름</label><select id="dsEvName"></select></div>
+      <details class="ds-more ds-wide"><summary>자세히</summary><div class="sx-ctl"><div><label for="dsAlias">별칭</label><input id="dsAlias" maxlength="30" placeholder="예: 우리 집 기념일" value="${E(st.alias)}"></div></div></details>`;
+    $("dsActs").innerHTML = `<button type="button" class="sec ds-mini" id="dsCopyTop" title="공유 링크 복사">${ICON.link}<span>링크 복사</span></button>`;
+    renderFav();
+  }
+  const seg2 = () => `<div class="seg ds-seg" role="group">${EV_KINDS.map(([k, l]) => `<button type="button" data-evk="${k}" class="${k === evKind() ? "on" : ""}" aria-pressed="${k === evKind()}">${E(l)}</button>`).join("")}</div>`;
+
+  function renderEv() {
+    const host = $("dsSeries");
+    if (!EV) return;
+    const S = EV.summary;
+    const W = EV.window;
+    const stn = EV.station;
+    const pts = EV.points;
+    const per = `${W.fromYear}~${W.toYear}년`;
+    const hot = S.extremes.hottest;
+    const cold = S.extremes.coldest;
+    const wet = S.extremes.wettest;
+    const r10 = S.recent10;
+    const name = evText();
+    const yearWord = (x) => (x.yearLabel ? `${x.yearLabel}` : `${x.year}년`);
+    const exLine = (x, unit) => (x.value == null ? "" : `<b>${E(yearWord(x))}</b>(${E(evPointDate({ solarDate: x.solarDate }))}) ${fmt(x.value)}${unit}${x.tie ? ` <span class="muted">공동 ${x.years.join("·")}</span>` : ""}`);
+    const lines = [];
+    if (hot.value != null) lines.push(`가장 더웠던 해는 ${exLine(hot, "℃")}${cold.value != null ? `, 가장 추웠던 해는 ${exLine(cold, "℃")}` : ""}입니다.`);
+    if (S.rainCount.n) lines.push(`비나 눈이 온 해는 ${S.rainCount.k}번 / 강수 자료가 있는 ${S.rainCount.n}개 해(${fmt(S.rainCount.share, 0)}%)${S.rainCount.k ? ` — ${S.rainCount.hitYears.join("·")}년` : ""}.`);
+    if (wet.value != null) lines.push(`강수가 가장 많았던 해는 ${exLine(wet, "mm")}입니다.`);
+    if (r10.max.mean != null) lines.push(`${r10.label || `최근 10년(${r10.fromYear}~${r10.toYear})`} ${r10.points}개 해의 평균은 최고 ${fmt(r10.max.mean)}℃ · 최저 ${fmt(r10.min.mean)}℃${r10.avg.mean != null ? ` · 평균 ${fmt(r10.avg.mean)}℃` : ""}이고, 그중 ${r10.rainCount.k}번 비나 눈이 왔습니다.`);
+    const exN = S.excluded.length;
+    if (exN) lines.push(`자료가 없어 평균·극값에서 뺀 해 ${exN}개${S.excluded.length <= 6 ? `: ${S.excluded.map((x) => `${x.year}(${x.reasonText})`).join(", ")}` : ""}.`);
+    if (EV.missingYears.length) {
+      const my = EV.missingYears;
+      lines.push(`${per} 중 이 특정일이 없던 해 ${my.length}개${my.length <= 12 ? `: ${my.join("·")}` : ` (${my[0]}~${my[my.length - 1]})`}.`);
+    }
+    const rows = pts.slice().reverse(); // 최근 해부터
+    const num = (v, d = 1) => (fin(v) ? fmt(v, d) : `<span class="muted">–</span>`);
+    const stat = (p) => (p.dateStatus === "ok" ? p.rowPresent ? "자료 있음" : "자료 없음" : STATUS(p.dateStatus));
+    host.innerHTML = `
+      <div class="ds-evhead">
+        <h3 class="ds-h">${E(name)} 날씨 ${window.InfoTip.sub(`${W.fromYear}~${W.toYear}년 · ${evWord()} 기준`, `해마다 그 특정일의 실제 양력 날짜를 따라가며 그날 하루의 공식 일자료를 봅니다(주변 날짜를 섞지 않음)`, { label: "기준" })}</h3>
+        <p class="ds-evsub"><b>${E(`${W.fromYear}~${W.toYear}년 · ${evWord()} 기준`)}</b> · ${E(stn.station_name)}(${E(stn.station_id)}) 지점 한 곳의 관측 · ${pts.length}개 점${W.dataFrom && W.dataFrom !== W.fromYear ? `(자료 ${W.dataFrom}~${W.dataTo}년)` : ""}${EV.series.label ? ` · 이름 ${E(EV.series.label)}` : ""}</p>
+        <div class="ds-evtools">
+          <div><button type="button" class="ds-evback" data-ev-back="1">날짜로 돌아가기</button></div>
+          ${EV.series.label ? `<div class="ds-evback2"><button type="button" class="sec" data-evk="${E(evKind())}">${E(EV_KINDS.find(([k]) => k === evKind())?.[1] || "")} 전체 보기</button></div>` : ""}
+        </div>
+      </div>
+      ${lines.length ? `<ol class="ds-evsum">${lines.map((t) => `<li>${t}</li>`).join("")}</ol>` : `<p class="muted">이 기간에는 이 특정일이 없습니다 — 기간(시작 연도)을 넓혀 보세요.</p>`}
+      ${pts.length ? `<details class="ds-ychart" open><summary>기온 그래프 — 실제 날짜 순서</summary>
+        <p class="ds-evlegend"><span><i style="background:#dc2626"></i>최고기온</span><span><i style="background:#2563eb"></i>최저기온</span><span><i class="hatch"></i>자료 없음</span><span class="muted">x축 위 = ${pts.some((p) => p.yearLabel) ? "학년도" : "연도"}, 아래 = 실제 양력 월·일 — 날짜가 해마다 밀린 것이 보입니다</span></p>
+        <div class="sx-chart" id="dsEvChart"></div>
+        <p class="ds-note">점 하나 = 그해 그 특정일 하루. 날짜가 해마다 달라(수능일·설날 등) 점 사이 간격은 '해'가 아니라 '그날'입니다. 값이 없는 해는 다른 날로 채우지 않습니다.</p></details>` : ""}
+      ${pts.length ? `<details class="sx-table ds-evtable" open><summary>표로 보기 · 최근 해부터</summary><div class="sx-table-wrap"><table><thead><tr><th>학년도</th><th>실제 양력 날짜</th><th>음력</th><th>최고(℃)</th><th>최저(℃)</th><th>평균(℃)</th><th>강수(mm)</th><th>신적설(cm)</th><th>상태</th><th>이름</th></tr></thead><tbody>${rows.map((p) => `<tr class="${p.dateStatus !== "ok" || !p.rowPresent ? "dim" : ""}"><td>${E(p.yearLabel || `${p.year}년`)}</td><td>${E(evPointDate(p))}</td><td class="muted">${E(p.lunarText || "–")}</td><td class="num">${p.dateStatus === "ok" ? num(p.values.max) : "–"}</td><td class="num">${p.dateStatus === "ok" ? num(p.values.min) : "–"}</td><td class="num">${p.dateStatus === "ok" ? num(p.values.avg) : "–"}</td><td class="num">${p.dateStatus === "ok" ? num(p.values.rain) : "–"}</td><td class="num">${p.dateStatus === "ok" ? num(p.values.nsnow) : "–"}</td><td>${E(stat(p))}</td><td class="muted">${E(p.note || "")}</td></tr>`).join("")}</tbody></table></div></details>` : ""}
+      <div class="sx-tools"><span class="muted">같은 계산 결과${window.InfoTip.btn("그래프·요약·표·CSV 는 같은 서버 계산 결과입니다.", { label: "CSV 안내" })}</span><a class="dl-chip-btn" href="/api/stats/date-series?${evQuery()}&format=csv" download>${E(name)} CSV</a></div>
+      <details class="sx-rules"><summary>계산 기준</summary><ul>
+        <li>특정일 날짜 = 관리 › 캘린더 관리에 등록한 표를 해석한 <b>그해 실제 양력 날짜</b>(음력 규칙인 설날·추석은 그해 음력 날짜의 양력 날짜). 화면에서 날짜를 다시 계산하지 않습니다.</li>
+        <li>값 = 그날 하루의 공식 일자료(최고·최저·평균기온, 일강수량, 신적설). 주변 날짜를 섞지 않고 같은 날 평균도 내지 않습니다.</li>
+        <li>그해 그 날짜의 일자료 행이 없으면 '자료 없음'으로 두고 다른 날·다른 해로 채우지 않습니다. 요약(평균·극값·강수 횟수)에서는 빼고 '뺀 해'로 적습니다.</li>
+        <li>강수 공란은 그날 행과 기온이 있을 때만 기상청 관례대로 무강수 0으로 셉니다. 비·눈 온 해 = 일강수량 0.1mm 이상인 해의 수(자료가 있는 해 기준).</li>
+        <li>극값이 표시 자리수로 같으면 공동으로 적습니다. 최근 10년 = 요청 기간의 끝 10년.</li>
+        <li>버전: 특정일 ${E(EV.series.version || "")} · 정책 ${E(EV.policyVersion)} · 달력 ${E(EV.calendarVersion)} · 일자료 판 ${E(EV.dataRevision?.daily)}</li></ul></details>
+      ${window.InfoTip.note(`값 = 그해 그 특정일 하루의 공식 일자료(같은 날 평균 없음). 그해 그 날짜의 행이 없으면 '자료 없음'으로 두고 다른 날로 대체하지 않습니다. 강수 공란은 그날 행과 기온이 있을 때만 기상청 관례대로 무강수 0으로 셉니다. '자료가 없어 뺀 해'는 평균·극값에서 빠집니다. 설날·추석처럼 음력 규칙인 날은 그해 음력 날짜의 양력 날짜를 따라갑니다(대한민국 음양력 표).`, { cls: "ds-note", label: "계산 방법" })}`;
+    renderEvChart();
+  }
+
+  const STATUS = (s) => (D || H || EV)?.statusText?.[s] || { partial: "자료 부족" }[s] || s;
   const yword = (y) => `${y}년${st.cal === "lunar" ? "(음력)" : ""}`;
   function selWhen(s) {
     if (!s) return "";
@@ -354,7 +543,9 @@
     const warn = s.dateStatus === "future" ? `<p class="sx-warn">${E(STATUS("future"))} — 그해 칸만 비워 두고, 지난 해들은 그대로 보여 줍니다.</p>` : s.dateStatus === "ongoing" ? `<p class="sx-warn">${E(STATUS("ongoing"))} — 오늘 하루 자료는 내일 공식 일자료가 들어오면 채워집니다.</p>` : s.dateStatus === "pending" ? `<p class="sx-warn">${E(STATUS("pending"))} — 지난 날이지만 아직 공식 일자료가 들어오지 않았습니다(최신 ${dot(stn.dailyLast)}).</p>` : "";
     // 그날 특정일(수능일·설날 등). 그해에 없는 날짜(nodate)면 s.solarDate 가 없으니 자연히 표시하지 않는다.
     const evs = calOf(s.solarDate);
-    const evLine = evs.length ? `<p class="ds-evline">${evs.map((e) => `<b>${E(e.label)}</b>${e.note ? ` <small>${E(e.note)}</small>` : ""}`).join(" <span class=\"ds-evdot\">·</span> ")}</p>` : "";
+    // 고른 날짜가 특정일과 같은 날이면 '수능일 날씨를 해마다 실제 날짜로 보기' 버튼을 함께 둔다(그 특정일 모드로 전환)
+    const evLine = evs.length ? `<p class="ds-evline">${evs.map((e) => `<b>${E(e.label)}</b>${e.note ? ` <small>${E(e.note)}</small>` : ""}`).join(" <span class=\"ds-evdot\">·</span> ")}</p>
+      <p class="ds-evline ds-evline-b">${evs.map((e) => `<button type="button" class="sec ds-evgo" data-ev-go="${E(evTarget(`${e.kind}|${e.label}`, e.kind))}">${E(`${e.kind === "csat" ? "수능일" : e.kind === "hakryeok" ? "학력고사일" : e.label} 날씨를 해마다 실제 날짜로 보기`)} ›</button>`).join(" ")}</p>` : "";
     $("dsCard").innerHTML = `<div class="ds-card"><div><p class="ds-k">고른 날짜</p><h3 class="ds-title">${title}</h3>${evLine}<p>${when}</p>${warn}</div>
       <dl class="ds-dl"><div><dt>관측지점</dt><dd>${E(stn.station_name)} (${E(stn.station_id)})${stn.region ? ` · ${E(stn.region)}` : ""} <small>지점 한 곳의 관측</small></dd></div><div><dt>해마다 볼 날</dt><dd>${E(specLabel())} <small>· ${E(D.window.label)} ${D.dateCounts.requested}개 해${D.dateCounts.nodate ? ` (그 날짜가 있는 해 ${D.dateCounts.exists}개)` : ""}</small></dd></div><div><dt>자료 범위</dt><dd>일자료 ${D.dailyFrom.slice(0, 4)}~${dot(stn.dailyLast)} / 시간자료 ${D.hourlyFrom.slice(0, 4)}~ ${window.InfoTip.btn("'전체'는 이 서비스가 가진 범위이며 기상청 전체 역사가 아닙니다.", { label: "자료 범위" })}</dd></div></dl></div>`;
   }

@@ -23,6 +23,7 @@ import { createPgEventStore, createMysqlEventStore, createJsonEventStore, seedRo
 import { createStatsData } from "./stats-data.mjs";
 import { createStatsApi } from "./stats-api.mjs";
 import { createDateApi } from "./date-api.mjs";
+import { createDateSeriesApi, DATE_SERIES_PATH } from "./date-series-api.mjs";
 import { createShareApi } from "./share-api.mjs";
 import { createRtApi } from "./rt-api.mjs";
 import { createRtSnapshotDb } from "./rt-snapshot-db.mjs";
@@ -1328,6 +1329,9 @@ async function publicView(req, d) {
 // 특정일 캘린더 API(공개 조회 + 관리자 편집). 저장소는 DB 연결 뒤(ready)에 만들므로 핸들러도 그때 채운다(auth 와 같은 방식).
 // 응답 모양은 기존 json 헬퍼 그대로.
 let handleCalendar = async () => false;
+// 특정일 · 해마다 실제 날짜(/api/stats/date-series). calendarStore 를 쓰므로 위와 같은 이유로 ready() 에서 만든다
+// (모듈 최상단에서 만들면 저장소가 아직 없다). 라우팅은 handleCalendar 와 같은 자리.
+let handleSeries = async () => false;
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", `http://127.0.0.1:${PORT}`);
@@ -1337,6 +1341,8 @@ const server = http.createServer(async (req, res) => {
     // 특정일 캘린더(/api/calendar/*). auth.handle 뒤에 두는 이유: 누니 ID 모드의 /api/admin/* 404 처리·세션 쿠키 해석과
     // 순서가 엉키지 않게 기존 관리자 경로와 같은 자리에서 처리하고, 쓰기는 auth.guard 가 이미 관리자만 통과시킨다.
     if (await handleCalendar(req, res, url)) return;
+    // 특정일 · 해마다 실제 날짜(/api/stats/date-series): 특정일 표(calendarStore) + 일자료 메모리. stats 라우트보다 먼저 잡는다.
+    if (url.pathname === DATE_SERIES_PATH && (await handleSeries(req, res, url))) return;
     if (await handleLayouts(req, res, url, { store: layoutStore, ownerOf: (r) => auth.ownerOf(r), allowedKeys: layoutKeys, readBody, json })) return;
     if (await handlePrefs(req, res, url, { store: prefsStore, layoutStore, ownerOf: (r) => auth.ownerOf(r), presetIds: presetIdsOf, readBody, json, knownStation: async (id) => (await stations()).some((x) => String(x.station_id) === id) })) return;
     if (req.method === "GET" && url.pathname === "/api/view") {
@@ -1609,6 +1615,8 @@ const ready = (async () => {
   prefsStore = kind === "mysql" ? createMysqlPrefsStore(db.getPool()) : kind === "postgresql" ? createPgPrefsStore(db.getPool()) : createJsonPrefsStore(PREFS_FILE);
   calendarStore = kind === "mysql" ? createMysqlEventStore(db.getPool()) : kind === "postgresql" ? createPgEventStore(db.getPool()) : createJsonEventStore(CALENDAR_FILE);
   handleCalendar = createCalendarApi({ store: calendarStore, json, readBody, isAdmin: (r) => auth.isAdmin(r), log: (line) => console.log(line) });
+  // 특정일 · 해마다 실제 날짜: 같은 calendarStore·statsData 를 쓴다(특정일 날짜 = calendar-events 해석, 값 = dailyYear 그대로)
+  handleSeries = createDateSeriesApi({ statsData, calendarStore, stations, json, log: (line) => console.log(line) });
   // 첫 기동이면 기본 자료(역대 수능·학력고사·설날·추석)를 미리 채운다 — 관리 화면이 처음부터 채워져 있게.
   // 표가 비어 있을 때만 넣으므로 관리자가 일부러 비운 표를 매 기동마다 되돌리지는 않는다(시드 id 가 고정이라 다시 눌러도 중복 없음).
   try {
