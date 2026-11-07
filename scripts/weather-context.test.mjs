@@ -265,7 +265,7 @@ test("API station validation, read-only methods, unavailable evidence, three rou
     },
     sourceAllowed: async () => false,
   });
-  await seed({ method: "GET" }, {}, new URL("http://local/api/stats/context-today"));
+  await seed({ method: "GET" }, {}, new URL("http://local/api/stats/context-battle"));
   assert.equal(status, 503);
 });
 

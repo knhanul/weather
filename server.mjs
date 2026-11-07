@@ -1299,7 +1299,7 @@ const handleDate = createDateApi({
   log: (line) => console.log(line),
 });
 // Context is read-only and reuses normalized stores. Refuse JSON seed/demo rows.
-const handleContext = createWeatherContextApi({ statsData, statsHourly, stations, json,
+const handleContext = createWeatherContextApi({ statsData, statsHourly, stations, json, rt: () => db.rtStore(),
   sourceAllowed: async (id) => db.usingPg() || ![...loadJson(DAILY_FILE, []), ...loadJson(OBS_FILE, [])].some(r => String(r.station_id) === id && r.source_kind !== "OFFICIAL"),
 });
 // 공유 경로(/s/day · /s/battle + .svg): 링크 미리보기용 HTML(og 메타)과 카드 SVG. 같은 date-api 계산·캐시를 씀

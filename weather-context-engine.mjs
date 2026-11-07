@@ -68,7 +68,7 @@ export function recentContext({ daily, hourly, today, maxHour = 23 }) {
     const a = hourlyValue(hourly, today, hour, k),
       b = hourlyValue(hourly, yesterday, hour, k),
       delta = diff(a, b);
-    return delta !== null && Math.abs(delta) >= threshold
+    return delta !== null && Math.abs(delta) + 1e-9 >= threshold
       ? [{ key: k, label, unit, today: a, yesterday: b, diff: delta, threshold }]
       : [];
   });

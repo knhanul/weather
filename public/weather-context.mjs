@@ -82,7 +82,9 @@ const get = async (path, signal) => {
     const ttl =
       path === "/api/stations"
         ? 1800000
-        : path.startsWith("/api/stats/context-season?")
+        : path.startsWith("/api/stats/context-today?")
+          ? 30000
+          : path.startsWith("/api/stats/context-season?")
           ? 600000
           : 60000;
     if (bytes <= MAX_CACHE_BYTES) {
@@ -141,13 +143,13 @@ function recentHtml(d) {
       : Math.abs(d.diff) < 0.05
         ? "어제 같은 시각과 기온이 같아요"
         : `어제 같은 시각보다 ${fmt(Math.abs(d.diff))} ${d.diff > 0 ? "높아요" : "낮아요"}`;
-  return `<p class="wc-lead">${E(headline)}</p><p>${E(d.message)} · ${E(d.station.name)}</p>${d.available ? `<p>오늘 ${fmt(d.value)} / 어제 ${fmt(d.previous)}</p>` : ""}<p>최근 7일 같은 시각 평균 ${fmt(d.recent7.mean)} · ${d.recent7.days}/7일 · 오늘과 ${sg(d.recent7.diff)}</p>${d.extras.map((x) => `<p>${E(x.label)} 어제보다 ${sg(x.diff, x.unit)}</p>`).join("")}<details><summary>비교 근거·시간별 그래프 보기</summary>${lineChart(d.series)}${table(
+  return `<p class="wc-lead">${E(headline)}</p><p>${E(d.message)} · ${E(d.station.name)}</p><p class="wc-note">${E(d.source)}${d.grid ? ` (${d.grid.nx},${d.grid.ny}) · ${E(d.grid.note)}` : ""}</p>${d.available ? `<p>오늘 ${fmt(d.value)} / 어제 ${fmt(d.previous)}</p>` : ""}${d.recent7.computed === false ? '<p>기준 실황 시각이 없어 최근 7일 비교는 아직 계산하지 않았어요.</p>' : `<p>최근 7일 같은 시각 평균 ${fmt(d.recent7.mean)} · ${d.recent7.days}/7일 · 오늘과 ${sg(d.recent7.diff)}</p>`}${d.extras.map((x) => `<p>${E(x.label)} 어제보다 ${sg(x.diff, x.unit)}</p>`).join("")}<details><summary>비교 근거·시간별 그래프 보기</summary>${lineChart(d.series)}${table(
     ["시각(KST)", "오늘(℃)", "어제(℃)"],
     d.series.map((p) => [`${p.hour}시`, fmt(p.today), fmt(p.yesterday)]),
-  )}<h3>최근 7일 최고·최저 관측</h3>${table(
+  )}<h3>최근 완료일 ASOS 최고·최저 (별도 자료)</h3><p class="wc-note">${E(d.dailySource || "기상청 ASOS 공식 일자료")}</p>${table(
     ["날짜", "최고", "최저"],
     d.recentDays.map((p) => [p.date, fmt(p.max), fmt(p.min)]),
-  )}<p class="wc-note">${E(d.policy)}</p><p class="wc-note">${E(d.thresholds)}</p><p class="wc-note">최근 7일 비교는 ${d.recent7.days}일뿐이며 없는 날은 0으로 세지 않아요.</p></details>`;
+  )}<p class="wc-note">${E(d.policy)}</p><p class="wc-note">${E(d.thresholds)}</p><p class="wc-note">${d.recent7.computed === false ? "오늘 실황 시각 미정은 과거 자료가 0일이라는 뜻이 아닙니다." : `최근 7일 비교는 관측 ${d.recent7.days}/7일이며 없는 날은 0으로 세지 않아요.`}</p>${d.precipitation ? `<p class="wc-note">${E(d.precipitation.note)} 강수 원문: 오늘 ${E(d.precipitation.today.text || "자료 없음")} / 어제 ${E(d.precipitation.yesterday.text || "자료 없음")}</p>` : ""}${d.latestTemperatureTime ? `<p class="wc-note">이 격자의 최신 유효 기온 ${E(d.latestTemperatureTime)} KST</p>` : ""}</details>`;
 }
 function battleHtml(d) {
   return `<p>${E(d.station.name)} · 기준 ${E(d.date1)} / 상대 ${E(d.date2)}${d.window ? `의 월·일 · ${d.window.expected ? `${d.window.fromYear}~${d.window.toYear}년` : "비교 가능한 과거 연도 없음"}` : ""}</p><p class="wc-note">${E(d.kind)} · ${E(d.fieldNote)}</p>${d.rows.map((r) => `<div class="wc-row"><b>${E(r.label)}</b><p>기준 ${fmt(r.a, r.unit)} / 상대 ${fmt(r.b, r.unit)}${d.window ? ` (관측 ${r.samples}/${d.window.expected}개 해${r.samples < 3 ? " · 소표본 참고" : ""})` : ""}</p><strong>${E(r.reason)}</strong><small>무승부 기준: 차이 ${r.tie}${E(r.unit)} 이하</small></div>`).join("")}<p class="wc-note">선택한 항목 결과: 기준 ${d.wins.A}승 / 상대 ${d.wins.B}승 · 무승부 ${d.wins.draw} · 비교 불가 ${d.wins.unavailable}</p><details><summary>비교 기준·보유 범위</summary><p>${E(d.policy)}</p><p>${E(d.available.kind || "일자료")} 보유 범위: ${E(d.available.first || "없음")} ~ ${E(d.available.last || "없음")} (사이 결측 가능). 전체·5년·10년은 이 범위 안 관측만 사용해요.</p></details>`;
@@ -212,6 +214,7 @@ export function mountWeatherContext(
     out.setAttribute("aria-busy", "true");
     out.textContent = "관측 자료를 확인하는 중…";
     const q = form ? new URLSearchParams(new FormData(form)) : new URLSearchParams({ station });
+    if (mode === "today") q.set("basis", "grid-v1"); // Separate browser/proxy cache key from the retired ASOS-only contract.
     const initializingBattle = mode === "battle" && firstBattle;
     if (initializingBattle) {
       q.delete("date1");

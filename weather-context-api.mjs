@@ -1,12 +1,12 @@
+import { recentGridContext, validGrid } from "./grid-context.mjs";
 import {
-  recentContext,
   contextBattle,
   seasonStory,
   opponentDate,
   CRITERIA,
   validDate,
 } from "./weather-context-engine.mjs";
-import { kstDate, SEASON_NAMES } from "./season-calendar.mjs";
+import { kstDate, shiftDate, SEASON_NAMES } from "./season-calendar.mjs";
 export const CONTEXT_PATHS = [
   "/api/stats/context-today",
   "/api/stats/context-battle",
@@ -19,7 +19,30 @@ export function createWeatherContextApi({
   json,
   now = () => new Date(),
   sourceAllowed = async () => true,
+  rt: rtSource = null,
 }) {
+  const gridCache = new Map(),
+    inflight = new Map();
+  async function gridRows(rt, grid, today, maxHour, clock) {
+    const key = `${grid.nx}|${grid.ny}|${today}|${maxHour}`,
+      at = clock.getTime();
+    const hit = gridCache.get(key);
+    if (hit && at - hit.at < 30000 && at >= hit.at) return hit.rows;
+    if (inflight.has(key)) return inflight.get(key);
+    const promise = (async () => {
+      const rows = await rt.ncst(
+        Number(grid.nx),
+        Number(grid.ny),
+        `${shiftDate(today, -7)} 00:00:00`,
+        `${today} ${String(maxHour).padStart(2, "0")}:00:00`,
+      );
+      if (gridCache.size >= 16) gridCache.delete(gridCache.keys().next().value);
+      gridCache.set(key, { at, rows });
+      return rows;
+    })().finally(() => inflight.delete(key));
+    inflight.set(key, promise);
+    return promise;
+  }
   return async (req, res, url) => {
     if (!CONTEXT_PATHS.includes(url.pathname)) return false;
     if (req.method !== "GET") {
@@ -32,7 +55,9 @@ export function createWeatherContextApi({
         list = await stations(),
         st = list.find((s) => String(s.station_id) === id);
       if (!st) throw new RangeError("지원하지 않는 관측소입니다");
-      if (!(await sourceAllowed(id))) {
+      const allowedAsos = await sourceAllowed(id),
+        isToday = url.pathname.endsWith("context-today");
+      if (!allowedAsos && !isToday) {
         json(
           res,
           {
@@ -43,7 +68,7 @@ export function createWeatherContextApi({
         );
         return true;
       }
-      const daily = await statsData.get(id),
+      const daily = allowedAsos ? await statsData.get(id) : null,
         clock = now(),
         today = kstDate(clock);
       const maxHour = Number(
@@ -54,7 +79,12 @@ export function createWeatherContextApi({
         }).format(clock),
       );
       let body;
-      if (url.pathname.endsWith("context-season")) {
+      if (isToday) {
+        const rt = typeof rtSource === "function" ? rtSource() : rtSource;
+        const grid = rt ? await rt.gridOf(id) : null;
+        const rows = rt && validGrid(grid) ? await gridRows(rt, grid, today, maxHour, clock) : [];
+        body = recentGridContext({ daily, today, maxHour, grid, rows });
+      } else if (url.pathname.endsWith("context-season")) {
         const year = q.has("year") ? Number(q.get("year")) : +today.slice(0, 4);
         if (!Number.isInteger(year) || year < 1970 || year > Math.min(2050, +today.slice(0, 4)))
           throw new RangeError("연도는 1970년부터 올해까지 골라 주세요");
@@ -62,27 +92,23 @@ export function createWeatherContextApi({
         body.names = SEASON_NAMES;
       } else {
         const hourly = await statsHourly.get(id);
-        if (url.pathname.endsWith("context-today"))
-          body = recentContext({ daily, hourly, today, maxHour });
-        else {
-          const date1 = q.get("date1") || daily.lastDate || today;
-          if (!validDate(date1)) throw new RangeError("기준 날짜를 확인해 주세요");
-          const preset = q.get("opponent") || "yesterday";
-          if (!["yesterday", "week", "year", "custom"].includes(preset))
-            throw new RangeError("비교 상대를 확인해 주세요");
-          const date2 = opponentDate(date1, preset, q.get("date2"));
-          body = contextBattle({
-            daily,
-            hourly,
-            today,
-            maxHour,
-            date1,
-            date2,
-            period: q.get("period") || "exact",
-            criteria: (q.get("criteria") ?? "cooler,dry,calm").split(",").filter(Boolean),
-          });
-          body.criteria = CRITERIA;
-        }
+        const date1 = q.get("date1") || daily.lastDate || today;
+        if (!validDate(date1)) throw new RangeError("기준 날짜를 확인해 주세요");
+        const preset = q.get("opponent") || "yesterday";
+        if (!["yesterday", "week", "year", "custom"].includes(preset))
+          throw new RangeError("비교 상대를 확인해 주세요");
+        const date2 = opponentDate(date1, preset, q.get("date2"));
+        body = contextBattle({
+          daily,
+          hourly,
+          today,
+          maxHour,
+          date1,
+          date2,
+          period: q.get("period") || "exact",
+          criteria: (q.get("criteria") ?? "cooler,dry,calm").split(",").filter(Boolean),
+        });
+        body.criteria = CRITERIA;
       }
       json(res, {
         ok: true,
