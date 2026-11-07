@@ -585,6 +585,7 @@
           <div class="nav-sub" id="navStories" role="group" aria-label="날씨 이야기 하위 메뉴">
             <a href="#/stories/day" data-page="sday">날짜로 보는 날씨</a>
             <a href="#/stories/battle" data-page="sbattle">날씨 배틀</a>
+            <a href="#/stories/season" data-page="sseason">절기·복날 이야기</a>
             <a href="#/questions" data-page="questions">질문으로 보는 날씨</a>
           </div>
           <div class="nav-row"><a href="#/hourly-weather" data-grp="lib" class="nav-parent">날씨 자료실</a><button type="button" class="nav-exp" id="navExpLib" data-name="날씨 자료실" aria-controls="navLib" aria-expanded="false" aria-label="날씨 자료실 하위 메뉴 펼치기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
@@ -669,6 +670,7 @@
           <div id="rtx" aria-live="polite"></div>
         </section>
         <section class="page" id="sday" aria-label="날짜로 보는 날씨"></section>
+        <section class="page" id="sseason" aria-label="절기·복날 이야기"></section>
         <section class="page" id="sbattle" aria-label="날씨 배틀"></section>
         <section class="page" id="mysettings" aria-label="내 설정"></section>
         <section class="page" id="hourly">
@@ -2033,6 +2035,7 @@
       dash: ["조회", "지난 날씨", "1970년부터 쌓인 관측 자료로 보는 우리 동네 날씨"],
       sday: ["날씨 이야기", "날짜로 보는 날씨", "양력·음력 아무 날짜나 — 해마다 그날의 날씨를 1970년부터의 관측으로"],
       mysettings: ["조회", "내 설정", "로그인 없이 이 기기에만 — 하루 구간·산책·러닝 조건·관심 카드·기본 지점"],
+      sseason: ["날씨 이야기", "절기·복날 이야기", "해마다 실제 절기 날짜의 관측을 주변 날씨와 비교"],
       sbattle: ["날씨 이야기", "날씨 배틀", "두 날짜 이상을 같은 기간·같은 연도끼리 맞대어 보기"],
       questions: ["날씨 이야기", "질문으로 보는 날씨", "예전보다 더워졌을까? 비가 더 자주 올까? — 일상적인 질문을 과거 관측으로"],
       hourly: ["날씨 자료실", "시간별 날씨", "지점·기간별 한 시간 단위 관측값 — 레이아웃으로 컬럼을 고르고 그리드·카드로 보기"],
@@ -2513,7 +2516,7 @@
       const nv = document.querySelector("aside nav");
       nv.classList.toggle("stats-on", name === "dash");
       // 묶음 메뉴 강조: 지난 날씨(통계 탭·질문), 날씨 자료실(시간별·일별·보기 설정)
-      const grp = name === "dash" ? "past" : ["hourly", "daily", "download"].includes(name) ? "lib" : ["sday", "sbattle", "questions"].includes(name) ? "story" : null;
+      const grp = name === "dash" ? "past" : ["hourly", "daily", "download"].includes(name) ? "lib" : ["sday", "sbattle", "sseason", "questions"].includes(name) ? "story" : null;
       nv.querySelectorAll("a[data-grp]").forEach((a) => a.classList.toggle("active", a.dataset.grp === grp));
       nv.querySelectorAll(".nav-sub").forEach((s) => s.classList.toggle("cur", !!s.querySelector("a.active") || (grp === "past" && s.id === "navStats") || (grp === "lib" && s.id === "navLib") || (grp === "story" && s.id === "navStories")));
       renderHeadChips();
@@ -2531,11 +2534,12 @@
       if (name === "forecast" && window.RTF) RTF.show();
       if (name === "sday" && window.DateDay) DateDay.show();
       if (name === "sbattle" && window.DateBattle) DateBattle.show();
+      if (name === "sseason") import('/weather-context.mjs').then(({mountWeatherContext}) => { const el=document.getElementById('sseason'); if(!el.dataset.mounted){el.dataset.mounted='1';mountWeatherContext(el,{mode:'season',station:String(window.NWStation?.stored?.()?.id||'108')});} });
       if (name === "mysettings" && window.MySettings) MySettings.show();
     }
     // 예전 주소(#/hourly, #/daily, #/download)는 새 주소로 바꿔 계속 쓸 수 있게(뒤에 붙은 ?조건은 그대로)
     const ROUTE_ALIAS = { "/hourly": "/hourly-weather", "/daily": "/daily-weather", "/download": "/view-settings" };
-    const ROUTE_KNOWN = new Set(["/stats/overview", "/questions", "/today", "/forecast", "/stats/yearly", "/stats/region", "/stats/life", "/stats/records", "/hourly-weather", "/daily-weather", "/view-settings", "/collect", "/gaps", "/jobs", "/stations", "/provider", "/users", "/calendar", "/stories/day", "/stories/battle", "/my", ...Object.keys(ROUTE_ALIAS)]);
+    const ROUTE_KNOWN = new Set(["/stats/overview", "/questions", "/today", "/forecast", "/stats/yearly", "/stats/region", "/stats/life", "/stats/records", "/hourly-weather", "/daily-weather", "/view-settings", "/collect", "/gaps", "/jobs", "/stations", "/provider", "/users", "/calendar", "/stories/day", "/stories/battle", "/stories/season", "/my", ...Object.keys(ROUTE_ALIAS)]);
     let lastRoutePath = null;
     function route() {
       {
@@ -2577,7 +2581,7 @@
       }
       const h = location.hash.replace("#", "").split("?")[0] || "/";
       const statsTab = { "/": "overview", "/stats/overview": "overview", "/stats/yearly": "yearly", "/stats/region": "region", "/stats/life": "life", "/stats/records": "records", "/questions": "questions" }[h] || (h.startsWith("/stats/") ? "overview" : null);
-      const map = { "/": "dash", "/stats/overview": "dash", "/questions": "questions", "/today": "today", "/forecast": "forecast", "/stats/yearly": "dash", "/stats/region": "dash", "/stats/life": "dash", "/stats/records": "dash", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/users": "users", "/calendar": "calendar", "/stories/day": "sday", "/stories/battle": "sbattle", "/my": "mysettings" };
+      const map = { "/": "dash", "/stats/overview": "dash", "/questions": "questions", "/today": "today", "/forecast": "forecast", "/stats/yearly": "dash", "/stats/region": "dash", "/stats/life": "dash", "/stats/records": "dash", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/users": "users", "/calendar": "calendar", "/stories/day": "sday", "/stories/battle": "sbattle", "/stories/season": "sseason", "/my": "mysettings" };
       let name = map[h] || "dash";
       if (name === "users" && !me.authEnabled) name = "dash";
       show(name);
@@ -3219,7 +3223,7 @@
     try { history.scrollRestoration = "manual"; } catch (e) {}
     // 메뉴를 누르면(지금 화면 메뉴를 다시 눌러도) 맨 위에서 시작
     document.querySelector("aside nav").addEventListener("click", (e) => { if (e.target.closest('a[href^="#/"]')) window.scrollTo(0, 0); }, true);
-    setPageHead(({ "/today": "today", "/forecast": "forecast", "/questions": "questions", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/calendar": "calendar", "/stories/day": "sday", "/stories/battle": "sbattle", "/my": "mysettings" })[location.hash.replace("#", "").split("?")[0]] || "dash");
+    setPageHead(({ "/today": "today", "/forecast": "forecast", "/questions": "questions", "/hourly": "hourly", "/daily": "daily", "/download": "download", "/hourly-weather": "hourly", "/daily-weather": "daily", "/view-settings": "download", "/collect": "collect", "/gaps": "gaps", "/jobs": "jobs", "/stations": "stations", "/provider": "provider", "/calendar": "calendar", "/stories/day": "sday", "/stories/battle": "sbattle", "/stories/season": "sseason", "/my": "mysettings" })[location.hash.replace("#", "").split("?")[0]] || "dash");
     showLoginNote();
     // 대시보드 자료가 늦거나 실패해도 다른 화면은 그대로 뜨게
     // 기본 지점(geo.js): 지금 화면의 지점, 나중에 정해진 기본 지점(위치·내 계정) 반영 — 주소에 지점을 넣었거나 직접 고른 뒤에는 바꾸지 않음
@@ -3247,9 +3251,9 @@
       // 화면 스크립트(rt.js 등)는 이 아래에서 읽히므로, 문서를 다 읽은 직후(DOMContentLoaded) 그린다
       const first = () => route();
       if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", first, { once: true }); else first();
-      loadMe().then(() => { if (!["today", "forecast", "sday", "sbattle", "mysettings"].includes(currentPage)) route(); });
+      loadMe().then(() => { if (!["today", "forecast", "sday", "sbattle", "sseason", "mysettings"].includes(currentPage)) route(); });
       let started = false;
-      const go = () => { if (started) return; started = true; loadDash().then(() => { if (!["today", "forecast", "sday", "sbattle", "mysettings"].includes(currentPage)) route(); else renderHeadChips(); }).then(after); };
+      const go = () => { if (started) return; started = true; loadDash().then(() => { if (!["today", "forecast", "sday", "sbattle", "sseason", "mysettings"].includes(currentPage)) route(); else renderHeadChips(); }).then(after); };
       document.addEventListener("rt:ready", go, { once: true });
       setTimeout(go, 4000);
     } else Promise.allSettled([loadMe(), loadDash()]).then(route).then(after);

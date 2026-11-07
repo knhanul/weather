@@ -1,3 +1,4 @@
+import { createWeatherContextApi } from "./weather-context-api.mjs";
 import { createVersioner } from "./static-version.mjs";
 import http from "node:http";
 import fs from "node:fs";
@@ -1297,6 +1298,10 @@ const handleDate = createDateApi({
   json,
   log: (line) => console.log(line),
 });
+// Context is read-only and reuses normalized stores. Refuse JSON seed/demo rows.
+const handleContext = createWeatherContextApi({ statsData, statsHourly, stations, json,
+  sourceAllowed: async (id) => db.usingPg() || ![...loadJson(DAILY_FILE, []), ...loadJson(OBS_FILE, [])].some(r => String(r.station_id) === id && r.source_kind !== "OFFICIAL"),
+});
 // 공유 경로(/s/day · /s/battle + .svg): 링크 미리보기용 HTML(og 메타)과 카드 SVG. 같은 date-api 계산·캐시를 씀
 const handleShare = createShareApi({ dateApi: handleDate, log: (line) => console.log(line) });
 
@@ -1353,6 +1358,7 @@ const server = http.createServer(async (req, res) => {
         throw e;
       }
     }
+    if (await handleContext(req, res, url)) return;
     if (url.pathname.startsWith("/api/stats/") && ((await handleDate(req, res, url)) || (await handleStats(req, res, url)))) return;
     if (url.pathname.startsWith("/api/rt/") && (await handleRt(req, res, url))) return;
     if (url.pathname.startsWith("/s/") && (await handleShare(req, res, url))) return;

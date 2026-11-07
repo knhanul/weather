@@ -20,6 +20,7 @@
 
 ```bash
 cd weather-hub
+npm ci --omit=dev
 node server.mjs
 ```
 
@@ -85,3 +86,7 @@ curl -s https://weather.nuni.co.kr/api/me        # "provider":"nuni-id"
 # 롤백: (먼저 카카오 콘솔에 https://weather.nuni.co.kr/auth/kakao/callback 재등록) sed -i '/^AUTH_PROVIDER=/d' /etc/weather-hub.env && systemctl restart weather-hub
 ```
 
+
+## 오늘과 최근 비교·선택형 배틀·절기 이야기
+
+오늘 화면에서 어제 같은 정시·최근 7일 관측을 비교하고, 이야기 메뉴에서 승리 조건을 고르는 날씨 배틀과 절기·복날 이야기를 볼 수 있습니다. 같은 ASOS 관측소의 관측만 사용하며 오늘 자료 미적재 시 비교 불가로 표시합니다. 상세 원칙·자료 제한·API·배포 전 확인은 [docs/WEATHER_CONTEXT.md](docs/WEATHER_CONTEXT.md)를 참고하세요.

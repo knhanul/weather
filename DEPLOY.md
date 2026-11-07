@@ -32,7 +32,8 @@ cd weather-hub
 ### 1-2. Node.js 직접 실행
 
 ```bash
-# 의존성 없음 — 바로 실행 가능
+# 운영 의존성 설치 (절기 날짜 계산 라이브러리 포함)
+npm ci --omit=dev
 node server.mjs
 ```
 

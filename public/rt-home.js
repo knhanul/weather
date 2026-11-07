@@ -78,6 +78,7 @@
       ${meter}
       <p class="rh-wear" id="rhTip" hidden></p>
     </section>
+    <section id="rhRecentContext"></section>
     <section class="card rh-hours lite" aria-label="앞으로 12시간"><h2>앞으로 12시간 <span class="rt-badge fc">예보</span></h2><div class="rh-chips" id="rhHours"><p class="rt-load">불러오는 중…</p></div><div class="rh-day" id="rhDay"></div></section>
     <section class="card rh-walk" id="rhWalk" aria-label="산책·러닝 시간 찾기" hidden></section>
     ${chart}`;
@@ -227,6 +228,7 @@
   let seq = 0;
   async function fill(t) {
     const my = ++seq, st = t.station.id;
+    import('/weather-context.mjs').then(({mountWeatherContext}) => { const host=document.getElementById('rhRecentContext'); if (my===seq && host) mountWeatherContext(host,{mode:'today',station:String(st)}); }).catch(()=>{});
     // 미리보기용: 전국 시간별(서버 60초 캐시, 약 3KB)만 바로. 지도·그래프는 묶음을 열어 보일 때 그린다
     get("/api/rt/nation-hours").then((r) => { if (my === seq) pv("nat", natPv(r)); }).catch(() => {});
     lazy("rhNation", (el) => get("/api/rt/nation-hours").then((r) => { if (my !== seq) return; NAT.data = r; NAT.sel = null; nationPaint(st); }).catch((e) => { if (el.isConnected) el.innerHTML = `<h2>지금 전국은?</h2><p class="rt-ins">자료 없음 — ${esc(e.message)}</p>`; }));

@@ -91,11 +91,12 @@
     const p = $("sbattle");
     if (p.dataset.ready === "2") return;
     p.dataset.ready = "2";
-    p.innerHTML = `<div class="card ds-head"><h2 class="sx-q">날씨 배틀${window.InfoTip.sub(`해마다 그날 실제 날씨 나란히`, `날짜 2~4개를 넣으면, 같은 기간 해마다 그날 실제 날씨가 어땠는지 나란히 셉니다. 같은 날 평균·종합 승자는 만들지 않습니다.`, { label: "기준" })}</h2>
+    p.innerHTML = `<div id="dbContext"></div><div class="card ds-head"><h2 class="sx-q">날씨 배틀${window.InfoTip.sub(`해마다 그날 실제 날씨 나란히`, `날짜 2~4개를 넣으면, 같은 기간 해마다 그날 실제 날씨가 어땠는지 나란히 셉니다. 같은 날 평균·종합 승자는 만들지 않습니다.`, { label: "기준" })}</h2>
         <div class="db-ex"><span class="muted">예시:</span>${EXAMPLES.map(([l], i) => `<button type="button" class="sec" data-ex="${i}">${E(l)}</button>`).join("")}</div>
         <div id="dbCases" class="db-cases"></div>
         <div class="sx-ctl" id="dbCtl"></div><p class="ds-banner" id="dbBanner" role="status"></p><div class="fav-row" id="dbFav"></div><p class="ds-toast" id="dbToast" role="status" hidden></p></div>
       <div class="card" id="dbChosen"></div><div class="card" id="dbYears" data-sec="yearly"></div><div class="card" id="dbAround" data-sec="around"></div><div class="card" id="dbHour" data-sec="hourly"></div>`;
+    import('/weather-context.mjs').then(({mountWeatherContext}) => mountWeatherContext($('dbContext'),{mode:'battle',station:st.cases[0]?.station||'108'})).catch(()=>{});
     p.addEventListener("change", onChange);
     p.addEventListener("click", onClick);
     p.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.dataset.f === "date") { e.preventDefault(); applyDate(e.target, true); } });
